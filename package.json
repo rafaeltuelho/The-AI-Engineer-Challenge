@@ -1,0 +1,17 @@
+{
+  "name": "ai-engineering-bootcamp-challenge",
+  "version": "1.0.0",
+  "description": "AI Engineering Bootcamp Challenge - FastAPI Backend + React Frontend",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently \"cd api && python -m uvicorn app:app --reload --port 8000\" \"cd frontend && npm run dev\"",
+    "build": "cd frontend && npm run build",
+    "start": "cd api && python -m uvicorn app:app --host 0.0.0.0 --port 8000"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
