@@ -1,7 +1,7 @@
 .header {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--bg-glass);
   backdrop-filter: blur(10px);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+  border-bottom: 1px solid var(--border-primary);
   padding: 1rem 0;
 }
 
@@ -23,16 +23,45 @@
 .logo-icon {
   width: 2rem;
   height: 2rem;
-  color: #667eea;
+  color: var(--accent-primary);
 }
 
 .logo h1 {
   font-size: 1.5rem;
   font-weight: 700;
-  background: linear-gradient(135deg, #667eea, #764ba2);
+  background: var(--gradient-primary);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
+}
+
+.header-controls {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.theme-toggle-btn {
+  padding: 0.5rem;
+  background: var(--bg-glass);
+  border: 1px solid var(--border-primary);
+  color: var(--text-primary);
+  border-radius: 0.5rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.theme-toggle-btn:hover {
+  background: var(--bg-glass-hover);
+  border-color: var(--border-accent);
+  transform: scale(1.05);
+}
+
+.theme-toggle-btn:active {
+  transform: scale(0.95);
 }
 
 .header-badge {
@@ -40,17 +69,18 @@
   align-items: center;
   gap: 0.5rem;
   padding: 0.5rem 1rem;
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--bg-glass);
   border-radius: 2rem;
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  border: 1px solid var(--border-primary);
   font-size: 0.875rem;
   font-weight: 500;
+  color: var(--text-primary);
 }
 
 .badge-icon {
   width: 1rem;
   height: 1rem;
-  color: #fbbf24;
+  color: var(--accent-warning);
 }
 
 @media (max-width: 768px) {
@@ -64,7 +94,16 @@
     font-size: 1.25rem;
   }
   
+  .header-controls {
+    gap: 0.75rem;
+  }
+  
   .header-badge {
     font-size: 0.75rem;
+    padding: 0.5rem 0.75rem;
+  }
+  
+  .theme-toggle-btn {
+    padding: 0.5rem;
   }
 }

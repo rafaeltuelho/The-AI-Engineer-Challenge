@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react'
-import { Send, Key, Settings, MessageSquare, User, Bot, RefreshCw, Trash2 } from 'lucide-react'
+import { Send, Key, Settings, MessageSquare, User, Bot, RefreshCw, Trash2, Sun, Moon } from 'lucide-react'
 import './ChatInterface.css'
 
 interface Message {
@@ -12,9 +12,11 @@ interface Message {
 interface ChatInterfaceProps {
   apiKey: string
   setApiKey: (key: string) => void
+  theme: 'light' | 'dark'
+  onThemeChange: (theme: 'light' | 'dark') => void
 }
 
-const ChatInterface: React.FC<ChatInterfaceProps> = ({ apiKey, setApiKey }) => {
+const ChatInterface: React.FC<ChatInterfaceProps> = ({ apiKey, setApiKey, theme, onThemeChange }) => {
   const [messages, setMessages] = useState<Message[]>([])
   const [inputMessage, setInputMessage] = useState('')
   const [developerMessage, setDeveloperMessage] = useState('You are a helpful AI assistant.')
@@ -288,6 +290,28 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ apiKey, setApiKey }) => {
                 className="developer-message-input"
                 rows={3}
               />
+            </div>
+            <div className="setting-group">
+              <label>
+                <Sun size={16} />
+                Theme Preference
+              </label>
+              <div className="theme-options">
+                <button
+                  className={`theme-option ${theme === 'light' ? 'active' : ''}`}
+                  onClick={() => onThemeChange('light')}
+                >
+                  <Sun size={16} />
+                  Light
+                </button>
+                <button
+                  className={`theme-option ${theme === 'dark' ? 'active' : ''}`}
+                  onClick={() => onThemeChange('dark')}
+                >
+                  <Moon size={16} />
+                  Dark
+                </button>
+              </div>
             </div>
             {conversationId && (
               <div className="setting-group">
