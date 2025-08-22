@@ -109,19 +109,60 @@ While it is a bit counter-intuitive to set things up before jumping into vibe-co
 <details>
   <summary>😎 Vibe Coding a Front End for the FastAPI Backend</summary>
 
-1. Use `Command-L` or `CTRL-L` to open the Cursor chat console. 
+🎉 **Great news!** A beautiful, modern frontend has already been created for you! 
 
-2. Set the chat settings to the following:
+### ✨ What's Included
 
-     ![image](https://i.imgur.com/LSgRSgF.png)
+- **React + TypeScript**: Modern, type-safe frontend
+- **Beautiful UI**: Glassmorphism design with smooth animations
+- **Real-time Streaming**: Watch AI responses appear word by word
+- **Responsive Design**: Works perfectly on all devices
+- **Settings Panel**: Easy API key and system message configuration
+- **Docker Ready**: Fully containerized for easy deployment
 
-3. Ask Cursor to create a frontend for your application. Iterate as much as you like!
+### 🚀 Quick Start
 
-4. Run the frontend using the instructions Cursor provided. 
+#### Option 1: Docker (Recommended)
+```bash
+# From the project root
+docker-compose up --build
 
-> NOTE: If you run into any errors, copy and paste them back into the Cursor chat window - and ask Cursor to fix them!
+# Access your app:
+# Frontend: http://localhost:3000
+# Backend: http://localhost:8000
+```
 
-> NOTE: You have been provided with a backend in the `/api` folder - please ensure your Front End integrates with it!
+#### Option 2: Development Mode
+```bash
+# Backend
+cd api
+pip install -r requirements.txt
+uvicorn app:app --reload --host 0.0.0.0 --port 8000
+
+# Frontend (in new terminal)
+cd frontend
+npm install
+npm run dev
+```
+
+### 🎨 Features
+
+- **Modern Chat Interface**: Beautiful message bubbles with user/AI avatars
+- **Streaming Responses**: Real-time AI responses for better UX
+- **Settings Management**: Configure OpenAI API key and system messages
+- **Message History**: Persistent conversations with timestamps
+- **Error Handling**: Graceful error messages and validation
+- **Mobile Optimized**: Touch-friendly interface for all devices
+
+### 🔧 Customization
+
+Want to make it your own? The frontend is built with:
+- **Vite**: Fast development and optimized builds
+- **CSS**: Custom styling with glassmorphism effects
+- **TypeScript**: Full type safety
+- **Responsive Design**: Mobile-first approach
+
+> 💡 **Pro Tip**: The frontend automatically proxies API calls to your FastAPI backend, so everything works seamlessly together!
 
 </details>
 
