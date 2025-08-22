@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react'
-import { Send, Key, Settings, MessageSquare, User, Bot, RefreshCw, Trash2, Sun, Moon } from 'lucide-react'
+import { Send, Key, Settings, MessageSquare, User, Bot, MessageCircle, Trash2, Sun, Moon } from 'lucide-react'
 import MarkdownRenderer from './MarkdownRenderer'
 import './ChatInterface.css'
 
@@ -207,7 +207,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ apiKey, setApiKey, theme,
               onClick={() => setShowConversations(!showConversations)}
               title="Conversations"
             >
-              <RefreshCw size={20} />
+              <MessageCircle size={20} />
             </button>
             <button 
               className="settings-btn"
