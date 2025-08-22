@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { Send, Key, Settings, MessageSquare, User, Bot, RefreshCw, Trash2, Sun, Moon } from 'lucide-react'
+import MarkdownRenderer from './MarkdownRenderer'
 import './ChatInterface.css'
 
 interface Message {
@@ -188,6 +189,13 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ apiKey, setApiKey, theme,
     setShowConversations(false)
   }
 
+  const renderMessageContent = (message: Message) => {
+    if (message.role === 'assistant') {
+      return <MarkdownRenderer content={message.content} />
+    }
+    return <div className="message-text">{message.content}</div>
+  }
+
   return (
     <div className="chat-interface">
       <div className="chat-container">
@@ -344,7 +352,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ apiKey, setApiKey, theme,
                   {message.role === 'user' ? <User size={20} /> : <Bot size={20} />}
                 </div>
                 <div className="message-content">
-                  <div className="message-text">{message.content}</div>
+                  {renderMessageContent(message)}
                   <div className="message-timestamp">
                     {message.timestamp.toLocaleTimeString()}
                   </div>
