@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react'
-import { Send, Key, Settings, MessageSquare, User, Bot } from 'lucide-react'
+import { Send, Key, Settings, MessageSquare, User, Bot, RefreshCw, Trash2 } from 'lucide-react'
 import './ChatInterface.css'
 
 interface Message {
@@ -20,6 +20,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ apiKey, setApiKey }) => {
   const [developerMessage, setDeveloperMessage] = useState('You are a helpful AI assistant.')
   const [isLoading, setIsLoading] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
+  const [conversationId, setConversationId] = useState<string | null>(null)
+  const [conversations, setConversations] = useState<any[]>([])
+  const [showConversations, setShowConversations] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   const scrollToBottom = () => {
@@ -29,6 +32,61 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ apiKey, setApiKey }) => {
   useEffect(() => {
     scrollToBottom()
   }, [messages])
+
+  // Load conversations on component mount
+  useEffect(() => {
+    if (apiKey) {
+      loadConversations()
+    }
+  }, [apiKey])
+
+  const loadConversations = async () => {
+    try {
+      const response = await fetch('/api/conversations')
+      if (response.ok) {
+        const data = await response.json()
+        setConversations(data)
+      }
+    } catch (error) {
+      console.error('Error loading conversations:', error)
+    }
+  }
+
+  const loadConversation = async (convId: string) => {
+    try {
+      const response = await fetch(`/api/conversations/${convId}`)
+      if (response.ok) {
+        const data = await response.json()
+        setMessages(data.messages.map((msg: any) => ({
+          id: msg.timestamp,
+          role: msg.role,
+          content: msg.content,
+          timestamp: new Date(msg.timestamp)
+        })))
+        setConversationId(convId)
+        setDeveloperMessage(data.system_message)
+        setShowConversations(false)
+      }
+    } catch (error) {
+      console.error('Error loading conversation:', error)
+    }
+  }
+
+  const deleteConversation = async (convId: string) => {
+    try {
+      const response = await fetch(`/api/conversations/${convId}`, {
+        method: 'DELETE'
+      })
+      if (response.ok) {
+        await loadConversations()
+        if (conversationId === convId) {
+          clearChat()
+        }
+      }
+    } catch (error) {
+      console.error('Error deleting conversation:', error)
+    }
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -52,6 +110,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ apiKey, setApiKey }) => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
+          conversation_id: conversationId,
           developer_message: developerMessage,
           user_message: inputMessage,
           model: 'gpt-4.1-mini',
@@ -61,6 +120,12 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ apiKey, setApiKey }) => {
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`)
+      }
+
+      // Get conversation ID from response headers or create new one
+      const newConversationId = response.headers.get('X-Conversation-ID') || conversationId || `conv_${Date.now()}`
+      if (!conversationId) {
+        setConversationId(newConversationId)
       }
 
       const reader = response.body?.getReader()
@@ -94,6 +159,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ apiKey, setApiKey }) => {
         )
       }
 
+      // Reload conversations to show the updated list
+      await loadConversations()
+
     } catch (error) {
       console.error('Error:', error)
       const errorMessage: Message = {
@@ -110,6 +178,12 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ apiKey, setApiKey }) => {
 
   const clearChat = () => {
     setMessages([])
+    setConversationId(null)
+  }
+
+  const startNewConversation = () => {
+    clearChat()
+    setShowConversations(false)
   }
 
   return (
@@ -118,6 +192,13 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ apiKey, setApiKey }) => {
         <div className="chat-header">
           <h2>Chat with AI</h2>
           <div className="chat-actions">
+            <button 
+              className="conversations-btn"
+              onClick={() => setShowConversations(!showConversations)}
+              title="Conversations"
+            >
+              <RefreshCw size={20} />
+            </button>
             <button 
               className="settings-btn"
               onClick={() => setShowSettings(!showSettings)}
@@ -134,6 +215,49 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ apiKey, setApiKey }) => {
             </button>
           </div>
         </div>
+
+        {showConversations && (
+          <div className="conversations-panel">
+            <div className="conversations-header">
+              <h3>Conversations</h3>
+              <button 
+                className="new-conversation-btn"
+                onClick={startNewConversation}
+              >
+                New Chat
+              </button>
+            </div>
+            <div className="conversations-list">
+              {conversations.length === 0 ? (
+                <p className="no-conversations">No conversations yet</p>
+              ) : (
+                conversations.map((conv) => (
+                  <div key={conv.conversation_id} className="conversation-item">
+                    <div 
+                      className="conversation-content"
+                      onClick={() => loadConversation(conv.conversation_id)}
+                    >
+                      <div className="conversation-preview">
+                        {conv.system_message.substring(0, 50)}...
+                      </div>
+                      <div className="conversation-meta">
+                        <span>{conv.message_count} messages</span>
+                        <span>{new Date(conv.last_updated).toLocaleDateString()}</span>
+                      </div>
+                    </div>
+                    <button 
+                      className="delete-conversation-btn"
+                      onClick={() => deleteConversation(conv.conversation_id)}
+                      title="Delete conversation"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        )}
 
         {showSettings && (
           <div className="settings-panel">
@@ -165,6 +289,14 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ apiKey, setApiKey }) => {
                 rows={3}
               />
             </div>
+            {conversationId && (
+              <div className="setting-group">
+                <label>Current Conversation ID</label>
+                <div className="conversation-id-display">
+                  {conversationId}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -174,6 +306,12 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ apiKey, setApiKey }) => {
               <Bot size={48} />
               <h3>Start a conversation</h3>
               <p>Enter your message below to begin chatting with the AI assistant.</p>
+              {conversations.length > 0 && (
+                <p className="conversation-hint">
+                  💡 You have {conversations.length} previous conversation{conversations.length !== 1 ? 's' : ''}. 
+                  Click the refresh button above to view them.
+                </p>
+              )}
             </div>
           ) : (
             messages.map((message) => (
@@ -229,6 +367,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ apiKey, setApiKey }) => {
             <div className="api-key-warning">
               <Key size={16} />
               Please enter your OpenAI API key in settings to start chatting
+            </div>
+          )}
+          {conversationId && (
+            <div className="conversation-info">
+              <span>💬 Continuing conversation: {conversationId.substring(0, 8)}...</span>
             </div>
           )}
         </form>
