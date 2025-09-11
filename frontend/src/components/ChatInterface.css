@@ -247,6 +247,67 @@
   font-weight: 500;
 }
 
+.conversation-info-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+  padding: 0.75rem;
+  background: rgba(59, 130, 246, 0.1);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  border-radius: 0.5rem;
+  position: relative;
+  animation: slideDown 0.3s ease-out;
+}
+
+.conversation-info-banner .info-icon {
+  font-size: 0.875rem;
+  flex-shrink: 0;
+  margin-top: 0.125rem;
+}
+
+.conversation-info-banner .info-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.conversation-info-banner .info-title {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--accent-primary);
+  margin-bottom: 0.25rem;
+  line-height: 1.2;
+}
+
+.conversation-info-banner .info-text {
+  font-size: 0.65rem;
+  color: var(--text-primary);
+  line-height: 1.4;
+  font-weight: 400;
+}
+
+.dismiss-banner-btn {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  padding: 0.25rem;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-radius: 0.25rem;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.dismiss-banner-btn:hover {
+  background: rgba(0, 0, 0, 0.1);
+  color: var(--text-primary);
+}
+
 .model-description {
   font-size: 0.6rem;
   color: var(--accent-success, #22c55e);

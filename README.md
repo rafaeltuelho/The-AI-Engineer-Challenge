@@ -150,7 +150,7 @@ npm run dev
 - **Modern Chat Interface**: Beautiful message bubbles with user/AI avatars
 - **Streaming Responses**: Real-time AI responses for better UX
 - **Settings Management**: Configure OpenAI API key and system messages
-- **Message History**: Persistent conversations with timestamps
+- **Message History**: Server-side In-memory Persistent (until inactivity expiration timeout) conversations with timestamps
 - **Error Handling**: Graceful error messages and validation
 - **Mobile Optimized**: Touch-friendly interface for all devices
 

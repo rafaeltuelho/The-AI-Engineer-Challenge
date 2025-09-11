@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react'
-import { Send, Key, MessageSquare, User, Bot, Trash2, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Settings, ArrowDown } from 'lucide-react'
+import { Send, Key, MessageSquare, User, Bot, Trash2, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Settings, ArrowDown, X } from 'lucide-react'
 import MarkdownRenderer from './MarkdownRenderer'
 import './ChatInterface.css'
 
@@ -34,6 +34,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const [conversationId, setConversationId] = useState<string | null>(null)
   const [conversations, setConversations] = useState<any[]>([])
   const [isPanelCollapsed, setIsPanelCollapsed] = useState(false)
+  const [showConversationInfoBanner, setShowConversationInfoBanner] = useState(false)
   const [expandedSections, setExpandedSections] = useState({
     apiKey: true,
     model: false,
@@ -202,6 +203,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       const newConversationId = response.headers.get('X-Conversation-ID') || conversationId || `conv_${Date.now()}`
       if (!conversationId) {
         setConversationId(newConversationId)
+        // Show info banner when first conversation is created
+        setShowConversationInfoBanner(true)
       }
 
       const reader = response.body?.getReader()
@@ -256,6 +259,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     setMessages([])
     setConversationId(null)
     setDeveloperMessage('You are a helpful AI assistant.')
+    setShowConversationInfoBanner(false)
   }
 
   const startNewConversation = () => {
@@ -273,6 +277,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
   const togglePanel = () => {
     setIsPanelCollapsed(!isPanelCollapsed)
+  }
+
+  const dismissInfoBanner = () => {
+    setShowConversationInfoBanner(false)
   }
 
   const renderMessageContent = (message: Message) => {
@@ -323,7 +331,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                     <div className="api-key-info">
                       <div className="info-icon">ℹ️</div>
                       <div className="info-text">
-                        Your API key is only used for this session and is not stored or persisted anywhere.
+                        Your API key is only used for this session and is not stored or persisted anywhere!
                       </div>
                     </div>
                   )}
@@ -397,6 +405,24 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
               </div>
               {expandedSections.conversations && (
                 <div className="section-content">
+                  {showConversationInfoBanner && (
+                    <div className="conversation-info-banner">
+                      <div className="info-icon">ℹ️</div>
+                      <div className="info-content">
+                        <div className="info-title">Session-based Conversations</div>
+                        <div className="info-text">
+                          Conversations are isolated by user-session, stored in-memory in the backend server-side and remain active for the duration of the current user-session interaction or up to 10min of inactivity.
+                        </div>
+                      </div>
+                      <button 
+                        className="dismiss-banner-btn"
+                        onClick={dismissInfoBanner}
+                        title="Dismiss"
+                      >
+                        <X size={12} />
+                      </button>
+                    </div>
+                  )}
                   <div className="conversations-list">
                     {conversations.length === 0 ? (
                       <p className="no-conversations">No conversations yet</p>
