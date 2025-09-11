@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react'
-import { Send, Key, Settings, MessageSquare, User, Bot, MessageCircle, Trash2, Sun, Moon } from 'lucide-react'
+import { Send, Key, MessageSquare, User, Bot, Trash2, Sun, Moon } from 'lucide-react'
 import MarkdownRenderer from './MarkdownRenderer'
 import './ChatInterface.css'
 
@@ -22,10 +22,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ apiKey, setApiKey, theme,
   const [inputMessage, setInputMessage] = useState('')
   const [developerMessage, setDeveloperMessage] = useState('You are a helpful AI assistant.')
   const [isLoading, setIsLoading] = useState(false)
-  const [showSettings, setShowSettings] = useState(false)
   const [conversationId, setConversationId] = useState<string | null>(null)
   const [conversations, setConversations] = useState<any[]>([])
-  const [showConversations, setShowConversations] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
@@ -78,7 +76,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ apiKey, setApiKey, theme,
         })))
         setConversationId(convId)
         setDeveloperMessage(data.system_message)
-        setShowConversations(false)
       } else {
         console.error('Failed to load conversation:', response.statusText)
       }
@@ -206,7 +203,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ apiKey, setApiKey, theme,
 
   const startNewConversation = () => {
     clearChat()
-    setShowConversations(false)
     // Reload conversations to ensure the list is up to date
     loadConversations()
   }
@@ -220,36 +216,74 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ apiKey, setApiKey, theme,
 
   return (
     <div className="chat-interface">
-      <div className="chat-container">
-        <div className="chat-header">
-          <h2>Chat with AI</h2>
-          <div className="chat-actions">
-            <button 
-              className="conversations-btn"
-              onClick={() => setShowConversations(!showConversations)}
-              title="Conversations"
-            >
-              <MessageCircle size={20} />
-            </button>
-            <button 
-              className="settings-btn"
-              onClick={() => setShowSettings(!showSettings)}
-              title="Settings"
-            >
-              <Settings size={20} />
-            </button>
-            <button 
-              className="clear-btn"
-              onClick={clearChat}
-              title="Clear Chat"
-            >
-              Clear
-            </button>
-          </div>
+      <div className="left-panel">
+        <div className="panel-header">
+          <h2>AI Chat</h2>
         </div>
+        
+        <div className="panel-content">
+          <div className="setting-group">
+            <label htmlFor="api-key">
+              <Key size={16} />
+              OpenAI API Key
+            </label>
+            <input
+              id="api-key"
+              type="password"
+              value={apiKey}
+              onChange={(e) => setApiKey(e.target.value)}
+              placeholder="Enter your OpenAI API key"
+              className="api-key-input"
+            />
+            {apiKey.trim() && (
+              <div className="api-key-info">
+                <div className="info-icon">ℹ️</div>
+                <div className="info-text">
+                  Your API key is only used for this session and is not stored or persisted anywhere.
+                </div>
+              </div>
+            )}
+          </div>
 
-        {showConversations && (
-          <div className="conversations-panel">
+          <div className="setting-group">
+            <label htmlFor="developer-message">
+              <MessageSquare size={16} />
+              System Message
+            </label>
+            <textarea
+              id="developer-message"
+              value={developerMessage}
+              onChange={(e) => setDeveloperMessage(e.target.value)}
+              placeholder="Define the AI's behavior and role"
+              className="developer-message-input"
+              rows={3}
+            />
+          </div>
+
+          <div className="setting-group">
+            <label>
+              <Sun size={16} />
+              Theme Preference
+            </label>
+            <div className="theme-options">
+              <button
+                className={`theme-option ${theme === 'light' ? 'active' : ''}`}
+                onClick={() => onThemeChange('light')}
+              >
+                <Sun size={16} />
+                Light
+              </button>
+              <button
+                className={`theme-option ${theme === 'dark' ? 'active' : ''}`}
+                onClick={() => onThemeChange('dark')}
+              >
+                <Moon size={16} />
+                Dark
+              </button>
+            </div>
+          </div>
+
+          <div className="conversations-section">
             <div className="conversations-header">
               <h3>Conversations</h3>
               <button 
@@ -289,70 +323,34 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ apiKey, setApiKey, theme,
               )}
             </div>
           </div>
-        )}
 
-        {showSettings && (
-          <div className="settings-panel">
+          {conversationId && (
             <div className="setting-group">
-              <label htmlFor="api-key">
-                <Key size={16} />
-                OpenAI API Key
-              </label>
-              <input
-                id="api-key"
-                type="password"
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-                placeholder="Enter your OpenAI API key"
-                className="api-key-input"
-              />
-            </div>
-            <div className="setting-group">
-              <label htmlFor="developer-message">
-                <MessageSquare size={16} />
-                System Message
-              </label>
-              <textarea
-                id="developer-message"
-                value={developerMessage}
-                onChange={(e) => setDeveloperMessage(e.target.value)}
-                placeholder="Define the AI's behavior and role"
-                className="developer-message-input"
-                rows={3}
-              />
-            </div>
-            <div className="setting-group">
-              <label>
-                <Sun size={16} />
-                Theme Preference
-              </label>
-              <div className="theme-options">
-                <button
-                  className={`theme-option ${theme === 'light' ? 'active' : ''}`}
-                  onClick={() => onThemeChange('light')}
-                >
-                  <Sun size={16} />
-                  Light
-                </button>
-                <button
-                  className={`theme-option ${theme === 'dark' ? 'active' : ''}`}
-                  onClick={() => onThemeChange('dark')}
-                >
-                  <Moon size={16} />
-                  Dark
-                </button>
+              <label>Current Conversation ID</label>
+              <div className="conversation-id-display">
+                {conversationId}
               </div>
             </div>
-            {conversationId && (
-              <div className="setting-group">
-                <label>Current Conversation ID</label>
-                <div className="conversation-id-display">
-                  {conversationId}
-                </div>
-              </div>
-            )}
+          )}
+
+          <div className="panel-actions">
+            <button 
+              className="clear-btn"
+              onClick={clearChat}
+              title="Clear Chat"
+            >
+              <Trash2 size={16} />
+              Clear Chat
+            </button>
           </div>
-        )}
+        </div>
+      </div>
+
+      <div className="chat-container">
+        <div className="chat-header">
+          <h2>Chat with AI</h2>
+        </div>
+
 
         <div className="messages-container">
           {messages.length === 0 ? (
