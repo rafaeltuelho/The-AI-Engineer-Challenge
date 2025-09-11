@@ -27,6 +27,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ apiKey, setApiKey, theme,
   const [conversations, setConversations] = useState<any[]>([])
   const [showConversations, setShowConversations] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -35,6 +36,14 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ apiKey, setApiKey, theme,
   useEffect(() => {
     scrollToBottom()
   }, [messages])
+
+  // Auto-resize textarea based on content
+  useEffect(() => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto'
+      textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`
+    }
+  }, [inputMessage])
 
   // Load conversations on component mount
   useEffect(() => {
@@ -91,6 +100,13 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ apiKey, setApiKey, theme,
       }
     } catch (error) {
       console.error('Error deleting conversation:', error)
+    }
+  }
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      handleSubmit(e as any)
     }
   }
 
@@ -385,13 +401,15 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ apiKey, setApiKey, theme,
 
         <form onSubmit={handleSubmit} className="input-form">
           <div className="input-container">
-            <input
-              type="text"
+            <textarea
+              ref={textareaRef}
               value={inputMessage}
               onChange={(e) => setInputMessage(e.target.value)}
-              placeholder="Type your message here..."
+              onKeyDown={handleKeyDown}
+              placeholder="Type your message here... (Cmd|Ctrl+Enter to send)"
               className="message-input"
               disabled={isLoading || !apiKey.trim()}
+              rows={1}
             />
             <button
               type="submit"

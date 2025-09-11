@@ -474,6 +474,12 @@
   color: var(--text-primary);
   border-radius: 0.5rem;
   font-size: 0.875rem;
+  font-family: inherit;
+  resize: none;
+  min-height: 2.5rem;
+  max-height: 8rem;
+  overflow-y: auto;
+  line-height: 1.5;
 }
 
 .message-input::placeholder {
