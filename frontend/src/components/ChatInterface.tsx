@@ -25,12 +25,26 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ apiKey, setApiKey, theme,
   const [conversationId, setConversationId] = useState<string | null>(null)
   const [conversations, setConversations] = useState<any[]>([])
   const [isPanelCollapsed, setIsPanelCollapsed] = useState(false)
+  const [selectedModel, setSelectedModel] = useState('gpt-5-nano')
   const [expandedSections, setExpandedSections] = useState({
     apiKey: true,
+    model: false,
     systemMessage: false,
     theme: false,
     conversations: false
   })
+
+  const availableModels = [
+    'gpt-4',
+    'gpt-4-turbo',
+    'gpt-4o',
+    'gpt-4o-mini',
+    'gpt-4.1-mini',
+    'gpt-4.1-nano',
+    'gpt-5',
+    'gpt-4-mini',
+    'gpt-5-nano'
+  ]
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
@@ -139,7 +153,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ apiKey, setApiKey, theme,
           conversation_id: conversationId,
           developer_message: developerMessage,
           user_message: inputMessage,
-          model: 'gpt-4.1-mini',
+          model: selectedModel,
           api_key: apiKey
         })
       })
@@ -277,6 +291,40 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ apiKey, setApiKey, theme,
                       </div>
                     </div>
                   )}
+                </div>
+              )}
+            </div>
+
+            <div className="setting-section">
+              <div 
+                className="section-header"
+                onClick={() => toggleSection('model')}
+              >
+                <div className="section-title">
+                  <Settings size={14} />
+                  <span>Model</span>
+                </div>
+                {expandedSections.model ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+              </div>
+              {expandedSections.model && (
+                <div className="section-content">
+                  <select
+                    value={selectedModel}
+                    onChange={(e) => setSelectedModel(e.target.value)}
+                    className="model-select"
+                  >
+                    {availableModels.map((model) => (
+                      <option key={model} value={model}>
+                        {model}
+                      </option>
+                    ))}
+                  </select>
+                  <div className="model-info">
+                    <div className="info-icon">ℹ️</div>
+                    <div className="info-text">
+                      Currently using: <strong>{selectedModel}</strong>
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
