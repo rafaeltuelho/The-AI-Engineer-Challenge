@@ -42,6 +42,10 @@ app.add_middleware(
 # Structure: {hashed_api_key: {conversation_id: conversation_data}}
 conversations: Dict[str, Dict[str, Dict[str, Any]]] = {}
 
+# Session management
+# Structure: {session_id: {"api_key": hashed_api_key, "last_access": datetime}}
+sessions: Dict[str, Dict[str, Any]] = {}
+
 # Track last access time for cleanup mechanism
 # Structure: {hashed_api_key: last_access_time}
 api_key_last_access: Dict[str, datetime] = {}
@@ -49,6 +53,33 @@ api_key_last_access: Dict[str, datetime] = {}
 def hash_api_key(api_key: str) -> str:
     """Hash the API key using SHA-256 for secure storage key generation"""
     return hashlib.sha256(api_key.encode('utf-8')).hexdigest()
+
+def create_session(api_key: str) -> str:
+    """Create a new session for the given API key"""
+    session_id = str(uuid.uuid4())
+    hashed_api_key = hash_api_key(api_key)
+    
+    sessions[session_id] = {
+        "api_key": hashed_api_key,
+        "last_access": datetime.utcnow()
+    }
+    
+    # Update API key access time
+    update_api_key_access(hashed_api_key)
+    
+    return session_id
+
+def get_session_api_key(session_id: str) -> Optional[str]:
+    """Get the hashed API key for a session, return None if session doesn't exist"""
+    if session_id not in sessions:
+        return None
+    
+    # Update session access time
+    sessions[session_id]["last_access"] = datetime.utcnow()
+    hashed_api_key = sessions[session_id]["api_key"]
+    update_api_key_access(hashed_api_key)
+    
+    return hashed_api_key
 
 def get_user_conversations(hashed_api_key: str) -> Dict[str, Dict[str, Any]]:
     """Get conversations for a specific user (hashed API key)"""
@@ -61,20 +92,33 @@ def update_api_key_access(hashed_api_key: str):
     api_key_last_access[hashed_api_key] = datetime.utcnow()
 
 def cleanup_inactive_conversations():
-    """Clean up conversations for API keys that haven't been used in the last 10 minutes"""
+    """Clean up conversations and sessions for API keys that haven't been used in the last 10 minutes"""
     current_time = datetime.utcnow()
     inactive_keys = []
+    inactive_sessions = []
     
+    # Clean up inactive API keys
     for hashed_key, last_access in api_key_last_access.items():
         if current_time - last_access > timedelta(minutes=10):
             inactive_keys.append(hashed_key)
     
+    # Clean up inactive sessions
+    for session_id, session_data in sessions.items():
+        if current_time - session_data["last_access"] > timedelta(minutes=10):
+            inactive_sessions.append(session_id)
+    
+    # Remove inactive conversations and API key access records
     for hashed_key in inactive_keys:
         if hashed_key in conversations:
             del conversations[hashed_key]
         if hashed_key in api_key_last_access:
             del api_key_last_access[hashed_key]
         print(f"Cleaned up conversations for inactive API key: {hashed_key[:8]}...")
+    
+    # Remove inactive sessions
+    for session_id in inactive_sessions:
+        del sessions[session_id]
+        print(f"Cleaned up inactive session: {session_id[:8]}...")
 
 def start_cleanup_scheduler():
     """Start the background cleanup scheduler"""
@@ -191,19 +235,56 @@ class ConversationResponse(BaseModel):
     message: str
     timestamp: datetime
 
+class SessionRequest(BaseModel):
+    api_key: str
+    
+    @field_validator('api_key')
+    @classmethod
+    def validate_api_key(cls, v):
+        """Validate OpenAI API key format"""
+        if not v or not isinstance(v, str):
+            raise ValueError('API key is required')
+        
+        if len(v.strip()) == 0:
+            raise ValueError('API key cannot be empty')
+        
+        return v
+
+class SessionResponse(BaseModel):
+    session_id: str
+    message: str
+
+# Endpoint to create a new session
+@app.post("/api/session")
+@limiter.limit("5/minute")  # Limit to 5 session creations per minute per IP
+async def create_session(request: Request, session_request: SessionRequest):
+    try:
+        session_id = create_session(session_request.api_key)
+        return SessionResponse(
+            session_id=session_id,
+            message="Session created successfully"
+        )
+    except Exception as e:
+        print(f"Error creating session: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 # Define the main chat endpoint that handles POST requests
 @app.post("/api/chat")
 @limiter.limit("10/minute")  # Limit to 10 requests per minute per IP
 async def chat(request: Request, chat_request: ChatRequest):
     try:
-        # Hash the API key for secure storage and user isolation
-        hashed_api_key = hash_api_key(chat_request.api_key)
+        # Get session ID from headers
+        session_id = request.headers.get("X-Session-ID")
+        if not session_id:
+            raise HTTPException(status_code=401, detail="Session ID required")
         
-        # Update last access time for cleanup mechanism
-        update_api_key_access(hashed_api_key)
+        # Get hashed API key from session
+        hashed_api_key = get_session_api_key(session_id)
+        if not hashed_api_key:
+            raise HTTPException(status_code=401, detail="Invalid or expired session")
         
         # Debug logging
-        print(f"Received chat request: hashed_api_key={hashed_api_key[:8]}..., model={chat_request.model}, user_message_length={len(chat_request.user_message)}")
+        print(f"Received chat request: session_id={session_id[:8]}..., hashed_api_key={hashed_api_key[:8]}..., model={chat_request.model}, user_message_length={len(chat_request.user_message)}")
         
         # Initialize OpenAI client with the provided API key
         client = OpenAI(api_key=chat_request.api_key)
@@ -302,12 +383,16 @@ async def chat(request: Request, chat_request: ChatRequest):
 # Endpoint to get conversation history
 @app.get("/api/conversations/{conversation_id}")
 @limiter.limit("30/minute")  # Limit to 30 requests per minute per IP
-async def get_conversation(request: Request, conversation_id: str, api_key: str):
-    # Hash the API key for user isolation
-    hashed_api_key = hash_api_key(api_key)
+async def get_conversation(request: Request, conversation_id: str):
+    # Get session ID from headers
+    session_id = request.headers.get("X-Session-ID")
+    if not session_id:
+        raise HTTPException(status_code=401, detail="Session ID required")
     
-    # Update last access time for cleanup mechanism
-    update_api_key_access(hashed_api_key)
+    # Get hashed API key from session
+    hashed_api_key = get_session_api_key(session_id)
+    if not hashed_api_key:
+        raise HTTPException(status_code=401, detail="Invalid or expired session")
     
     # Get user-specific conversations
     user_conversations = get_user_conversations(hashed_api_key)
@@ -327,12 +412,16 @@ async def get_conversation(request: Request, conversation_id: str, api_key: str)
 # Endpoint to list all conversations
 @app.get("/api/conversations")
 @limiter.limit("20/minute")  # Limit to 20 requests per minute per IP
-async def list_conversations(request: Request, api_key: str):
-    # Hash the API key for user isolation
-    hashed_api_key = hash_api_key(api_key)
+async def list_conversations(request: Request):
+    # Get session ID from headers
+    session_id = request.headers.get("X-Session-ID")
+    if not session_id:
+        raise HTTPException(status_code=401, detail="Session ID required")
     
-    # Update last access time for cleanup mechanism
-    update_api_key_access(hashed_api_key)
+    # Get hashed API key from session
+    hashed_api_key = get_session_api_key(session_id)
+    if not hashed_api_key:
+        raise HTTPException(status_code=401, detail="Invalid or expired session")
     
     # Get user-specific conversations
     user_conversations = get_user_conversations(hashed_api_key)
@@ -355,12 +444,16 @@ async def list_conversations(request: Request, api_key: str):
 # Endpoint to delete a conversation
 @app.delete("/api/conversations/{conversation_id}")
 @limiter.limit("10/minute")  # Limit to 10 requests per minute per IP
-async def delete_conversation(request: Request, conversation_id: str, api_key: str):
-    # Hash the API key for user isolation
-    hashed_api_key = hash_api_key(api_key)
+async def delete_conversation(request: Request, conversation_id: str):
+    # Get session ID from headers
+    session_id = request.headers.get("X-Session-ID")
+    if not session_id:
+        raise HTTPException(status_code=401, detail="Session ID required")
     
-    # Update last access time for cleanup mechanism
-    update_api_key_access(hashed_api_key)
+    # Get hashed API key from session
+    hashed_api_key = get_session_api_key(session_id)
+    if not hashed_api_key:
+        raise HTTPException(status_code=401, detail="Invalid or expired session")
     
     # Get user-specific conversations
     user_conversations = get_user_conversations(hashed_api_key)
@@ -374,12 +467,16 @@ async def delete_conversation(request: Request, conversation_id: str, api_key: s
 # Endpoint to clear all conversations for a specific user
 @app.delete("/api/conversations")
 @limiter.limit("5/minute")  # Limit to 5 requests per minute per IP (more restrictive)
-async def clear_all_conversations(request: Request, api_key: str):
-    # Hash the API key for user isolation
-    hashed_api_key = hash_api_key(api_key)
+async def clear_all_conversations(request: Request):
+    # Get session ID from headers
+    session_id = request.headers.get("X-Session-ID")
+    if not session_id:
+        raise HTTPException(status_code=401, detail="Session ID required")
     
-    # Update last access time for cleanup mechanism
-    update_api_key_access(hashed_api_key)
+    # Get hashed API key from session
+    hashed_api_key = get_session_api_key(session_id)
+    if not hashed_api_key:
+        raise HTTPException(status_code=401, detail="Invalid or expired session")
     
     # Get user-specific conversations and clear them
     user_conversations = get_user_conversations(hashed_api_key)
