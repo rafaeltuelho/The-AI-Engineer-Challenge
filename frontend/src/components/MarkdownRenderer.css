@@ -218,6 +218,31 @@
   background: var(--border-primary);
 }
 
+/* Math Expressions */
+.katex {
+  font-size: 1.1em;
+}
+
+.katex-display {
+  margin: 1.5rem 0;
+  text-align: center;
+}
+
+.katex-display .katex {
+  font-size: 1.2em;
+}
+
+/* Ensure math expressions don't break layout */
+.katex-display {
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+/* Math in paragraphs should be inline */
+p .katex {
+  font-size: 1em;
+}
+
 /* Syntax Highlighting */
 .code-block pre {
   margin: 0;

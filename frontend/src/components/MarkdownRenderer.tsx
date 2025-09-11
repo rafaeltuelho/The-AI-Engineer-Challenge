@@ -2,8 +2,11 @@ import React from 'react'
 import ReactMarkdown from 'react-markdown'
 import rehypeHighlight from 'rehype-highlight'
 import rehypeRaw from 'rehype-raw'
+import rehypeKatex from 'rehype-katex'
 import remarkGfm from 'remark-gfm'
+import remarkMath from 'remark-math'
 import { Copy, Check } from 'lucide-react'
+import 'katex/dist/katex.min.css'
 import './MarkdownRenderer.css'
 
 interface MarkdownRendererProps {
@@ -32,8 +35,8 @@ const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content }) => {
   return (
     <div className="markdown-content">
       <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
-        rehypePlugins={[rehypeRaw, rehypeHighlight]}
+        remarkPlugins={[remarkGfm, remarkMath]}
+        rehypePlugins={[rehypeRaw, rehypeHighlight, rehypeKatex]}
         components={{
           // Customize code blocks
           code({ className, children, ...props }) {
