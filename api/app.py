@@ -3,7 +3,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 # Import Pydantic for data validation and settings management
-from pydantic import BaseModel, validator
+from pydantic import BaseModel, field_validator
 # Import OpenAI client for interacting with OpenAI's API
 from openai import OpenAI
 # Import slowapi for rate limiting
@@ -46,7 +46,8 @@ class ChatRequest(BaseModel):
     model: Optional[str] = "gpt-4.1-mini"  # Optional model selection with default
     api_key: str          # OpenAI API key for authentication
     
-    @validator('api_key')
+    @field_validator('api_key')
+    @classmethod
     def validate_api_key(cls, v):
         """Validate OpenAI API key format"""
         if not v or not isinstance(v, str):
@@ -65,7 +66,8 @@ class ChatRequest(BaseModel):
         
         return v
     
-    @validator('user_message')
+    @field_validator('user_message')
+    @classmethod
     def validate_user_message(cls, v):
         """Validate user message content"""
         if not v or not isinstance(v, str):
@@ -79,7 +81,8 @@ class ChatRequest(BaseModel):
         
         return v.strip()
     
-    @validator('developer_message')
+    @field_validator('developer_message')
+    @classmethod
     def validate_developer_message(cls, v):
         """Validate developer/system message content"""
         if not v or not isinstance(v, str):
@@ -90,7 +93,8 @@ class ChatRequest(BaseModel):
         
         return v.strip()
     
-    @validator('model')
+    @field_validator('model')
+    @classmethod
     def validate_model(cls, v):
         """Validate model selection"""
         if not v:
@@ -107,7 +111,8 @@ class ChatRequest(BaseModel):
         
         return v
     
-    @validator('conversation_id')
+    @field_validator('conversation_id')
+    @classmethod
     def validate_conversation_id(cls, v):
         """Validate conversation ID format"""
         if v is None:
