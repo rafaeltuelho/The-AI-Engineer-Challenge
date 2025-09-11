@@ -363,14 +363,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
               </div>
               {expandedSections.conversations && (
                 <div className="section-content">
-                  <div className="conversations-header">
-                    <button 
-                      className="new-conversation-btn"
-                      onClick={startNewConversation}
-                    >
-                      New Chat
-                    </button>
-                  </div>
                   <div className="conversations-list">
                     {conversations.length === 0 ? (
                       <p className="no-conversations">No conversations yet</p>
@@ -419,12 +411,12 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         <div className="chat-header">
           <h2>Chat with AI</h2>
           <button 
-            className="clear-chat-btn"
-            onClick={clearChat}
-            title="Clear Chat"
+            className="new-chat-btn"
+            onClick={startNewConversation}
+            title="New Chat"
           >
-            <Trash2 size={16} />
-            Clear Chat
+            <MessageSquare size={16} />
+            New Chat
           </button>
         </div>
 
