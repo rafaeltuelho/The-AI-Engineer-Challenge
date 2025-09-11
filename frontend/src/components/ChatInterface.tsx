@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react'
-import { Send, Key, MessageSquare, User, Bot, Trash2, Sun, Moon } from 'lucide-react'
+import { Send, Key, MessageSquare, User, Bot, Trash2, Sun, Moon, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Settings } from 'lucide-react'
 import MarkdownRenderer from './MarkdownRenderer'
 import './ChatInterface.css'
 
@@ -24,6 +24,13 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ apiKey, setApiKey, theme,
   const [isLoading, setIsLoading] = useState(false)
   const [conversationId, setConversationId] = useState<string | null>(null)
   const [conversations, setConversations] = useState<any[]>([])
+  const [isPanelCollapsed, setIsPanelCollapsed] = useState(false)
+  const [expandedSections, setExpandedSections] = useState({
+    apiKey: true,
+    systemMessage: false,
+    theme: false,
+    conversations: false
+  })
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
@@ -207,6 +214,17 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ apiKey, setApiKey, theme,
     loadConversations()
   }
 
+  const toggleSection = (section: keyof typeof expandedSections) => {
+    setExpandedSections(prev => ({
+      ...prev,
+      [section]: !prev[section]
+    }))
+  }
+
+  const togglePanel = () => {
+    setIsPanelCollapsed(!isPanelCollapsed)
+  }
+
   const renderMessageContent = (message: Message) => {
     if (message.role === 'assistant') {
       return <MarkdownRenderer content={message.content} />
@@ -216,134 +234,185 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ apiKey, setApiKey, theme,
 
   return (
     <div className="chat-interface">
-      <div className="left-panel">
+      <div className={`left-panel ${isPanelCollapsed ? 'collapsed' : ''}`}>
         <div className="panel-header">
           <h2>AI Chat</h2>
+          <button 
+            className="panel-toggle-btn"
+            onClick={togglePanel}
+            title={isPanelCollapsed ? 'Expand panel' : 'Collapse panel'}
+          >
+            {isPanelCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
+          </button>
         </div>
         
-        <div className="panel-content">
-          <div className="setting-group">
-            <label htmlFor="api-key">
-              <Key size={16} />
-              OpenAI API Key
-            </label>
-            <input
-              id="api-key"
-              type="password"
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-              placeholder="Enter your OpenAI API key"
-              className="api-key-input"
-            />
-            {apiKey.trim() && (
-              <div className="api-key-info">
-                <div className="info-icon">ℹ️</div>
-                <div className="info-text">
-                  Your API key is only used for this session and is not stored or persisted anywhere.
+        {!isPanelCollapsed && (
+          <div className="panel-content">
+            <div className="setting-section">
+              <div 
+                className="section-header"
+                onClick={() => toggleSection('apiKey')}
+              >
+                <div className="section-title">
+                  <Key size={14} />
+                  <span>API Key</span>
                 </div>
+                {expandedSections.apiKey ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
               </div>
-            )}
-          </div>
-
-          <div className="setting-group">
-            <label htmlFor="developer-message">
-              <MessageSquare size={16} />
-              System Message
-            </label>
-            <textarea
-              id="developer-message"
-              value={developerMessage}
-              onChange={(e) => setDeveloperMessage(e.target.value)}
-              placeholder="Define the AI's behavior and role"
-              className="developer-message-input"
-              rows={3}
-            />
-          </div>
-
-          <div className="setting-group">
-            <label>
-              <Sun size={16} />
-              Theme Preference
-            </label>
-            <div className="theme-options">
-              <button
-                className={`theme-option ${theme === 'light' ? 'active' : ''}`}
-                onClick={() => onThemeChange('light')}
-              >
-                <Sun size={16} />
-                Light
-              </button>
-              <button
-                className={`theme-option ${theme === 'dark' ? 'active' : ''}`}
-                onClick={() => onThemeChange('dark')}
-              >
-                <Moon size={16} />
-                Dark
-              </button>
-            </div>
-          </div>
-
-          <div className="conversations-section">
-            <div className="conversations-header">
-              <h3>Conversations</h3>
-              <button 
-                className="new-conversation-btn"
-                onClick={startNewConversation}
-              >
-                New Chat
-              </button>
-            </div>
-            <div className="conversations-list">
-              {conversations.length === 0 ? (
-                <p className="no-conversations">No conversations yet</p>
-              ) : (
-                conversations.map((conv) => (
-                  <div key={conv.conversation_id} className="conversation-item">
-                    <div 
-                      className="conversation-content"
-                      onClick={() => loadConversation(conv.conversation_id)}
-                    >
-                      <div className="conversation-preview">
-                        {conv.title || conv.system_message.substring(0, 50)}
-                      </div>
-                      <div className="conversation-meta">
-                        <span>{conv.message_count} messages</span>
-                        <span>{new Date(conv.last_updated).toLocaleDateString()}</span>
+              {expandedSections.apiKey && (
+                <div className="section-content">
+                  <input
+                    id="api-key"
+                    type="password"
+                    value={apiKey}
+                    onChange={(e) => setApiKey(e.target.value)}
+                    placeholder="Enter your OpenAI API key"
+                    className="api-key-input"
+                  />
+                  {apiKey.trim() && (
+                    <div className="api-key-info">
+                      <div className="info-icon">ℹ️</div>
+                      <div className="info-text">
+                        Your API key is only used for this session and is not stored or persisted anywhere.
                       </div>
                     </div>
-                    <button 
-                      className="delete-conversation-btn"
-                      onClick={() => deleteConversation(conv.conversation_id)}
-                      title="Delete conversation"
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  </div>
-                ))
+                  )}
+                </div>
               )}
             </div>
-          </div>
 
-          {conversationId && (
-            <div className="setting-group">
-              <label>Current Conversation ID</label>
-              <div className="conversation-id-display">
-                {conversationId}
+            <div className="setting-section">
+              <div 
+                className="section-header"
+                onClick={() => toggleSection('systemMessage')}
+              >
+                <div className="section-title">
+                  <MessageSquare size={14} />
+                  <span>System Message</span>
+                </div>
+                {expandedSections.systemMessage ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
               </div>
+              {expandedSections.systemMessage && (
+                <div className="section-content">
+                  <textarea
+                    id="developer-message"
+                    value={developerMessage}
+                    onChange={(e) => setDeveloperMessage(e.target.value)}
+                    placeholder="Define the AI's behavior and role"
+                    className="developer-message-input"
+                    rows={3}
+                  />
+                </div>
+              )}
             </div>
-          )}
 
-          <div className="panel-actions">
-            <button 
-              className="clear-btn"
-              onClick={clearChat}
-              title="Clear Chat"
-            >
-              <Trash2 size={16} />
-              Clear Chat
-            </button>
+            <div className="setting-section">
+              <div 
+                className="section-header"
+                onClick={() => toggleSection('theme')}
+              >
+                <div className="section-title">
+                  <Settings size={14} />
+                  <span>Theme</span>
+                </div>
+                {expandedSections.theme ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+              </div>
+              {expandedSections.theme && (
+                <div className="section-content">
+                  <div className="theme-options">
+                    <button
+                      className={`theme-option ${theme === 'light' ? 'active' : ''}`}
+                      onClick={() => onThemeChange('light')}
+                    >
+                      <Sun size={14} />
+                      Light
+                    </button>
+                    <button
+                      className={`theme-option ${theme === 'dark' ? 'active' : ''}`}
+                      onClick={() => onThemeChange('dark')}
+                    >
+                      <Moon size={14} />
+                      Dark
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="setting-section">
+              <div 
+                className="section-header"
+                onClick={() => toggleSection('conversations')}
+              >
+                <div className="section-title">
+                  <MessageSquare size={14} />
+                  <span>Conversations</span>
+                </div>
+                {expandedSections.conversations ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+              </div>
+              {expandedSections.conversations && (
+                <div className="section-content">
+                  <div className="conversations-header">
+                    <button 
+                      className="new-conversation-btn"
+                      onClick={startNewConversation}
+                    >
+                      New Chat
+                    </button>
+                  </div>
+                  <div className="conversations-list">
+                    {conversations.length === 0 ? (
+                      <p className="no-conversations">No conversations yet</p>
+                    ) : (
+                      conversations.map((conv) => (
+                        <div key={conv.conversation_id} className="conversation-item">
+                          <div 
+                            className="conversation-content"
+                            onClick={() => loadConversation(conv.conversation_id)}
+                          >
+                            <div className="conversation-preview">
+                              {conv.title || conv.system_message.substring(0, 30)}
+                            </div>
+                            <div className="conversation-meta">
+                              <span>{conv.message_count} msgs</span>
+                              <span>{new Date(conv.last_updated).toLocaleDateString()}</span>
+                            </div>
+                          </div>
+                          <button 
+                            className="delete-conversation-btn"
+                            onClick={() => deleteConversation(conv.conversation_id)}
+                            title="Delete conversation"
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                  {conversationId && (
+                    <div className="conversation-id-section">
+                      <div className="conversation-id-label">Current ID</div>
+                      <div className="conversation-id-display">
+                        {conversationId.substring(0, 12)}...
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="panel-actions">
+              <button 
+                className="clear-btn"
+                onClick={clearChat}
+                title="Clear Chat"
+              >
+                <Trash2 size={14} />
+                Clear Chat
+              </button>
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       <div className="chat-container">
