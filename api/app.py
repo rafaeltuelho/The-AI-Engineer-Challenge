@@ -53,16 +53,10 @@ class ChatRequest(BaseModel):
         if not v or not isinstance(v, str):
             raise ValueError('API key is required')
         
-        # OpenAI API keys typically start with 'sk-' and are 51 characters long
-        if not v.startswith('sk-'):
-            raise ValueError('Invalid API key format: must start with "sk-"')
-        
-        if len(v) < 20 or len(v) > 100:
-            raise ValueError('Invalid API key length')
-        
-        # Check for basic format (alphanumeric and some special chars)
-        if not re.match(r'^sk-[A-Za-z0-9_-]+$', v):
-            raise ValueError('Invalid API key format: contains invalid characters')
+        # Temporarily disable strict validation for debugging
+        # Just check that it's not empty and is a string
+        if len(v.strip()) == 0:
+            raise ValueError('API key cannot be empty')
         
         return v
     
@@ -145,6 +139,8 @@ class ConversationResponse(BaseModel):
 @limiter.limit("10/minute")  # Limit to 10 requests per minute per IP
 async def chat(request: Request, chat_request: ChatRequest):
     try:
+        # Debug logging
+        print(f"Received chat request: api_key={chat_request.api_key[:10]}..., model={chat_request.model}, user_message_length={len(chat_request.user_message)}")
         # Initialize OpenAI client with the provided API key
         client = OpenAI(api_key=chat_request.api_key)
         
@@ -233,6 +229,7 @@ async def chat(request: Request, chat_request: ChatRequest):
     
     except Exception as e:
         # Handle any errors that occur during processing
+        print(f"Error in chat endpoint: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 # Endpoint to get conversation history
