@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react'
-import { Send, Key, MessageSquare, User, Bot, Trash2, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Settings } from 'lucide-react'
+import { Send, Key, MessageSquare, User, Bot, Trash2, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Settings, ArrowDown } from 'lucide-react'
 import MarkdownRenderer from './MarkdownRenderer'
 import './ChatInterface.css'
 
@@ -42,14 +42,41 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const availableModels = Object.keys(modelDescriptions)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const messagesContainerRef = useRef<HTMLDivElement>(null)
+  const [isUserScrolling, setIsUserScrolling] = useState(false)
+  const [shouldAutoScroll, setShouldAutoScroll] = useState(true)
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }
 
+  const checkIfNearBottom = () => {
+    if (!messagesContainerRef.current) return false
+    const { scrollTop, scrollHeight, clientHeight } = messagesContainerRef.current
+    return scrollHeight - scrollTop - clientHeight < 100 // 100px threshold
+  }
+
+  const handleScroll = () => {
+    if (!messagesContainerRef.current) return
+    
+    const nearBottom = checkIfNearBottom()
+    setIsUserScrolling(!nearBottom)
+    setShouldAutoScroll(nearBottom)
+  }
+
   useEffect(() => {
-    scrollToBottom()
-  }, [messages])
+    if (shouldAutoScroll) {
+      scrollToBottom()
+    }
+  }, [messages, shouldAutoScroll])
+
+  // Reset auto-scroll when starting a new conversation
+  useEffect(() => {
+    if (!conversationId) {
+      setShouldAutoScroll(true)
+      setIsUserScrolling(false)
+    }
+  }, [conversationId])
 
   // Auto-resize textarea based on content
   useEffect(() => {
@@ -314,13 +341,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                       </option>
                     ))}
                   </select>
-                  <div className="model-info">
-                    <div className="info-icon">ℹ️</div>
-                    <div className="info-text">
-                      Currently using: <strong>{selectedModel}</strong><br/>
-                      <span className="model-description">{modelDescriptions[selectedModel as keyof typeof modelDescriptions]}</span>
-                    </div>
-                  </div>
                 </div>
               )}
             </div>
@@ -428,7 +448,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         )}
 
 
-        <div className="messages-container">
+        <div 
+          className="messages-container"
+          ref={messagesContainerRef}
+          onScroll={handleScroll}
+        >
           {messages.length === 0 ? (
             <div className="empty-state">
               <Bot size={48} />
@@ -472,6 +496,20 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           )}
           <div ref={messagesEndRef} />
         </div>
+
+        {isUserScrolling && messages.length > 0 && (
+          <button 
+            className="scroll-to-bottom-btn"
+            onClick={() => {
+              setShouldAutoScroll(true)
+              scrollToBottom()
+            }}
+            title="Scroll to bottom"
+          >
+            <ArrowDown size={16} />
+            New messages
+          </button>
+        )}
 
         <form onSubmit={handleSubmit} className="input-form">
           <div className="input-container">
