@@ -34,9 +34,9 @@ const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content }) => {
 
   // Preprocess content to convert square bracket math expressions to LaTeX format
   const preprocessMathContent = (text: string): string => {
-    // Convert [ math expression ] to $math expression$
+    // Convert [ math expression ] to $math expression$ (inline math)
     // This regex matches [ followed by optional whitespace, then content, then optional whitespace and ]
-    return text.replace(/\[\s*([^[\]]+?)\s*\]/g, '$$$1$$')
+    return text.replace(/\[\s*([^[\]]+?)\s*\]/g, '$$1$')
   }
 
   return (
