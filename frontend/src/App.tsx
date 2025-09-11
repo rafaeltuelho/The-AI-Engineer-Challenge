@@ -53,8 +53,6 @@ function App() {
         <ChatInterface 
           apiKey={apiKey} 
           setApiKey={setApiKey} 
-          theme={theme}
-          onThemeChange={handleThemeChange}
           selectedModel={selectedModel}
           setSelectedModel={setSelectedModel}
           modelDescriptions={modelDescriptions}

@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react'
-import { Send, Key, MessageSquare, User, Bot, Trash2, Sun, Moon, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Settings } from 'lucide-react'
+import { Send, Key, MessageSquare, User, Bot, Trash2, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Settings } from 'lucide-react'
 import MarkdownRenderer from './MarkdownRenderer'
 import './ChatInterface.css'
 
@@ -13,8 +13,6 @@ interface Message {
 interface ChatInterfaceProps {
   apiKey: string
   setApiKey: (key: string) => void
-  theme: 'light' | 'dark'
-  onThemeChange: (theme: 'light' | 'dark') => void
   selectedModel: string
   setSelectedModel: (model: string) => void
   modelDescriptions: Record<string, string>
@@ -23,8 +21,6 @@ interface ChatInterfaceProps {
 const ChatInterface: React.FC<ChatInterfaceProps> = ({ 
   apiKey, 
   setApiKey, 
-  theme, 
-  onThemeChange, 
   selectedModel, 
   setSelectedModel, 
   modelDescriptions 
@@ -40,7 +36,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     apiKey: true,
     model: false,
     systemMessage: false,
-    theme: false,
     conversations: false
   })
 
@@ -250,7 +245,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     <div className="chat-interface">
       <div className={`left-panel ${isPanelCollapsed ? 'collapsed' : ''}`}>
         <div className="panel-header">
-          <h2>AI Chat</h2>
+          <h2>Chat settings</h2>
           <button 
             className="panel-toggle-btn"
             onClick={togglePanel}
@@ -358,39 +353,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             <div className="setting-section">
               <div 
                 className="section-header"
-                onClick={() => toggleSection('theme')}
-              >
-                <div className="section-title">
-                  <Settings size={14} />
-                  <span>Theme</span>
-                </div>
-                {expandedSections.theme ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-              </div>
-              {expandedSections.theme && (
-                <div className="section-content">
-                  <div className="theme-options">
-                    <button
-                      className={`theme-option ${theme === 'light' ? 'active' : ''}`}
-                      onClick={() => onThemeChange('light')}
-                    >
-                      <Sun size={14} />
-                      Light
-                    </button>
-                    <button
-                      className={`theme-option ${theme === 'dark' ? 'active' : ''}`}
-                      onClick={() => onThemeChange('dark')}
-                    >
-                      <Moon size={14} />
-                      Dark
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <div className="setting-section">
-              <div 
-                className="section-header"
                 onClick={() => toggleSection('conversations')}
               >
                 <div className="section-title">
@@ -449,17 +411,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                 </div>
               )}
             </div>
-
-            <div className="panel-actions">
-              <button 
-                className="clear-btn"
-                onClick={clearChat}
-                title="Clear Chat"
-              >
-                <Trash2 size={14} />
-                Clear Chat
-              </button>
-            </div>
           </div>
         )}
       </div>
@@ -467,7 +418,22 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       <div className="chat-container">
         <div className="chat-header">
           <h2>Chat with AI</h2>
+          <button 
+            className="clear-chat-btn"
+            onClick={clearChat}
+            title="Clear Chat"
+          >
+            <Trash2 size={16} />
+            Clear Chat
+          </button>
         </div>
+
+        {!apiKey.trim() && (
+          <div className="api-key-warning">
+            <Key size={16} />
+            Please enter your OpenAI API key in settings to start chatting
+          </div>
+        )}
 
 
         <div className="messages-container">
@@ -535,12 +501,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
               <Send size={20} />
             </button>
           </div>
-          {!apiKey.trim() && (
-            <div className="api-key-warning">
-              <Key size={16} />
-              Please enter your OpenAI API key in settings to start chatting
-            </div>
-          )}
           {conversationId && (
             <div className="conversation-info">
               <span>💬 Continuing conversation: {conversationId.substring(0, 8)}...</span>
