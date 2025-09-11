@@ -12,9 +12,13 @@ from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 import os
 from typing import Optional, List, Dict, Any
-from datetime import datetime
+from datetime import datetime, timedelta
 import uuid
 import re
+import hashlib
+import asyncio
+import threading
+import time
 
 # Initialize FastAPI application with a title
 app = FastAPI(title="OpenAI Chat API")
@@ -35,7 +39,60 @@ app.add_middleware(
 )
 
 # In-memory storage for conversations (in production, use a proper database)
-conversations: Dict[str, Dict[str, Any]] = {}
+# Structure: {hashed_api_key: {conversation_id: conversation_data}}
+conversations: Dict[str, Dict[str, Dict[str, Any]]] = {}
+
+# Track last access time for cleanup mechanism
+# Structure: {hashed_api_key: last_access_time}
+api_key_last_access: Dict[str, datetime] = {}
+
+def hash_api_key(api_key: str) -> str:
+    """Hash the API key using SHA-256 for secure storage key generation"""
+    return hashlib.sha256(api_key.encode('utf-8')).hexdigest()
+
+def get_user_conversations(hashed_api_key: str) -> Dict[str, Dict[str, Any]]:
+    """Get conversations for a specific user (hashed API key)"""
+    if hashed_api_key not in conversations:
+        conversations[hashed_api_key] = {}
+    return conversations[hashed_api_key]
+
+def update_api_key_access(hashed_api_key: str):
+    """Update the last access time for an API key"""
+    api_key_last_access[hashed_api_key] = datetime.utcnow()
+
+def cleanup_inactive_conversations():
+    """Clean up conversations for API keys that haven't been used in the last 10 minutes"""
+    current_time = datetime.utcnow()
+    inactive_keys = []
+    
+    for hashed_key, last_access in api_key_last_access.items():
+        if current_time - last_access > timedelta(minutes=10):
+            inactive_keys.append(hashed_key)
+    
+    for hashed_key in inactive_keys:
+        if hashed_key in conversations:
+            del conversations[hashed_key]
+        if hashed_key in api_key_last_access:
+            del api_key_last_access[hashed_key]
+        print(f"Cleaned up conversations for inactive API key: {hashed_key[:8]}...")
+
+def start_cleanup_scheduler():
+    """Start the background cleanup scheduler"""
+    def cleanup_loop():
+        while True:
+            try:
+                cleanup_inactive_conversations()
+                time.sleep(60)  # Run cleanup every minute
+            except Exception as e:
+                print(f"Error in cleanup scheduler: {e}")
+                time.sleep(60)
+    
+    cleanup_thread = threading.Thread(target=cleanup_loop, daemon=True)
+    cleanup_thread.start()
+    print("Started conversation cleanup scheduler")
+
+# Start the cleanup scheduler when the module loads
+start_cleanup_scheduler()
 
 # Define the data model for chat requests using Pydantic
 # This ensures incoming request data is properly validated
@@ -139,17 +196,27 @@ class ConversationResponse(BaseModel):
 @limiter.limit("10/minute")  # Limit to 10 requests per minute per IP
 async def chat(request: Request, chat_request: ChatRequest):
     try:
+        # Hash the API key for secure storage and user isolation
+        hashed_api_key = hash_api_key(chat_request.api_key)
+        
+        # Update last access time for cleanup mechanism
+        update_api_key_access(hashed_api_key)
+        
         # Debug logging
-        print(f"Received chat request: api_key={chat_request.api_key[:10]}..., model={chat_request.model}, user_message_length={len(chat_request.user_message)}")
+        print(f"Received chat request: hashed_api_key={hashed_api_key[:8]}..., model={chat_request.model}, user_message_length={len(chat_request.user_message)}")
+        
         # Initialize OpenAI client with the provided API key
         client = OpenAI(api_key=chat_request.api_key)
+        
+        # Get user-specific conversations
+        user_conversations = get_user_conversations(hashed_api_key)
         
         # Generate or retrieve conversation ID
         conversation_id = chat_request.conversation_id or str(uuid.uuid4())
         
         # Initialize conversation if it doesn't exist
-        if conversation_id not in conversations:
-            conversations[conversation_id] = {
+        if conversation_id not in user_conversations:
+            user_conversations[conversation_id] = {
                 "messages": [],
                 "system_message": chat_request.developer_message,
                 "title": None,  # Will be set when first user message is added
@@ -163,22 +230,22 @@ async def chat(request: Request, chat_request: ChatRequest):
             content=chat_request.user_message,
             timestamp=datetime.utcnow()
         )
-        conversations[conversation_id]["messages"].append(user_message)
-        conversations[conversation_id]["last_updated"] = datetime.utcnow()
+        user_conversations[conversation_id]["messages"].append(user_message)
+        user_conversations[conversation_id]["last_updated"] = datetime.utcnow()
         
         # Set conversation title from first user message if not already set
-        if conversations[conversation_id]["title"] is None:
+        if user_conversations[conversation_id]["title"] is None:
             # Use first line of the user message as title (max 50 characters)
             first_line = chat_request.user_message.split('\n')[0].strip()
-            conversations[conversation_id]["title"] = first_line[:50] + ("..." if len(first_line) > 50 else "")
+            user_conversations[conversation_id]["title"] = first_line[:50] + ("..." if len(first_line) > 50 else "")
         
         # Build the full conversation context for OpenAI
         messages_for_openai = [
-            {"role": "system", "content": conversations[conversation_id]["system_message"]}
+            {"role": "system", "content": user_conversations[conversation_id]["system_message"]}
         ]
         
         # Add conversation history (limit to last 20 messages to avoid token limits)
-        recent_messages = conversations[conversation_id]["messages"][-20:]
+        recent_messages = user_conversations[conversation_id]["messages"][-20:]
         for msg in recent_messages:
             # Map our roles to OpenAI's expected roles
             openai_role = "assistant" if msg.role == "assistant" else msg.role
@@ -213,13 +280,13 @@ async def chat(request: Request, chat_request: ChatRequest):
                     content=full_response,
                     timestamp=datetime.utcnow()
                 )
-                conversations[conversation_id]["messages"].append(assistant_message)
-                conversations[conversation_id]["last_updated"] = datetime.utcnow()
+                user_conversations[conversation_id]["messages"].append(assistant_message)
+                user_conversations[conversation_id]["last_updated"] = datetime.utcnow()
                 
             except Exception as e:
                 # Remove the user message if the API call failed
-                if conversations[conversation_id]["messages"]:
-                    conversations[conversation_id]["messages"].pop()
+                if user_conversations[conversation_id]["messages"]:
+                    user_conversations[conversation_id]["messages"].pop()
                 raise e
 
         # Return a streaming response to the client with conversation ID in headers
@@ -235,25 +302,43 @@ async def chat(request: Request, chat_request: ChatRequest):
 # Endpoint to get conversation history
 @app.get("/api/conversations/{conversation_id}")
 @limiter.limit("30/minute")  # Limit to 30 requests per minute per IP
-async def get_conversation(request: Request, conversation_id: str):
-    if conversation_id not in conversations:
+async def get_conversation(request: Request, conversation_id: str, api_key: str):
+    # Hash the API key for user isolation
+    hashed_api_key = hash_api_key(api_key)
+    
+    # Update last access time for cleanup mechanism
+    update_api_key_access(hashed_api_key)
+    
+    # Get user-specific conversations
+    user_conversations = get_user_conversations(hashed_api_key)
+    
+    if conversation_id not in user_conversations:
         raise HTTPException(status_code=404, detail="Conversation not found")
     
     return {
         "conversation_id": conversation_id,
-        "title": conversations[conversation_id].get("title", "New Conversation"),
-        "system_message": conversations[conversation_id]["system_message"],
-        "messages": conversations[conversation_id]["messages"],
-        "created_at": conversations[conversation_id]["created_at"],
-        "last_updated": conversations[conversation_id]["last_updated"]
+        "title": user_conversations[conversation_id].get("title", "New Conversation"),
+        "system_message": user_conversations[conversation_id]["system_message"],
+        "messages": user_conversations[conversation_id]["messages"],
+        "created_at": user_conversations[conversation_id]["created_at"],
+        "last_updated": user_conversations[conversation_id]["last_updated"]
     }
 
 # Endpoint to list all conversations
 @app.get("/api/conversations")
 @limiter.limit("20/minute")  # Limit to 20 requests per minute per IP
-async def list_conversations(request: Request):
+async def list_conversations(request: Request, api_key: str):
+    # Hash the API key for user isolation
+    hashed_api_key = hash_api_key(api_key)
+    
+    # Update last access time for cleanup mechanism
+    update_api_key_access(hashed_api_key)
+    
+    # Get user-specific conversations
+    user_conversations = get_user_conversations(hashed_api_key)
+    
     conversation_list = []
-    for conv_id, conv_data in conversations.items():
+    for conv_id, conv_data in user_conversations.items():
         conversation_list.append({
             "conversation_id": conv_id,
             "title": conv_data.get("title", "New Conversation"),
@@ -270,18 +355,36 @@ async def list_conversations(request: Request):
 # Endpoint to delete a conversation
 @app.delete("/api/conversations/{conversation_id}")
 @limiter.limit("10/minute")  # Limit to 10 requests per minute per IP
-async def delete_conversation(request: Request, conversation_id: str):
-    if conversation_id not in conversations:
+async def delete_conversation(request: Request, conversation_id: str, api_key: str):
+    # Hash the API key for user isolation
+    hashed_api_key = hash_api_key(api_key)
+    
+    # Update last access time for cleanup mechanism
+    update_api_key_access(hashed_api_key)
+    
+    # Get user-specific conversations
+    user_conversations = get_user_conversations(hashed_api_key)
+    
+    if conversation_id not in user_conversations:
         raise HTTPException(status_code=404, detail="Conversation not found")
     
-    del conversations[conversation_id]
+    del user_conversations[conversation_id]
     return {"message": "Conversation deleted successfully"}
 
-# Endpoint to clear all conversations
+# Endpoint to clear all conversations for a specific user
 @app.delete("/api/conversations")
 @limiter.limit("5/minute")  # Limit to 5 requests per minute per IP (more restrictive)
-async def clear_all_conversations(request: Request):
-    conversations.clear()
+async def clear_all_conversations(request: Request, api_key: str):
+    # Hash the API key for user isolation
+    hashed_api_key = hash_api_key(api_key)
+    
+    # Update last access time for cleanup mechanism
+    update_api_key_access(hashed_api_key)
+    
+    # Get user-specific conversations and clear them
+    user_conversations = get_user_conversations(hashed_api_key)
+    user_conversations.clear()
+    
     return {"message": "All conversations cleared successfully"}
 
 # Define a health check endpoint to verify API status
