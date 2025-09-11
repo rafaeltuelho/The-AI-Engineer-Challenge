@@ -15,9 +15,20 @@ interface ChatInterfaceProps {
   setApiKey: (key: string) => void
   theme: 'light' | 'dark'
   onThemeChange: (theme: 'light' | 'dark') => void
+  selectedModel: string
+  setSelectedModel: (model: string) => void
+  modelDescriptions: Record<string, string>
 }
 
-const ChatInterface: React.FC<ChatInterfaceProps> = ({ apiKey, setApiKey, theme, onThemeChange }) => {
+const ChatInterface: React.FC<ChatInterfaceProps> = ({ 
+  apiKey, 
+  setApiKey, 
+  theme, 
+  onThemeChange, 
+  selectedModel, 
+  setSelectedModel, 
+  modelDescriptions 
+}) => {
   const [messages, setMessages] = useState<Message[]>([])
   const [inputMessage, setInputMessage] = useState('')
   const [developerMessage, setDeveloperMessage] = useState('You are a helpful AI assistant.')
@@ -25,7 +36,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ apiKey, setApiKey, theme,
   const [conversationId, setConversationId] = useState<string | null>(null)
   const [conversations, setConversations] = useState<any[]>([])
   const [isPanelCollapsed, setIsPanelCollapsed] = useState(false)
-  const [selectedModel, setSelectedModel] = useState('gpt-5-nano')
   const [expandedSections, setExpandedSections] = useState({
     apiKey: true,
     model: false,
@@ -34,17 +44,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ apiKey, setApiKey, theme,
     conversations: false
   })
 
-  const availableModels = [
-    'gpt-4',
-    'gpt-4-turbo',
-    'gpt-4o',
-    'gpt-4o-mini',
-    'gpt-4.1-mini',
-    'gpt-4.1-nano',
-    'gpt-5',
-    'gpt-4-mini',
-    'gpt-5-nano'
-  ]
+  const availableModels = Object.keys(modelDescriptions)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
@@ -315,14 +315,15 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ apiKey, setApiKey, theme,
                   >
                     {availableModels.map((model) => (
                       <option key={model} value={model}>
-                        {model}
+                        {model} - {modelDescriptions[model as keyof typeof modelDescriptions]}
                       </option>
                     ))}
                   </select>
                   <div className="model-info">
                     <div className="info-icon">ℹ️</div>
                     <div className="info-text">
-                      Currently using: <strong>{selectedModel}</strong>
+                      Currently using: <strong>{selectedModel}</strong><br/>
+                      <span className="model-description">{modelDescriptions[selectedModel as keyof typeof modelDescriptions]}</span>
                     </div>
                   </div>
                 </div>

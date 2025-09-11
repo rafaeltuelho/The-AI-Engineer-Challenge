@@ -248,6 +248,15 @@
   font-weight: 500;
 }
 
+.model-description {
+  font-size: 0.6rem;
+  color: var(--accent-success, #22c55e);
+  font-weight: 400;
+  opacity: 0.8;
+  margin-top: 0.125rem;
+  display: block;
+}
+
 .chat-container {
   flex: 1;
   background: var(--bg-glass);

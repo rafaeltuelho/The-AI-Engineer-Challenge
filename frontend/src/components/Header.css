@@ -81,6 +81,26 @@
   width: 1rem;
   height: 1rem;
   color: var(--accent-warning);
+  flex-shrink: 0;
+}
+
+.badge-content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+.badge-title {
+  font-weight: 600;
+  color: var(--text-primary);
+  font-size: 0.875rem;
+}
+
+.badge-description {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-weight: 400;
+  line-height: 1.2;
 }
 
 @media (max-width: 768px) {
@@ -101,6 +121,14 @@
   .header-badge {
     font-size: 0.75rem;
     padding: 0.5rem 0.75rem;
+  }
+  
+  .badge-title {
+    font-size: 0.75rem;
+  }
+  
+  .badge-description {
+    font-size: 0.65rem;
   }
   
   .theme-toggle-btn {

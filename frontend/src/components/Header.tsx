@@ -5,9 +5,11 @@ import './Header.css'
 interface HeaderProps {
   theme: 'light' | 'dark'
   onThemeChange: (theme: 'light' | 'dark') => void
+  selectedModel: string
+  modelDescription: string
 }
 
-const Header: React.FC<HeaderProps> = ({ theme, onThemeChange }) => {
+const Header: React.FC<HeaderProps> = ({ theme, onThemeChange, selectedModel, modelDescription }) => {
   const toggleTheme = () => {
     const newTheme = theme === 'light' ? 'dark' : 'light'
     onThemeChange(newTheme)
@@ -30,7 +32,10 @@ const Header: React.FC<HeaderProps> = ({ theme, onThemeChange }) => {
           </button>
           <div className="header-badge">
             <Sparkles className="badge-icon" />
-            <span>Powered by GPT-4.1-mini</span>
+            <div className="badge-content">
+              <span className="badge-title">Powered by {selectedModel}</span>
+              <span className="badge-description">{modelDescription}</span>
+            </div>
           </div>
         </div>
       </div>
