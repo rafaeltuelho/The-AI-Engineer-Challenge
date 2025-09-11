@@ -13,6 +13,7 @@ interface Message {
 interface ChatInterfaceProps {
   apiKey: string
   setApiKey: (key: string) => void
+  sessionId: string
   selectedModel: string
   setSelectedModel: (model: string) => void
   modelDescriptions: Record<string, string>
@@ -21,6 +22,7 @@ interface ChatInterfaceProps {
 const ChatInterface: React.FC<ChatInterfaceProps> = ({ 
   apiKey, 
   setApiKey, 
+  sessionId,
   selectedModel, 
   setSelectedModel, 
   modelDescriptions 
@@ -88,14 +90,18 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
   // Load conversations on component mount
   useEffect(() => {
-    if (apiKey) {
+    if (sessionId) {
       loadConversations()
     }
-  }, [apiKey])
+  }, [sessionId])
 
   const loadConversations = async () => {
     try {
-      const response = await fetch('/api/conversations')
+      const response = await fetch('/api/conversations', {
+        headers: {
+          'X-Session-ID': sessionId
+        }
+      })
       if (response.ok) {
         const data = await response.json()
         setConversations(data)
@@ -107,7 +113,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
   const loadConversation = async (convId: string) => {
     try {
-      const response = await fetch(`/api/conversations/${convId}`)
+      const response = await fetch(`/api/conversations/${convId}`, {
+        headers: {
+          'X-Session-ID': sessionId
+        }
+      })
       if (response.ok) {
         const data = await response.json()
         // Clear current messages and load the conversation history
@@ -130,7 +140,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const deleteConversation = async (convId: string) => {
     try {
       const response = await fetch(`/api/conversations/${convId}`, {
-        method: 'DELETE'
+        method: 'DELETE',
+        headers: {
+          'X-Session-ID': sessionId
+        }
       })
       if (response.ok) {
         await loadConversations()
@@ -170,6 +183,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'X-Session-ID': sessionId
         },
         body: JSON.stringify({
           conversation_id: conversationId,
@@ -461,7 +475,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
               {conversations.length > 0 && (
                 <p className="conversation-hint">
                   💡 You have {conversations.length} previous conversation{conversations.length !== 1 ? 's' : ''}. 
-                  Click the refresh button above to view them.
+                  Open the Conversations section in the left panel to view them.
                 </p>
               )}
             </div>

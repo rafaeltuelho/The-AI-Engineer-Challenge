@@ -257,7 +257,7 @@ class SessionResponse(BaseModel):
 # Endpoint to create a new session
 @app.post("/api/session")
 @limiter.limit("5/minute")  # Limit to 5 session creations per minute per IP
-async def create_session(request: Request, session_request: SessionRequest):
+async def create_session_endpoint(request: Request, session_request: SessionRequest):
     try:
         session_id = create_session(session_request.api_key)
         return SessionResponse(

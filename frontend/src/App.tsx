@@ -5,6 +5,7 @@ import './App.css'
 
 function App() {
   const [apiKey, setApiKey] = useState<string>('')
+  const [sessionId, setSessionId] = useState<string>('')
   const [theme, setTheme] = useState<'light' | 'dark'>('light')
   const [selectedModel, setSelectedModel] = useState<string>('gpt-5-nano')
 
@@ -37,6 +38,41 @@ function App() {
     localStorage.setItem('theme', theme)
   }, [theme])
 
+  // Create session when API key is provided
+  const createSession = async (apiKey: string) => {
+    try {
+      const response = await fetch('/api/session', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ api_key: apiKey })
+      })
+      
+      if (response.ok) {
+        const data = await response.json()
+        setSessionId(data.session_id)
+        return data.session_id
+      } else {
+        console.error('Failed to create session:', response.statusText)
+        return null
+      }
+    } catch (error) {
+      console.error('Error creating session:', error)
+      return null
+    }
+  }
+
+  // Handle API key changes
+  const handleApiKeyChange = async (newApiKey: string) => {
+    setApiKey(newApiKey)
+    if (newApiKey.trim()) {
+      await createSession(newApiKey)
+    } else {
+      setSessionId('')
+    }
+  }
+
   const handleThemeChange = (newTheme: 'light' | 'dark') => {
     setTheme(newTheme)
   }
@@ -52,7 +88,8 @@ function App() {
       <main className="main-content">
         <ChatInterface 
           apiKey={apiKey} 
-          setApiKey={setApiKey} 
+          setApiKey={handleApiKeyChange} 
+          sessionId={sessionId}
           selectedModel={selectedModel}
           setSelectedModel={setSelectedModel}
           modelDescriptions={modelDescriptions}
