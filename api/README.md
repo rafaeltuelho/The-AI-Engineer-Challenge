@@ -66,11 +66,30 @@ Once the server is running, you can access the interactive API documentation at:
 
 The API is configured to accept requests from any origin (`*`). This can be modified in the `app.py` file if you need to restrict access to specific domains.
 
-## Error Handling
+## Security Features
 
-The API includes basic error handling for:
-- Invalid API keys
+### Rate Limiting
+The API implements rate limiting to prevent abuse:
+- `/api/chat`: 10 requests per minute per IP
+- `/api/conversations`: 20 requests per minute per IP
+- `/api/conversations/{id}`: 30 requests per minute per IP
+- DELETE endpoints: 5-10 requests per minute per IP
+
+### Input Validation
+All API requests are validated for:
+- **API Key Format**: Must start with "sk-", proper length (20-100 chars), valid characters
+- **User Messages**: Required, not empty, max 10,000 characters
+- **System Messages**: Max 5,000 characters
+- **Model Selection**: Whitelist of allowed models only
+- **Conversation IDs**: Proper format and length validation
+
+### Error Handling
+
+The API includes comprehensive error handling for:
+- Invalid API keys (format validation)
+- Invalid input data (validation errors)
+- Rate limit exceeded (429 status code)
 - OpenAI API errors
 - General server errors
 
-All errors will return a 500 status code with an error message. 
+All validation errors return detailed error messages to help with debugging. 
