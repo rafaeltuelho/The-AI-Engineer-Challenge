@@ -60,6 +60,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ apiKey, setApiKey, theme,
       const response = await fetch(`/api/conversations/${convId}`)
       if (response.ok) {
         const data = await response.json()
+        // Clear current messages and load the conversation history
         setMessages(data.messages.map((msg: any) => ({
           id: msg.timestamp,
           role: msg.role,
@@ -69,6 +70,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ apiKey, setApiKey, theme,
         setConversationId(convId)
         setDeveloperMessage(data.system_message)
         setShowConversations(false)
+      } else {
+        console.error('Failed to load conversation:', response.statusText)
       }
     } catch (error) {
       console.error('Error loading conversation:', error)
@@ -182,11 +185,14 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ apiKey, setApiKey, theme,
   const clearChat = () => {
     setMessages([])
     setConversationId(null)
+    setDeveloperMessage('You are a helpful AI assistant.')
   }
 
   const startNewConversation = () => {
     clearChat()
     setShowConversations(false)
+    // Reload conversations to ensure the list is up to date
+    loadConversations()
   }
 
   const renderMessageContent = (message: Message) => {
@@ -248,7 +254,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ apiKey, setApiKey, theme,
                       onClick={() => loadConversation(conv.conversation_id)}
                     >
                       <div className="conversation-preview">
-                        {conv.system_message.substring(0, 50)}...
+                        {conv.title || conv.system_message.substring(0, 50)}
                       </div>
                       <div className="conversation-meta">
                         <span>{conv.message_count} messages</span>

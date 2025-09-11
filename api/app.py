@@ -61,6 +61,7 @@ async def chat(request: ChatRequest):
             conversations[conversation_id] = {
                 "messages": [],
                 "system_message": request.developer_message,
+                "title": None,  # Will be set when first user message is added
                 "created_at": datetime.utcnow(),
                 "last_updated": datetime.utcnow()
             }
@@ -73,6 +74,12 @@ async def chat(request: ChatRequest):
         )
         conversations[conversation_id]["messages"].append(user_message)
         conversations[conversation_id]["last_updated"] = datetime.utcnow()
+        
+        # Set conversation title from first user message if not already set
+        if conversations[conversation_id]["title"] is None:
+            # Use first line of the user message as title (max 50 characters)
+            first_line = request.user_message.split('\n')[0].strip()
+            conversations[conversation_id]["title"] = first_line[:50] + ("..." if len(first_line) > 50 else "")
         
         # Build the full conversation context for OpenAI
         messages_for_openai = [
@@ -141,6 +148,7 @@ async def get_conversation(conversation_id: str):
     
     return {
         "conversation_id": conversation_id,
+        "title": conversations[conversation_id].get("title", "New Conversation"),
         "system_message": conversations[conversation_id]["system_message"],
         "messages": conversations[conversation_id]["messages"],
         "created_at": conversations[conversation_id]["created_at"],
@@ -154,6 +162,7 @@ async def list_conversations():
     for conv_id, conv_data in conversations.items():
         conversation_list.append({
             "conversation_id": conv_id,
+            "title": conv_data.get("title", "New Conversation"),
             "system_message": conv_data["system_message"],
             "message_count": len(conv_data["messages"]),
             "created_at": conv_data["created_at"],
