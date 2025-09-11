@@ -250,83 +250,28 @@ p .katex {
 }
 
 .code-block .hljs {
-  background: transparent;
+  background: transparent !important;
   color: var(--text-primary);
 }
 
-/* Code block syntax highlighting colors */
-.code-block .hljs-keyword {
-  color: #ff79c6;
+/* Override highlight.js theme colors to work with our theme system */
+.code-block .hljs {
+  background: var(--bg-tertiary) !important;
 }
 
-.code-block .hljs-string {
-  color: #f1fa8c;
+/* Light theme - use github theme as base */
+[data-theme="light"] .code-block .hljs {
+  background: var(--bg-tertiary) !important;
 }
 
-.code-block .hljs-comment {
-  color: #6272a4;
-  font-style: italic;
+/* Dark theme - use github-dark theme as base */
+[data-theme="dark"] .code-block .hljs {
+  background: var(--bg-tertiary) !important;
 }
 
-.code-block .hljs-function {
-  color: #50fa7b;
-}
-
-.code-block .hljs-number {
-  color: #bd93f9;
-}
-
-.code-block .hljs-class {
-  color: #8be9fd;
-}
-
-.code-block .hljs-variable {
-  color: #f8f8f2;
-}
-
-.code-block .hljs-operator {
-  color: #ff79c6;
-}
-
-.code-block .hljs-punctuation {
-  color: #f8f8f2;
-}
-
-/* Dark theme syntax highlighting adjustments */
-[data-theme="dark"] .code-block .hljs-keyword {
-  color: #ff79c6;
-}
-
-[data-theme="dark"] .code-block .hljs-string {
-  color: #f1fa8c;
-}
-
-[data-theme="dark"] .code-block .hljs-comment {
-  color: #6272a4;
-}
-
-[data-theme="dark"] .code-block .hljs-function {
-  color: #50fa7b;
-}
-
-[data-theme="dark"] .code-block .hljs-number {
-  color: #bd93f9;
-}
-
-[data-theme="dark"] .code-block .hljs-class {
-  color: #8be9fd;
-}
-
-[data-theme="dark"] .code-block .hljs-variable {
-  color: #f8f8f2;
-}
-
-[data-theme="dark"] .code-block .hljs-operator {
-  color: #ff79c6;
-}
-
-[data-theme="dark"] .code-block .hljs-punctuation {
-  color: #f8f8f2;
+/* Ensure proper contrast for code text */
+.code-block .hljs {
+  color: var(--text-primary) !important;
 }
 
 /* Responsive Design */

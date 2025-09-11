@@ -7,6 +7,8 @@ import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
 import { Copy, Check } from 'lucide-react'
 import 'katex/dist/katex.min.css'
+import 'highlight.js/styles/github.css'
+import 'highlight.js/styles/github-dark.css'
 import './MarkdownRenderer.css'
 
 interface MarkdownRendererProps {
