@@ -1,18 +1,28 @@
 # Import required FastAPI components for building the API
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 # Import Pydantic for data validation and settings management
-from pydantic import BaseModel
+from pydantic import BaseModel, validator
 # Import OpenAI client for interacting with OpenAI's API
 from openai import OpenAI
+# Import slowapi for rate limiting
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 import os
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 import uuid
+import re
 
 # Initialize FastAPI application with a title
 app = FastAPI(title="OpenAI Chat API")
+
+# Initialize rate limiter
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # Configure CORS (Cross-Origin Resource Sharing) middleware
 # This allows the API to be accessed from different domains/origins
@@ -35,6 +45,85 @@ class ChatRequest(BaseModel):
     user_message: str      # Message from the user
     model: Optional[str] = "gpt-4.1-mini"  # Optional model selection with default
     api_key: str          # OpenAI API key for authentication
+    
+    @validator('api_key')
+    def validate_api_key(cls, v):
+        """Validate OpenAI API key format"""
+        if not v or not isinstance(v, str):
+            raise ValueError('API key is required')
+        
+        # OpenAI API keys typically start with 'sk-' and are 51 characters long
+        if not v.startswith('sk-'):
+            raise ValueError('Invalid API key format: must start with "sk-"')
+        
+        if len(v) < 20 or len(v) > 100:
+            raise ValueError('Invalid API key length')
+        
+        # Check for basic format (alphanumeric and some special chars)
+        if not re.match(r'^sk-[A-Za-z0-9_-]+$', v):
+            raise ValueError('Invalid API key format: contains invalid characters')
+        
+        return v
+    
+    @validator('user_message')
+    def validate_user_message(cls, v):
+        """Validate user message content"""
+        if not v or not isinstance(v, str):
+            raise ValueError('User message is required')
+        
+        if len(v.strip()) == 0:
+            raise ValueError('User message cannot be empty')
+        
+        if len(v) > 10000:  # Reasonable limit for message length
+            raise ValueError('User message is too long (max 10,000 characters)')
+        
+        return v.strip()
+    
+    @validator('developer_message')
+    def validate_developer_message(cls, v):
+        """Validate developer/system message content"""
+        if not v or not isinstance(v, str):
+            raise ValueError('Developer message is required')
+        
+        if len(v) > 5000:  # Reasonable limit for system message
+            raise ValueError('Developer message is too long (max 5,000 characters)')
+        
+        return v.strip()
+    
+    @validator('model')
+    def validate_model(cls, v):
+        """Validate model selection"""
+        if not v:
+            return "gpt-4.1-mini"  # Default model
+        
+        # List of allowed models (you can expand this list)
+        allowed_models = [
+            "gpt-4", "gpt-4-turbo", "gpt-4o", "gpt-4o-mini",
+            "gpt-4.1-mini", "gpt-4.1-nano", "gpt-5", "gpt-4-mini", "gpt-5-nano"
+        ]
+        
+        if v not in allowed_models:
+            raise ValueError(f'Invalid model: {v}. Allowed models: {", ".join(allowed_models)}')
+        
+        return v
+    
+    @validator('conversation_id')
+    def validate_conversation_id(cls, v):
+        """Validate conversation ID format"""
+        if v is None:
+            return v
+        
+        if not isinstance(v, str):
+            raise ValueError('Conversation ID must be a string')
+        
+        if len(v) > 100:
+            raise ValueError('Conversation ID is too long')
+        
+        # Allow alphanumeric, hyphens, and underscores
+        if not re.match(r'^[A-Za-z0-9_-]+$', v):
+            raise ValueError('Conversation ID contains invalid characters')
+        
+        return v
 
 class Message(BaseModel):
     role: str  # "system", "user", or "assistant"
@@ -48,19 +137,20 @@ class ConversationResponse(BaseModel):
 
 # Define the main chat endpoint that handles POST requests
 @app.post("/api/chat")
-async def chat(request: ChatRequest):
+@limiter.limit("10/minute")  # Limit to 10 requests per minute per IP
+async def chat(request: Request, chat_request: ChatRequest):
     try:
         # Initialize OpenAI client with the provided API key
-        client = OpenAI(api_key=request.api_key)
+        client = OpenAI(api_key=chat_request.api_key)
         
         # Generate or retrieve conversation ID
-        conversation_id = request.conversation_id or str(uuid.uuid4())
+        conversation_id = chat_request.conversation_id or str(uuid.uuid4())
         
         # Initialize conversation if it doesn't exist
         if conversation_id not in conversations:
             conversations[conversation_id] = {
                 "messages": [],
-                "system_message": request.developer_message,
+                "system_message": chat_request.developer_message,
                 "title": None,  # Will be set when first user message is added
                 "created_at": datetime.utcnow(),
                 "last_updated": datetime.utcnow()
@@ -69,7 +159,7 @@ async def chat(request: ChatRequest):
         # Add user message to conversation history
         user_message = Message(
             role="user",
-            content=request.user_message,
+            content=chat_request.user_message,
             timestamp=datetime.utcnow()
         )
         conversations[conversation_id]["messages"].append(user_message)
@@ -78,7 +168,7 @@ async def chat(request: ChatRequest):
         # Set conversation title from first user message if not already set
         if conversations[conversation_id]["title"] is None:
             # Use first line of the user message as title (max 50 characters)
-            first_line = request.user_message.split('\n')[0].strip()
+            first_line = chat_request.user_message.split('\n')[0].strip()
             conversations[conversation_id]["title"] = first_line[:50] + ("..." if len(first_line) > 50 else "")
         
         # Build the full conversation context for OpenAI
@@ -101,7 +191,7 @@ async def chat(request: ChatRequest):
             try:
                 # Create a streaming chat completion request
                 stream = client.chat.completions.create(
-                    model=request.model,
+                    model=chat_request.model,
                     messages=messages_for_openai,
                     stream=True  # Enable streaming response
                 )
@@ -142,7 +232,8 @@ async def chat(request: ChatRequest):
 
 # Endpoint to get conversation history
 @app.get("/api/conversations/{conversation_id}")
-async def get_conversation(conversation_id: str):
+@limiter.limit("30/minute")  # Limit to 30 requests per minute per IP
+async def get_conversation(request: Request, conversation_id: str):
     if conversation_id not in conversations:
         raise HTTPException(status_code=404, detail="Conversation not found")
     
@@ -157,7 +248,8 @@ async def get_conversation(conversation_id: str):
 
 # Endpoint to list all conversations
 @app.get("/api/conversations")
-async def list_conversations():
+@limiter.limit("20/minute")  # Limit to 20 requests per minute per IP
+async def list_conversations(request: Request):
     conversation_list = []
     for conv_id, conv_data in conversations.items():
         conversation_list.append({
@@ -175,7 +267,8 @@ async def list_conversations():
 
 # Endpoint to delete a conversation
 @app.delete("/api/conversations/{conversation_id}")
-async def delete_conversation(conversation_id: str):
+@limiter.limit("10/minute")  # Limit to 10 requests per minute per IP
+async def delete_conversation(request: Request, conversation_id: str):
     if conversation_id not in conversations:
         raise HTTPException(status_code=404, detail="Conversation not found")
     
@@ -184,7 +277,8 @@ async def delete_conversation(conversation_id: str):
 
 # Endpoint to clear all conversations
 @app.delete("/api/conversations")
-async def clear_all_conversations():
+@limiter.limit("5/minute")  # Limit to 5 requests per minute per IP (more restrictive)
+async def clear_all_conversations(request: Request):
     conversations.clear()
     return {"message": "All conversations cleared successfully"}
 
