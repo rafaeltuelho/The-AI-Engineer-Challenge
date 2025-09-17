@@ -17,7 +17,8 @@
           "aimakerspace/**",
           "pyproject.toml",
           "uv.lock"
-        ]
+        ],
+        "maxDuration": 30
       }
     }
   ],
@@ -30,10 +31,5 @@
       "src": "/(.*)",
       "dest": "/frontend/$1"
     }
-  ],
-  "functions": {
-    "api/app.py": {
-      "maxDuration": 30
-    }
-  }
+  ]
 } 
