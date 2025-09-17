@@ -1,100 +1,92 @@
-# API Key Parametrization Changes
+# UI Improvements and Bug Fixes Merge Instructions
 
-## Overview
-This branch implements parametrization of OpenAI API keys throughout the backend API and aimakerspace library, ensuring that API keys are always sourced from the frontend rather than relying on server-side environment variables.
+This document explains how to merge the UI improvements and bug fixes back to the main branch.
 
 ## Changes Made
 
-### 1. aimakerspace/openai_utils/chatmodel.py
-- **Modified**: `ChatOpenAI.__init__()` method
-- **Changes**: 
-  - Added `api_key: str = None` parameter
-  - Updated to use provided API key or fall back to environment variable
-  - Updated `run()` method to pass API key to OpenAI client
-- **Impact**: ChatOpenAI now accepts API keys as parameters instead of relying solely on environment variables
+The following improvements and bug fixes have been implemented:
 
-### 2. aimakerspace/openai_utils/embedding.py
-- **Modified**: `EmbeddingModel.__init__()` method
-- **Changes**:
-  - Added `api_key: str = None` parameter
-  - Updated to use provided API key or fall back to environment variable
-  - Updated both async and sync OpenAI clients to use the provided API key
-- **Impact**: EmbeddingModel now accepts API keys as parameters
+1. **PDF Upload Button**: Moved PDF upload button to the left side of the message input field
+2. **RAG Query Integration**: Integrated RAG Query functionality into the main chat panel - users can now ask questions about uploaded PDFs directly in the chat
+3. **New Chat Button Logic**: The New Chat button is now only enabled after the user enters their API key
+4. **Closable API Key Info**: Made the API Key info banner closable
+5. **RAG Mode Persistence**: Once a PDF is uploaded, the entire conversation stays in RAG mode
+6. **Conversation Management**: Fixed conversation history loading and saving with debugging
+7. **Removed Left Panel Sections**: Removed PDF Upload and RAG Query sections from the left panel
+8. **Closable PDF Banner**: Made PDF Documents Ready banner closable and it disappears on new chat
+9. **Session Banner Persistence**: Session-based conversation info banner now appears only once and persists dismissal using localStorage
+10. **RAG Conversation History**: Fixed RAG mode conversations not being stored in conversation history - now all conversations (regular and RAG) are properly stored
 
-### 3. aimakerspace/vectordatabase.py
-- **Modified**: `VectorDatabase.__init__()` method
-- **Changes**:
-  - Added `api_key: str = None` parameter
-  - Updated to pass API key to EmbeddingModel constructor
-- **Impact**: VectorDatabase now properly passes API keys to its embedding model
+## Files Modified
 
-### 4. api/pdf_rag.py
-- **Modified**: `RAGSystem.__init__()` method
-- **Changes**:
-  - Updated to pass API key to all sub-components (EmbeddingModel, VectorDatabase, ChatOpenAI)
-- **Impact**: RAG system now uses parametrized API keys throughout
-
-### 5. api/app.py
-- **Modified**: Multiple endpoints
-- **Changes**:
-  - Updated PDF upload endpoint to get API key from `X-API-Key` header instead of form data
-  - Updated RAG query endpoint to require `X-API-Key` header
-  - Updated documents endpoint to require `X-API-Key` header
-  - Improved error messages for missing API keys
-- **Impact**: All API endpoints now consistently require API keys in headers
-
-## Security Improvements
-1. **No Server-Side API Key Storage**: API keys are no longer stored in environment variables on the server
-2. **Client-Controlled Authentication**: Each request must provide its own API key
-3. **Session-Based Security**: API keys are validated per session, not globally
-4. **Header-Based Authentication**: Consistent use of `X-API-Key` header for API key transmission
-
-## Backward Compatibility
-- All classes maintain backward compatibility by falling back to environment variables if no API key is provided
-- This ensures existing code continues to work while new code can use parametrized API keys
-
-## Frontend Integration Required
-The frontend will need to be updated to:
-1. Include `X-API-Key` header in all requests to PDF upload, RAG query, and document info endpoints
-2. Pass the user's OpenAI API key in this header
-3. Ensure the API key is available from the user's session/authentication
-
-## Testing
-- All changes maintain backward compatibility
-- No linting errors introduced
-- API endpoints now properly validate API key presence
-- RAG system components now use parametrized API keys
+- `frontend/src/components/ChatInterface.tsx` - Main chat interface component with all improvements and bug fixes
+- `frontend/src/components/ChatInterface.css` - Updated styles for new UI elements
+- `api/app.py` - Backend API with RAG conversation history storage fix
 
 ## Merge Instructions
 
-### GitHub PR Route
-1. Create a pull request from `feature/parametrize-api-keys` to `main`
-2. Title: "Parametrize API Keys - Remove Server-Side Environment Variable Dependencies"
-3. Description: Include this MERGE.md content
-4. Review and merge the PR
+### Option 1: GitHub Pull Request (Recommended)
 
-### GitHub CLI Route
-```bash
-# Switch to main branch
-git checkout main
+1. Push the current branch to GitHub:
+   ```bash
+   git push origin feature/pdf-upload-rag
+   ```
 
-# Merge the feature branch
-git merge feature/parametrize-api-keys
+2. Create a Pull Request on GitHub:
+   - Go to the repository on GitHub
+   - Click "Compare & pull request" for the `feature/pdf-upload-rag` branch
+   - Add a descriptive title: "UI Improvements and Bug Fixes: PDF Upload, RAG Integration, Session Banner, and Conversation History"
+   - Add a description of the changes made
+   - Request review if needed
+   - Merge the pull request
 
-# Push changes
-git push origin main
+### Option 2: GitHub CLI (if you have GitHub CLI installed)
 
-# Delete feature branch (optional)
-git branch -d feature/parametrize-api-keys
-git push origin --delete feature/parametrize-api-keys
-```
+1. Push the current branch:
+   ```bash
+   git push origin feature/pdf-upload-rag
+   ```
 
-## Files Modified
-- `aimakerspace/openai_utils/chatmodel.py`
-- `aimakerspace/openai_utils/embedding.py`
-- `aimakerspace/vectordatabase.py`
-- `api/pdf_rag.py`
-- `api/app.py`
+2. Create and merge the pull request:
+   ```bash
+   gh pr create --title "UI Improvements and Bug Fixes: PDF Upload, RAG Integration, Session Banner, and Conversation History" --body "Implements PDF upload button, RAG query integration, session banner persistence, and fixes RAG conversation history storage"
+   gh pr merge --merge
+   ```
 
-## Breaking Changes
-None - all changes are backward compatible with fallback to environment variables.
+### Option 3: Direct Merge (if working locally)
+
+1. Switch to main branch:
+   ```bash
+   git checkout main
+   ```
+
+2. Merge the feature branch:
+   ```bash
+   git merge feature/pdf-upload-rag
+   ```
+
+3. Push to remote:
+   ```bash
+   git push origin main
+   ```
+
+## Testing the Changes
+
+After merging, test the following functionality:
+
+1. **PDF Upload**: Click the upload button on the left side of the message input to upload a PDF
+2. **RAG Integration**: After uploading a PDF, ask questions about the document in the chat - the entire conversation should stay in RAG mode
+3. **New Chat Button**: Verify the button is disabled until API key is entered
+4. **API Key Info**: Enter an API key and verify the info banner can be dismissed
+5. **Conversation History**: Create conversations, switch between them, and verify they load properly (check browser console for debugging info)
+6. **Left Panel**: Verify PDF Upload and RAG Query sections are removed from the left panel
+7. **PDF Banner**: Upload a PDF and verify the banner appears and can be dismissed, and disappears when starting a new chat
+8. **Session Banner**: Verify the session-based conversation info banner appears only once and can be dismissed permanently
+9. **RAG Conversation History**: Upload a PDF, ask questions in RAG mode, and verify the conversation appears in the conversation history
+
+## Notes
+
+- All existing chat functionality has been preserved
+- The RAG integration automatically detects when documents are uploaded and switches to RAG mode
+- The UI maintains the same design language and responsive behavior
+- All new features are properly styled and accessible
