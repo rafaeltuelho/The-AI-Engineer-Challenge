@@ -560,6 +560,26 @@
   border-color: var(--border-accent);
 }
 
+.conversation-item.rag-mode {
+  background: rgba(34, 197, 94, 0.05);
+  border-color: rgba(34, 197, 94, 0.2);
+}
+
+.conversation-item.rag-mode:hover {
+  background: rgba(34, 197, 94, 0.1);
+  border-color: rgba(34, 197, 94, 0.3);
+}
+
+.conversation-item.regular-mode {
+  background: rgba(59, 130, 246, 0.05);
+  border-color: rgba(59, 130, 246, 0.2);
+}
+
+.conversation-item.regular-mode:hover {
+  background: rgba(59, 130, 246, 0.1);
+  border-color: rgba(59, 130, 246, 0.3);
+}
+
 .conversation-content {
   flex: 1;
   cursor: pointer;

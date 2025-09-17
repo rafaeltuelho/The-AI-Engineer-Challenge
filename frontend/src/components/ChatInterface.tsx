@@ -184,10 +184,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         setConversationId(convId)
         setDeveloperMessage(data.system_message)
         
-        // Check if this conversation has uploaded documents (RAG mode)
-        // We'll need to check if there are any documents in the session
-        // For now, we'll assume regular chat mode when loading conversations
-        setIsRagMode(false)
+        // Set the conversation mode based on the response
+        const conversationMode = data.mode || "regular"
+        setIsRagMode(conversationMode === "rag")
       } else {
         console.error('Failed to load conversation:', response.statusText)
       }
@@ -619,7 +618,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                       <p className="no-conversations">No conversations yet</p>
                     ) : (
                       conversations.map((conv) => (
-                        <div key={conv.conversation_id} className="conversation-item">
+                        <div key={conv.conversation_id} className={`conversation-item ${conv.mode === 'rag' ? 'rag-mode' : 'regular-mode'}`}>
                           <div 
                             className="conversation-content"
                             onClick={() => loadConversation(conv.conversation_id)}

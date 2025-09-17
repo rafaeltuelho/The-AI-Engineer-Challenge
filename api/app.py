@@ -454,7 +454,8 @@ async def chat(request: Request, chat_request: ChatRequest):
                 "system_message": chat_request.developer_message,
                 "title": None,  # Will be set when first user message is added
                 "created_at": datetime.now(timezone.utc),
-                "last_updated": datetime.now(timezone.utc)
+                "last_updated": datetime.now(timezone.utc),
+                "mode": "regular"  # Default to regular chat mode
             }
         
         # Add user message to conversation history
@@ -571,7 +572,8 @@ async def get_conversation(request: Request, conversation_id: str):
         "system_message": user_conversations[conversation_id]["system_message"],
         "messages": user_conversations[conversation_id]["messages"],
         "created_at": user_conversations[conversation_id]["created_at"],
-        "last_updated": user_conversations[conversation_id]["last_updated"]
+        "last_updated": user_conversations[conversation_id]["last_updated"],
+        "mode": user_conversations[conversation_id].get("mode", "regular")
     }
 
 # Endpoint to list all conversations
@@ -609,7 +611,8 @@ async def list_conversations(request: Request):
             "system_message": conv_data["system_message"],
             "message_count": len(conv_data["messages"]),
             "created_at": conv_data["created_at"],
-            "last_updated": conv_data["last_updated"]
+            "last_updated": conv_data["last_updated"],
+            "mode": conv_data.get("mode", "regular")
         })
     
     # Sort by last updated (most recent first)
@@ -823,7 +826,8 @@ async def rag_query(request: Request, query_request: RAGQueryRequest):
                 "system_message": "You are a helpful AI assistant with access to uploaded documents. Use the document content to answer questions accurately.",
                 "title": None,  # Will be set when first user message is added
                 "created_at": datetime.now(timezone.utc),
-                "last_updated": datetime.now(timezone.utc)
+                "last_updated": datetime.now(timezone.utc),
+                "mode": "rag"  # RAG mode for document queries
             }
         
         # Add user message to conversation history
