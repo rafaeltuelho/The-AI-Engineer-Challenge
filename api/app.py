@@ -25,8 +25,70 @@ from pathlib import Path
 # Import our PDF RAG functionality
 from pdf_rag import PDFProcessor, get_or_create_rag_system
 
-# Initialize FastAPI application with a title
-app = FastAPI(title="OpenAI Chat API")
+# Initialize FastAPI application with comprehensive OpenAPI configuration
+app = FastAPI(
+    title="OpenAI Chat API",
+    description="""
+    A comprehensive FastAPI-based backend service that provides:
+    
+    * **Streaming Chat Interface**: Real-time chat with OpenAI's GPT models
+    * **Session Management**: Secure session-based authentication
+    * **Conversation History**: Persistent conversation storage and retrieval
+    * **PDF RAG System**: Upload and query PDF documents using Retrieval-Augmented Generation
+    * **Rate Limiting**: Built-in protection against abuse
+    * **Security**: Input validation and secure API key handling
+    
+    ## Features
+    
+    - 🔄 **Real-time Streaming**: Get responses as they're generated
+    - 💬 **Conversation Management**: Create, retrieve, and delete conversations
+    - 📄 **PDF Processing**: Upload and query PDF documents
+    - 🔍 **RAG Queries**: Ask questions about uploaded documents
+    - 🛡️ **Security**: Rate limiting, input validation, and secure session management
+    - 📚 **Interactive Docs**: Test the API directly from the browser
+    
+    ## Authentication
+    
+    This API uses session-based authentication. First, create a session with your OpenAI API key, then use the returned session ID in subsequent requests.
+    """,
+    version="1.0.0",
+    contact={
+        "name": "API Support",
+        "email": "support@example.com",
+    },
+    license_info={
+        "name": "MIT",
+        "url": "https://opensource.org/licenses/MIT",
+    },
+    servers=[
+        {
+            "url": "http://localhost:8000",
+            "description": "Development server"
+        },
+        {
+            "url": "https://your-production-domain.com",
+            "description": "Production server"
+        }
+    ],
+    openapi_tags=[
+        {
+            "name": "Authentication",
+            "description": "Session management and authentication endpoints"
+        },
+        {
+            "name": "Chat",
+            "description": "Chat and conversation management endpoints"
+        },
+        {
+            "name": "PDF RAG",
+            "description": "PDF upload and RAG query endpoints"
+        },
+        {
+            "name": "Health",
+            "description": "Health check and system status endpoints"
+        }
+    ]
+)
 
 # Initialize rate limiter
 limiter = Limiter(key_func=get_remote_address)
@@ -305,7 +367,17 @@ class RAGQueryResponse(BaseModel):
     document_info: Dict[str, Any]
 
 # Endpoint to create a new session
-@app.post("/api/session")
+@app.post(
+    "/api/session",
+    response_model=SessionResponse,
+    tags=["Authentication"],
+    summary="Create a new session",
+    description="Create a new authenticated session using your OpenAI API key. Returns a session ID that you'll use for subsequent requests.",
+    responses={
+        200: {"description": "Session created successfully"},
+        500: {"description": "Internal server error"}
+    }
+)
 @limiter.limit("5/minute")  # Limit to 5 session creations per minute per IP
 async def create_session_endpoint(request: Request, session_request: SessionRequest):
     try:
@@ -319,7 +391,18 @@ async def create_session_endpoint(request: Request, session_request: SessionRequ
         raise HTTPException(status_code=500, detail=str(e))
 
 # Define the main chat endpoint that handles POST requests
-@app.post("/api/chat")
+@app.post(
+    "/api/chat",
+    tags=["Chat"],
+    summary="Send a chat message",
+    description="Send a message to the AI and receive a streaming response. Supports conversation history and model selection.",
+    responses={
+        200: {"description": "Streaming chat response"},
+        401: {"description": "Invalid or expired session"},
+        429: {"description": "Rate limit exceeded"},
+        500: {"description": "Internal server error"}
+    }
+)
 @limiter.limit("10/minute")  # Limit to 10 requests per minute per IP
 async def chat(request: Request, chat_request: ChatRequest):
     try:
@@ -433,7 +516,18 @@ async def chat(request: Request, chat_request: ChatRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 # Endpoint to get conversation history
-@app.get("/api/conversations/{conversation_id}")
+@app.get(
+    "/api/conversations/{conversation_id}",
+    tags=["Chat"],
+    summary="Get conversation history",
+    description="Retrieve the complete history of a specific conversation including all messages and metadata.",
+    responses={
+        200: {"description": "Conversation history retrieved successfully"},
+        401: {"description": "Invalid or expired session"},
+        404: {"description": "Conversation not found"},
+        429: {"description": "Rate limit exceeded"}
+    }
+)
 @limiter.limit("30/minute")  # Limit to 30 requests per minute per IP
 async def get_conversation(request: Request, conversation_id: str):
     # Get session ID from headers
@@ -462,7 +556,17 @@ async def get_conversation(request: Request, conversation_id: str):
     }
 
 # Endpoint to list all conversations
-@app.get("/api/conversations")
+@app.get(
+    "/api/conversations",
+    tags=["Chat"],
+    summary="List all conversations",
+    description="Get a list of all conversations for the authenticated user, sorted by last updated time.",
+    responses={
+        200: {"description": "List of conversations retrieved successfully"},
+        401: {"description": "Invalid or expired session"},
+        429: {"description": "Rate limit exceeded"}
+    }
+)
 @limiter.limit("20/minute")  # Limit to 20 requests per minute per IP
 async def list_conversations(request: Request):
     # Get session ID from headers
@@ -494,7 +598,18 @@ async def list_conversations(request: Request):
     return conversation_list
 
 # Endpoint to delete a conversation
-@app.delete("/api/conversations/{conversation_id}")
+@app.delete(
+    "/api/conversations/{conversation_id}",
+    tags=["Chat"],
+    summary="Delete a conversation",
+    description="Permanently delete a specific conversation and all its messages.",
+    responses={
+        200: {"description": "Conversation deleted successfully"},
+        401: {"description": "Invalid or expired session"},
+        404: {"description": "Conversation not found"},
+        429: {"description": "Rate limit exceeded"}
+    }
+)
 @limiter.limit("10/minute")  # Limit to 10 requests per minute per IP
 async def delete_conversation(request: Request, conversation_id: str):
     # Get session ID from headers
@@ -517,7 +632,17 @@ async def delete_conversation(request: Request, conversation_id: str):
     return {"message": "Conversation deleted successfully"}
 
 # Endpoint to clear all conversations for a specific user
-@app.delete("/api/conversations")
+@app.delete(
+    "/api/conversations",
+    tags=["Chat"],
+    summary="Clear all conversations",
+    description="Permanently delete all conversations for the authenticated user. This action cannot be undone.",
+    responses={
+        200: {"description": "All conversations cleared successfully"},
+        401: {"description": "Invalid or expired session"},
+        429: {"description": "Rate limit exceeded"}
+    }
+)
 @limiter.limit("5/minute")  # Limit to 5 requests per minute per IP (more restrictive)
 async def clear_all_conversations(request: Request):
     # Get session ID from headers
@@ -537,12 +662,25 @@ async def clear_all_conversations(request: Request):
     return {"message": "All conversations cleared successfully"}
 
 # PDF Upload endpoint
-@app.post("/api/upload-pdf")
+@app.post(
+    "/api/upload-pdf",
+    response_model=PDFUploadResponse,
+    tags=["PDF RAG"],
+    summary="Upload a PDF document",
+    description="Upload and process a PDF document for RAG (Retrieval-Augmented Generation) functionality. The document will be chunked and indexed for later querying.",
+    responses={
+        200: {"description": "PDF processed and indexed successfully"},
+        400: {"description": "Invalid file type or size"},
+        401: {"description": "Invalid or expired session"},
+        429: {"description": "Rate limit exceeded"},
+        500: {"description": "Internal server error"}
+    }
+)
 @limiter.limit("3/minute")  # Limit to 3 PDF uploads per minute per IP
 async def upload_pdf(
     request: Request,
-    file: UploadFile = File(...),
-    api_key: str = Form(...)
+    file: UploadFile = File(..., description="PDF file to upload (max 10MB)"),
+    api_key: str = Form(..., description="OpenAI API key for processing")
 ):
     """Upload and process a PDF file for RAG functionality."""
     try:
@@ -604,7 +742,19 @@ async def upload_pdf(
         raise HTTPException(status_code=500, detail=str(e))
 
 # RAG Query endpoint
-@app.post("/api/rag-query")
+@app.post(
+    "/api/rag-query",
+    response_model=RAGQueryResponse,
+    tags=["PDF RAG"],
+    summary="Query uploaded documents",
+    description="Ask questions about uploaded PDF documents using RAG (Retrieval-Augmented Generation). Returns relevant answers based on document content.",
+    responses={
+        200: {"description": "RAG query processed successfully"},
+        401: {"description": "Invalid or expired session"},
+        429: {"description": "Rate limit exceeded"},
+        500: {"description": "Internal server error"}
+    }
+)
 @limiter.limit("20/minute")  # Limit to 20 RAG queries per minute per IP
 async def rag_query(request: Request, query_request: RAGQueryRequest):
     """Query the RAG system with a question."""
@@ -648,7 +798,18 @@ async def rag_query(request: Request, query_request: RAGQueryRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 # Get document info endpoint
-@app.get("/api/documents")
+@app.get(
+    "/api/documents",
+    tags=["PDF RAG"],
+    summary="Get uploaded documents info",
+    description="Retrieve information about all uploaded documents for the current session, including metadata and chunk counts.",
+    responses={
+        200: {"description": "Document information retrieved successfully"},
+        401: {"description": "Invalid or expired session"},
+        429: {"description": "Rate limit exceeded"},
+        500: {"description": "Internal server error"}
+    }
+)
 @limiter.limit("10/minute")  # Limit to 10 requests per minute per IP
 async def get_documents(request: Request):
     """Get information about uploaded documents for the session."""
@@ -681,7 +842,15 @@ async def get_documents(request: Request):
         raise HTTPException(status_code=500, detail=str(e))
 
 # Define a health check endpoint to verify API status
-@app.get("/api/health")
+@app.get(
+    "/api/health",
+    tags=["Health"],
+    summary="Health check",
+    description="Check the API health status. Returns OK if the service is running properly.",
+    responses={
+        200: {"description": "API is healthy and running"}
+    }
+)
 async def health_check():
     return {"status": "ok"}
 
