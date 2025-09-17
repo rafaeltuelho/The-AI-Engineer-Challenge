@@ -246,7 +246,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         headers: {
           'Content-Type': 'application/json',
           'X-Session-ID': sessionId,
-          'X-API-Key': apiKey
+          'X-API-Key': apiKey,
+          ...(shouldUseRAG && conversationId ? { 'X-Conversation-ID': conversationId } : {})
         },
         body: JSON.stringify(shouldUseRAG ? {
           question: currentMessage,
@@ -282,9 +283,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         const ragResult = await response.json()
         assistantMessage = ragResult.answer
         
-        // Get conversation ID from response headers or create new one for RAG queries
-        const newConversationId = response.headers.get('X-Conversation-ID') || conversationId || `conv_${Date.now()}`
-        if (!conversationId) {
+        // Get conversation ID from response headers or use existing one for RAG queries
+        const newConversationId = response.headers.get('X-Conversation-ID') || conversationId
+        if (!conversationId && newConversationId) {
           setConversationId(newConversationId)
         }
         
