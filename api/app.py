@@ -330,6 +330,7 @@ class PDFUploadResponse(BaseModel):
 class RAGQueryRequest(BaseModel):
     question: str
     k: Optional[int] = 5  # Number of relevant chunks to retrieve
+    model: Optional[str] = "gpt-4.1-mini"  # Model selection for RAG queries
     
     @field_validator('question')
     @classmethod
@@ -358,6 +359,24 @@ class RAGQueryRequest(BaseModel):
         
         if v < 1 or v > 20:
             raise ValueError('k must be between 1 and 20')
+        
+        return v
+    
+    @field_validator('model')
+    @classmethod
+    def validate_model(cls, v):
+        """Validate model selection"""
+        if not v:
+            return "gpt-4.1-mini"  # Default model
+        
+        # List of allowed models (you can expand this list)
+        allowed_models = [
+            "gpt-4", "gpt-4-turbo", "gpt-4o", "gpt-4o-mini",
+            "gpt-4.1-mini", "gpt-4.1-nano", "gpt-5", "gpt-4-mini", "gpt-5-nano"
+        ]
+        
+        if v not in allowed_models:
+            raise ValueError(f'Invalid model: {v}. Allowed models: {", ".join(allowed_models)}')
         
         return v
 
@@ -778,8 +797,8 @@ async def rag_query(request: Request, query_request: RAGQueryRequest):
         if not api_key:
             raise HTTPException(status_code=401, detail="API key required in X-API-Key header")
         
-        # Get RAG system for this session
-        rag_system = get_or_create_rag_system(session_id, api_key)
+        # Get RAG system for this session with the specified model
+        rag_system = get_or_create_rag_system(session_id, api_key, query_request.model)
         
         # Query the RAG system
         answer = rag_system.query(query_request.question, k=query_request.k)
@@ -881,7 +900,7 @@ async def get_documents(request: Request):
         if not api_key:
             raise HTTPException(status_code=401, detail="API key required in X-API-Key header")
         
-        # Get RAG system for this session
+        # Get RAG system for this session (using default model for document info)
         rag_system = get_or_create_rag_system(session_id, api_key)
         
         # Get document info

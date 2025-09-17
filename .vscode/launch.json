@@ -1,0 +1,44 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug FastAPI Backend",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/api/app.py",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}/api",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            },
+            "args": [],
+            "justMyCode": false,
+            "stopOnEntry": false,
+            "python": "${command:python.interpreterPath}"
+        },
+        {
+            "name": "Debug FastAPI with uvicorn",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "uvicorn",
+            "args": [
+                "app:app",
+                "--reload",
+                "--host",
+                "0.0.0.0",
+                "--port",
+                "8000",
+                "--log-level",
+                "debug"
+            ],
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}/api",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            },
+            "justMyCode": false,
+            "stopOnEntry": false,
+            "python": "${command:python.interpreterPath}"
+        }
+    ]
+}

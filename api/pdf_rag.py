@@ -144,11 +144,12 @@ class PDFProcessor:
 class RAGSystem:
     """RAG (Retrieval-Augmented Generation) system using aimakerspace library."""
     
-    def __init__(self, api_key: str):
+    def __init__(self, api_key: str, model_name: str = "gpt-4.1-mini"):
         self.api_key = api_key
+        self.model_name = model_name
         self.embedding_model = EmbeddingModel(api_key=api_key)
         self.vector_db = VectorDatabase(embedding_model=self.embedding_model, api_key=api_key)
-        self.chat_model = ChatOpenAI(model_name="gpt-4.1-mini", api_key=api_key)
+        self.chat_model = ChatOpenAI(model_name=model_name, api_key=api_key)
         self.documents = {}  # Store document metadata
         
     async def index_document(self, document_id: str, chunks: List[str], metadata: Dict[str, Any]) -> None:
@@ -188,7 +189,7 @@ class RAGSystem:
         except Exception as e:
             raise Exception(f"Error indexing document: {str(e)}")
     
-    def search_relevant_chunks(self, query: str, k: int = 5) -> List[Dict[str, Any]]:
+    def search_relevant_chunks(self, query: str, k: int = 3) -> List[Dict[str, Any]]:
         """
         Search for relevant chunks using vector similarity.
         
@@ -282,8 +283,8 @@ Please answer the question based only on the provided context."""
 rag_systems: Dict[str, RAGSystem] = {}
 
 
-def get_or_create_rag_system(session_id: str, api_key: str) -> RAGSystem:
+def get_or_create_rag_system(session_id: str, api_key: str, model_name: str = "gpt-4.1-mini") -> RAGSystem:
     """Get or create a RAG system for a session."""
     if session_id not in rag_systems:
-        rag_systems[session_id] = RAGSystem(api_key)
+        rag_systems[session_id] = RAGSystem(api_key, model_name)
     return rag_systems[session_id]

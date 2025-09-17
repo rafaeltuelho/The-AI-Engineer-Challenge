@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react'
-import { Send, Key, MessageSquare, User, Bot, Trash2, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Settings, ArrowDown, X, FileText, Upload } from 'lucide-react'
+import { Send, Key, MessageSquare, User, Bot, Trash2, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Settings, ArrowDown, X, FileText, Upload, Database, MessageCircle } from 'lucide-react'
 import MarkdownRenderer from './MarkdownRenderer'
 import './ChatInterface.css'
 
@@ -251,7 +251,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         },
         body: JSON.stringify(shouldUseRAG ? {
           question: currentMessage,
-          k: 3
+          k: 3,
+          model: selectedModel
         } : {
           conversation_id: conversationId,
           developer_message: developerMessage,
@@ -659,7 +660,22 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
       <div className="chat-container">
         <div className="chat-header">
-          <h2>Chat with AI</h2>
+          <div className="chat-header-left">
+            <h2>Chat with AI</h2>
+            <div className={`mode-indicator ${isRagMode ? 'rag-mode' : 'regular-mode'}`}>
+              {isRagMode ? (
+                <>
+                  <Database size={14} />
+                  <span>RAG Mode</span>
+                </>
+              ) : (
+                <>
+                  <MessageCircle size={14} />
+                  <span>Regular Chat</span>
+                </>
+              )}
+            </div>
+          </div>
           <button 
             className="new-chat-btn"
             onClick={startNewConversation}
@@ -690,7 +706,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
               <Bot size={48} />
               <h3>Start a conversation</h3>
               <p>Enter your message below to begin chatting with the AI assistant.</p>
-              {uploadedDocuments.length > 0 && showPdfBanner && (
+              {/*uploadedDocuments.length > 0 && showPdfBanner && (
                 <div className="pdf-info-banner">
                   <FileText size={16} />
                   <div className="pdf-info-content">
@@ -714,7 +730,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                   💡 You have {conversations.length} previous conversation{conversations.length !== 1 ? 's' : ''}. 
                   Open the Conversations section in the left panel to view them.
                 </p>
-              )}
+              ) */}
             </div>
           ) : (
             messages.map((message) => (
