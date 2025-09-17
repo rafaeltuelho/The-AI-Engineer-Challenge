@@ -44,14 +44,12 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     systemMessage: false,
     conversations: false
   })
-  const [uploadedDocuments, setUploadedDocuments] = useState<any[]>([])
   const [pdfUploadError, setPdfUploadError] = useState<string | null>(null)
   const [pdfUploadSuccess, setPdfUploadSuccess] = useState<string | null>(null)
   const [isPdfUploading, setIsPdfUploading] = useState(false)
   const [showApiKeySuccess, setShowApiKeySuccess] = useState(false)
   const [showApiKeyInfo, setShowApiKeyInfo] = useState(true)
   const [isRagMode, setIsRagMode] = useState(false)
-  const [showPdfBanner, setShowPdfBanner] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const availableModels = Object.keys(modelDescriptions)
@@ -354,7 +352,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     setDeveloperMessage('You are a helpful AI assistant.')
     setShowConversationInfoBanner(false)
     setIsRagMode(false)
-    setShowPdfBanner(false)
   }
 
   const startNewConversation = () => {
@@ -387,9 +384,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     setShowApiKeyInfo(false)
   }
 
-  const dismissPdfBanner = () => {
-    setShowPdfBanner(false)
-  }
 
 
   const handlePdfUpload = async (file: File) => {
@@ -432,21 +426,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
       const data = await response.json()
       
-      const newDocument = {
-        document_id: data.document_id,
-        file_name: data.file_name,
-        chunk_count: data.chunk_count,
-        upload_time: new Date()
-      }
-
-      setUploadedDocuments(prev => [newDocument, ...prev])
       setPdfUploadSuccess(`PDF "${data.file_name}" uploaded and processed successfully! ${data.chunk_count} chunks created.`)
       
       // Set RAG mode for the current conversation
       setIsRagMode(true)
-      
-      // Show PDF banner
-      setShowPdfBanner(true)
       
       // Clear success message after 10 seconds
       setTimeout(() => setPdfUploadSuccess(null), 10000)
