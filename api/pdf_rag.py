@@ -146,9 +146,9 @@ class RAGSystem:
     
     def __init__(self, api_key: str):
         self.api_key = api_key
-        self.embedding_model = EmbeddingModel()
-        self.vector_db = VectorDatabase(embedding_model=self.embedding_model)
-        self.chat_model = ChatOpenAI(model_name="gpt-4.1-mini")
+        self.embedding_model = EmbeddingModel(api_key=api_key)
+        self.vector_db = VectorDatabase(embedding_model=self.embedding_model, api_key=api_key)
+        self.chat_model = ChatOpenAI(model_name="gpt-4.1-mini", api_key=api_key)
         self.documents = {}  # Store document metadata
         
     async def index_document(self, document_id: str, chunks: List[str], metadata: Dict[str, Any]) -> None:

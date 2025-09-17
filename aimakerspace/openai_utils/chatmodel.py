@@ -6,17 +6,18 @@ load_dotenv()
 
 
 class ChatOpenAI:
-    def __init__(self, model_name: str = "gpt-4.1-mini"):
+    def __init__(self, model_name: str = "gpt-4.1-mini", api_key: str = None):
         self.model_name = model_name
-        self.openai_api_key = os.getenv("OPENAI_API_KEY")
+        # Use provided API key or fall back to environment variable
+        self.openai_api_key = api_key or os.getenv("OPENAI_API_KEY")
         if self.openai_api_key is None:
-            raise ValueError("OPENAI_API_KEY is not set")
+            raise ValueError("OpenAI API key must be provided either as parameter or OPENAI_API_KEY environment variable")
 
     def run(self, messages, text_only: bool = True, **kwargs):
         if not isinstance(messages, list):
             raise ValueError("messages must be a list")
 
-        client = OpenAI()
+        client = OpenAI(api_key=self.openai_api_key)
         response = client.chat.completions.create(
             model=self.model_name, messages=messages, **kwargs
         )

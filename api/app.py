@@ -679,8 +679,7 @@ async def clear_all_conversations(request: Request):
 @limiter.limit("3/minute")  # Limit to 3 PDF uploads per minute per IP
 async def upload_pdf(
     request: Request,
-    file: UploadFile = File(..., description="PDF file to upload (max 10MB)"),
-    api_key: str = Form(..., description="OpenAI API key for processing")
+    file: UploadFile = File(..., description="PDF file to upload (max 10MB)")
 ):
     """Upload and process a PDF file for RAG functionality."""
     try:
@@ -693,6 +692,11 @@ async def upload_pdf(
         hashed_api_key = get_session_api_key(session_id)
         if not hashed_api_key:
             raise HTTPException(status_code=401, detail="Invalid or expired session")
+        
+        # Get API key from request headers
+        api_key = request.headers.get("X-API-Key")
+        if not api_key:
+            raise HTTPException(status_code=401, detail="API key required in X-API-Key header")
         
         # Validate file type
         if not file.filename.lower().endswith('.pdf'):
@@ -769,10 +773,10 @@ async def rag_query(request: Request, query_request: RAGQueryRequest):
         if not hashed_api_key:
             raise HTTPException(status_code=401, detail="Invalid or expired session")
         
-        # Get API key from request body (we need it for the RAG system)
+        # Get API key from request headers (we need it for the RAG system)
         api_key = request.headers.get("X-API-Key")
         if not api_key:
-            raise HTTPException(status_code=401, detail="API key required")
+            raise HTTPException(status_code=401, detail="API key required in X-API-Key header")
         
         # Get RAG system for this session
         rag_system = get_or_create_rag_system(session_id, api_key)
@@ -827,7 +831,7 @@ async def get_documents(request: Request):
         # Get API key from request headers
         api_key = request.headers.get("X-API-Key")
         if not api_key:
-            raise HTTPException(status_code=401, detail="API key required")
+            raise HTTPException(status_code=401, detail="API key required in X-API-Key header")
         
         # Get RAG system for this session
         rag_system = get_or_create_rag_system(session_id, api_key)

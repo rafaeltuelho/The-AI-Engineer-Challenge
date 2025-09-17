@@ -79,9 +79,9 @@ DISTANCE_MEASURES = {
 
 
 class VectorDatabase:
-    def __init__(self, embedding_model: EmbeddingModel = None):
+    def __init__(self, embedding_model: EmbeddingModel = None, api_key: str = None):
         self.vectors = defaultdict(np.array)
-        self.embedding_model = embedding_model or EmbeddingModel()
+        self.embedding_model = embedding_model or EmbeddingModel(api_key=api_key)
         self.metadata = {}  # Store metadata for each vector
 
     def insert(self, key: str, vector: np.array, metadata: dict = None) -> None:

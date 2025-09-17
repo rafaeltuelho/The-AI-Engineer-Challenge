@@ -1,8 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react'
-import { Send, Key, MessageSquare, User, Bot, Trash2, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Settings, ArrowDown, X, FileText, Search } from 'lucide-react'
+import { Send, Key, MessageSquare, User, Bot, Trash2, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Settings, ArrowDown, X, FileText, Upload } from 'lucide-react'
 import MarkdownRenderer from './MarkdownRenderer'
-import PDFUpload from './PDFUpload'
-import RAGQuery from './RAGQuery'
 import './ChatInterface.css'
 
 interface Message {
@@ -41,12 +39,17 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     apiKey: true,
     model: false,
     systemMessage: false,
-    conversations: false,
-    pdfUpload: false,
-    ragQuery: false
+    conversations: false
   })
   const [uploadedDocuments, setUploadedDocuments] = useState<any[]>([])
-  const [ragQueryResult, setRagQueryResult] = useState<any>(null)
+  const [pdfUploadError, setPdfUploadError] = useState<string | null>(null)
+  const [pdfUploadSuccess, setPdfUploadSuccess] = useState<string | null>(null)
+  const [isPdfUploading, setIsPdfUploading] = useState(false)
+  const [showApiKeySuccess, setShowApiKeySuccess] = useState(false)
+  const [showApiKeyInfo, setShowApiKeyInfo] = useState(true)
+  const [isRagMode, setIsRagMode] = useState(false)
+  const [showPdfBanner, setShowPdfBanner] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const availableModels = Object.keys(modelDescriptions)
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -56,13 +59,15 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const [shouldAutoScroll, setShouldAutoScroll] = useState(true)
 
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' })
+    }
   }
 
   const checkIfNearBottom = () => {
     if (!messagesContainerRef.current) return false
     const { scrollTop, scrollHeight, clientHeight } = messagesContainerRef.current
-    return scrollHeight - scrollTop - clientHeight < 100 // 100px threshold
+    return scrollHeight - scrollTop - clientHeight < 50 // Reduced threshold for better UX
   }
 
   const handleScroll = () => {
@@ -74,10 +79,26 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   }
 
   useEffect(() => {
-    if (shouldAutoScroll) {
-      scrollToBottom()
+    if (shouldAutoScroll && messages.length > 0) {
+      // Use requestAnimationFrame for better performance
+      requestAnimationFrame(() => {
+        scrollToBottom()
+      })
     }
   }, [messages, shouldAutoScroll])
+
+  // Auto-scroll when new messages are added during streaming
+  useEffect(() => {
+    if (isLoading && shouldAutoScroll) {
+      const interval = setInterval(() => {
+        if (shouldAutoScroll) {
+          scrollToBottom()
+        }
+      }, 100)
+      
+      return () => clearInterval(interval)
+    }
+  }, [isLoading, shouldAutoScroll])
 
   // Reset auto-scroll when starting a new conversation
   useEffect(() => {
@@ -102,8 +123,26 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     }
   }, [sessionId])
 
+  // Reload conversations when conversationId changes (new conversation created)
+  useEffect(() => {
+    if (conversationId) {
+      // Small delay to ensure backend has processed the conversation
+      setTimeout(() => {
+        loadConversations()
+      }, 200)
+    }
+  }, [conversationId])
+
+  // Show API key success banner when API key is entered
+  useEffect(() => {
+    if (apiKey.trim() && !showApiKeySuccess) {
+      setShowApiKeySuccess(true)
+    }
+  }, [apiKey, showApiKeySuccess])
+
   const loadConversations = async () => {
     try {
+      console.log('Loading conversations for session:', sessionId)
       const response = await fetch('/api/conversations', {
         headers: {
           'X-Session-ID': sessionId
@@ -111,10 +150,15 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       })
       if (response.ok) {
         const data = await response.json()
-        setConversations(data)
+        console.log('Conversations loaded:', data)
+        setConversations(data || [])
+      } else {
+        console.error('Failed to load conversations:', response.status, response.statusText)
+        setConversations([])
       }
     } catch (error) {
       console.error('Error loading conversations:', error)
+      setConversations([])
     }
   }
 
@@ -136,6 +180,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         })))
         setConversationId(convId)
         setDeveloperMessage(data.system_message)
+        
+        // Check if this conversation has uploaded documents (RAG mode)
+        // We'll need to check if there are any documents in the session
+        // For now, we'll assume regular chat mode when loading conversations
+        setIsRagMode(false)
       } else {
         console.error('Failed to load conversation:', response.statusText)
       }
@@ -182,20 +231,28 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     }
 
     setMessages(prev => [...prev, userMessage])
+    const currentMessage = inputMessage
     setInputMessage('')
     setIsLoading(true)
 
     try {
-      const response = await fetch('/api/chat', {
+      // Use RAG mode if it's been set for this conversation
+      const shouldUseRAG = isRagMode
+      
+      const response = await fetch(shouldUseRAG ? '/api/rag-query' : '/api/chat', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-Session-ID': sessionId
+          'X-Session-ID': sessionId,
+          'X-API-Key': apiKey
         },
-        body: JSON.stringify({
+        body: JSON.stringify(shouldUseRAG ? {
+          question: currentMessage,
+          k: 5
+        } : {
           conversation_id: conversationId,
           developer_message: developerMessage,
-          user_message: inputMessage,
+          user_message: currentMessage,
           model: selectedModel,
           api_key: apiKey
         })
@@ -204,17 +261,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`)
       }
-
-      // Get conversation ID from response headers or create new one
-      const newConversationId = response.headers.get('X-Conversation-ID') || conversationId || `conv_${Date.now()}`
-      if (!conversationId) {
-        setConversationId(newConversationId)
-        // Show info banner when first conversation is created
-        setShowConversationInfoBanner(true)
-      }
-
-      const reader = response.body?.getReader()
-      if (!reader) throw new Error('No response body')
 
       let assistantMessage = ''
       const assistantMessageId = (Date.now() + 1).toString()
@@ -228,13 +274,19 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
       setMessages(prev => [...prev, assistantMessageObj])
 
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-
-        const chunk = new TextDecoder().decode(value)
-        assistantMessage += chunk
-
+      if (shouldUseRAG) {
+        // Handle RAG response (JSON)
+        const ragResult = await response.json()
+        assistantMessage = ragResult.answer
+        
+        // Get conversation ID from response headers or create new one for RAG queries
+        const newConversationId = response.headers.get('X-Conversation-ID') || conversationId || `conv_${Date.now()}`
+        if (!conversationId) {
+          setConversationId(newConversationId)
+          // Show info banner when first conversation is created
+          setShowConversationInfoBanner(true)
+        }
+        
         setMessages(prev => 
           prev.map(msg => 
             msg.id === assistantMessageId 
@@ -242,10 +294,45 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
               : msg
           )
         )
-      }
+        
+        // Reload conversations to show the updated list
+        setTimeout(() => {
+          loadConversations()
+        }, 100)
+      } else {
+        // Handle regular chat response (streaming)
+        // Get conversation ID from response headers or create new one
+        const newConversationId = response.headers.get('X-Conversation-ID') || conversationId || `conv_${Date.now()}`
+        if (!conversationId) {
+          setConversationId(newConversationId)
+          // Show info banner when first conversation is created
+          setShowConversationInfoBanner(true)
+        }
 
-      // Reload conversations to show the updated list
-      await loadConversations()
+        const reader = response.body?.getReader()
+        if (!reader) throw new Error('No response body')
+
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+
+          const chunk = new TextDecoder().decode(value)
+          assistantMessage += chunk
+
+          setMessages(prev => 
+            prev.map(msg => 
+              msg.id === assistantMessageId 
+                ? { ...msg, content: assistantMessage }
+                : msg
+            )
+          )
+        }
+
+        // Reload conversations to show the updated list
+        setTimeout(() => {
+          loadConversations()
+        }, 100)
+      }
 
     } catch (error) {
       console.error('Error:', error)
@@ -266,12 +353,16 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     setConversationId(null)
     setDeveloperMessage('You are a helpful AI assistant.')
     setShowConversationInfoBanner(false)
+    setIsRagMode(false)
+    setShowPdfBanner(false)
   }
 
   const startNewConversation = () => {
     clearChat()
     // Reload conversations to ensure the list is up to date
-    loadConversations()
+    setTimeout(() => {
+      loadConversations()
+    }, 100)
   }
 
   const toggleSection = (section: keyof typeof expandedSections) => {
@@ -287,6 +378,90 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
   const dismissInfoBanner = () => {
     setShowConversationInfoBanner(false)
+  }
+
+
+  const dismissApiKeyInfo = () => {
+    setShowApiKeyInfo(false)
+  }
+
+  const dismissPdfBanner = () => {
+    setShowPdfBanner(false)
+  }
+
+
+  const handlePdfUpload = async (file: File) => {
+    if (!sessionId || !apiKey) {
+      setPdfUploadError('Session ID and API key are required')
+      return
+    }
+
+    if (file.type !== 'application/pdf') {
+      setPdfUploadError('Please select a PDF file')
+      return
+    }
+
+    if (file.size > 10 * 1024 * 1024) { // 10MB limit
+      setPdfUploadError('File size must be less than 10MB')
+      return
+    }
+
+    setIsPdfUploading(true)
+    setPdfUploadError(null)
+    setPdfUploadSuccess(null)
+
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+
+      const response = await fetch('/api/upload-pdf', {
+        method: 'POST',
+        headers: {
+          'X-Session-ID': sessionId,
+          'X-API-Key': apiKey
+        },
+        body: formData
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.detail || 'Upload failed')
+      }
+
+      const data = await response.json()
+      
+      const newDocument = {
+        document_id: data.document_id,
+        file_name: data.file_name,
+        chunk_count: data.chunk_count,
+        upload_time: new Date()
+      }
+
+      setUploadedDocuments(prev => [newDocument, ...prev])
+      setPdfUploadSuccess(`PDF "${data.file_name}" uploaded and processed successfully! ${data.chunk_count} chunks created.`)
+      
+      // Set RAG mode for the current conversation
+      setIsRagMode(true)
+      
+      // Show PDF banner
+      setShowPdfBanner(true)
+      
+      // Clear success message after 5 seconds
+      setTimeout(() => setPdfUploadSuccess(null), 5000)
+
+    } catch (error) {
+      console.error('Upload error:', error)
+      setPdfUploadError(error instanceof Error ? error.message : 'Upload failed')
+    } finally {
+      setIsPdfUploading(false)
+    }
+  }
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files
+    if (files && files.length > 0) {
+      handlePdfUpload(files[0])
+    }
   }
 
   const renderMessageContent = (message: Message) => {
@@ -333,12 +508,19 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                     placeholder="Enter your OpenAI API key"
                     className="api-key-input"
                   />
-                  {apiKey.trim() && (
+                  {apiKey.trim() && showApiKeyInfo && (
                     <div className="api-key-info">
                       <div className="info-icon">ℹ️</div>
                       <div className="info-text">
                         Your API key is only used for this session and is not stored or persisted anywhere!
                       </div>
+                      <button 
+                        className="dismiss-info-btn"
+                        onClick={dismissApiKeyInfo}
+                        title="Dismiss"
+                      >
+                        <X size={12} />
+                      </button>
                     </div>
                   )}
                 </div>
@@ -398,49 +580,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
               )}
             </div>
 
-            <div className="setting-section">
-              <div 
-                className="section-header"
-                onClick={() => toggleSection('pdfUpload')}
-              >
-                <div className="section-title">
-                  <FileText size={14} />
-                  <span>PDF Upload</span>
-                </div>
-                {expandedSections.pdfUpload ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-              </div>
-              {expandedSections.pdfUpload && (
-                <div className="section-content">
-                  <PDFUpload 
-                    sessionId={sessionId}
-                    apiKey={apiKey}
-                    onDocumentUploaded={(doc) => setUploadedDocuments(prev => [doc, ...prev])}
-                  />
-                </div>
-              )}
-            </div>
-
-            <div className="setting-section">
-              <div 
-                className="section-header"
-                onClick={() => toggleSection('ragQuery')}
-              >
-                <div className="section-title">
-                  <Search size={14} />
-                  <span>RAG Query</span>
-                </div>
-                {expandedSections.ragQuery ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-              </div>
-              {expandedSections.ragQuery && (
-                <div className="section-content">
-                  <RAGQuery 
-                    sessionId={sessionId}
-                    apiKey={apiKey}
-                    onQueryResult={(result) => setRagQueryResult(result)}
-                  />
-                </div>
-              )}
-            </div>
 
             <div className="setting-section">
               <div 
@@ -523,7 +662,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           <button 
             className="new-chat-btn"
             onClick={startNewConversation}
-            title="New Chat"
+            disabled={!apiKey.trim()}
+            title={apiKey.trim() ? "New Chat" : "Enter API key to start chatting"}
           >
             <MessageSquare size={16} />
             New Chat
@@ -538,6 +678,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         )}
 
 
+
         <div 
           className="messages-container"
           ref={messagesContainerRef}
@@ -548,16 +689,23 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
               <Bot size={48} />
               <h3>Start a conversation</h3>
               <p>Enter your message below to begin chatting with the AI assistant.</p>
-              {uploadedDocuments.length > 0 && (
+              {uploadedDocuments.length > 0 && showPdfBanner && (
                 <div className="pdf-info-banner">
                   <FileText size={16} />
                   <div className="pdf-info-content">
                     <div className="pdf-info-title">PDF Documents Ready</div>
                     <div className="pdf-info-text">
                       You have {uploadedDocuments.length} PDF document{uploadedDocuments.length !== 1 ? 's' : ''} uploaded. 
-                      Use the RAG Query section in the left panel to ask questions about your documents.
+                      You can now ask questions about your documents directly in the chat - the AI will use information from your uploaded PDFs to answer your questions.
                     </div>
                   </div>
+                  <button 
+                    className="dismiss-pdf-banner-btn"
+                    onClick={dismissPdfBanner}
+                    title="Dismiss"
+                  >
+                    <X size={12} />
+                  </button>
                 </div>
               )}
               {conversations.length > 0 && (
@@ -615,6 +763,15 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
         <form onSubmit={handleSubmit} className="input-form">
           <div className="input-container">
+            <button
+              type="button"
+              className="pdf-upload-button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isLoading || !apiKey.trim() || isPdfUploading}
+              title="Upload PDF"
+            >
+              <Upload size={20} />
+            </button>
             <textarea
               ref={textareaRef}
               value={inputMessage}
@@ -632,10 +789,45 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             >
               <Send size={20} />
             </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".pdf"
+              onChange={handleFileSelect}
+              style={{ display: 'none' }}
+              disabled={isPdfUploading}
+            />
           </div>
           {conversationId && (
             <div className="conversation-info">
               <span>💬 Continuing conversation: {conversationId.substring(0, 8)}...</span>
+            </div>
+          )}
+          
+          {pdfUploadError && (
+            <div className="upload-message error">
+              <X size={16} />
+              <span>{pdfUploadError}</span>
+              <button onClick={() => setPdfUploadError(null)}>
+                <X size={14} />
+              </button>
+            </div>
+          )}
+
+          {pdfUploadSuccess && (
+            <div className="upload-message success">
+              <FileText size={16} />
+              <span>{pdfUploadSuccess}</span>
+              <button onClick={() => setPdfUploadSuccess(null)}>
+                <X size={14} />
+              </button>
+            </div>
+          )}
+
+          {isPdfUploading && (
+            <div className="upload-message uploading">
+              <div className="loading-spinner" />
+              <span>Processing PDF...</span>
             </div>
           )}
         </form>

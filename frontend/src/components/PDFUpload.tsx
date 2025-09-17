@@ -77,12 +77,12 @@ const PDFUpload: React.FC<PDFUploadProps> = ({ sessionId, apiKey, onDocumentUplo
     try {
       const formData = new FormData()
       formData.append('file', file)
-      formData.append('api_key', apiKey)
 
       const response = await fetch('/api/upload-pdf', {
         method: 'POST',
         headers: {
-          'X-Session-ID': sessionId
+          'X-Session-ID': sessionId,
+          'X-API-Key': apiKey
         },
         body: formData
       })

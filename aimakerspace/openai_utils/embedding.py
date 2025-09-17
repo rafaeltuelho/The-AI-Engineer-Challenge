@@ -7,16 +7,18 @@ import asyncio
 
 
 class EmbeddingModel:
-    def __init__(self, embeddings_model_name: str = "text-embedding-3-small", batch_size: int = 1024):
+    def __init__(self, embeddings_model_name: str = "text-embedding-3-small", batch_size: int = 1024, api_key: str = None):
         load_dotenv()
-        self.openai_api_key = os.getenv("OPENAI_API_KEY")
-        self.async_client = AsyncOpenAI()
-        self.client = OpenAI()
-
+        # Use provided API key or fall back to environment variable
+        self.openai_api_key = api_key or os.getenv("OPENAI_API_KEY")
+        
         if self.openai_api_key is None:
             raise ValueError(
-                "OPENAI_API_KEY environment variable is not set. Please set it to your OpenAI API key."
+                "OpenAI API key must be provided either as parameter or OPENAI_API_KEY environment variable."
             )
+        
+        self.async_client = AsyncOpenAI(api_key=self.openai_api_key)
+        self.client = OpenAI(api_key=self.openai_api_key)
         self.embeddings_model_name = embeddings_model_name
         self.batch_size = batch_size
 
