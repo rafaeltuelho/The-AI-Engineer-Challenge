@@ -12,7 +12,7 @@ from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 import os
 from typing import Optional, List, Dict, Any
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import uuid
 import re
 import hashlib
@@ -128,7 +128,7 @@ def create_session(api_key: str) -> str:
     
     sessions[session_id] = {
         "api_key": hashed_api_key,
-        "last_access": datetime.utcnow()
+        "last_access": datetime.now(timezone.utc)
     }
     
     # Update API key access time
@@ -142,7 +142,7 @@ def get_session_api_key(session_id: str) -> Optional[str]:
         return None
     
     # Update session access time
-    sessions[session_id]["last_access"] = datetime.utcnow()
+    sessions[session_id]["last_access"] = datetime.now(timezone.utc)
     hashed_api_key = sessions[session_id]["api_key"]
     update_api_key_access(hashed_api_key)
     
@@ -156,11 +156,11 @@ def get_user_conversations(hashed_api_key: str) -> Dict[str, Dict[str, Any]]:
 
 def update_api_key_access(hashed_api_key: str):
     """Update the last access time for an API key"""
-    api_key_last_access[hashed_api_key] = datetime.utcnow()
+    api_key_last_access[hashed_api_key] = datetime.now(timezone.utc)
 
 def cleanup_inactive_conversations():
     """Clean up conversations and sessions for API keys that haven't been used in the last 10 minutes"""
-    current_time = datetime.utcnow()
+    current_time = datetime.now(timezone.utc)
     inactive_keys = []
     inactive_sessions = []
     
@@ -434,18 +434,18 @@ async def chat(request: Request, chat_request: ChatRequest):
                 "messages": [],
                 "system_message": chat_request.developer_message,
                 "title": None,  # Will be set when first user message is added
-                "created_at": datetime.utcnow(),
-                "last_updated": datetime.utcnow()
+                "created_at": datetime.now(timezone.utc),
+                "last_updated": datetime.now(timezone.utc)
             }
         
         # Add user message to conversation history
         user_message = Message(
             role="user",
             content=chat_request.user_message,
-            timestamp=datetime.utcnow()
+            timestamp=datetime.now(timezone.utc)
         )
         user_conversations[conversation_id]["messages"].append(user_message)
-        user_conversations[conversation_id]["last_updated"] = datetime.utcnow()
+        user_conversations[conversation_id]["last_updated"] = datetime.now(timezone.utc)
         
         # Set conversation title from first user message if not already set
         if user_conversations[conversation_id]["title"] is None:
@@ -494,10 +494,10 @@ async def chat(request: Request, chat_request: ChatRequest):
                 assistant_message = Message(
                     role="assistant",
                     content=full_response,
-                    timestamp=datetime.utcnow()
+                    timestamp=datetime.now(timezone.utc)
                 )
                 user_conversations[conversation_id]["messages"].append(assistant_message)
-                user_conversations[conversation_id]["last_updated"] = datetime.utcnow()
+                user_conversations[conversation_id]["last_updated"] = datetime.now(timezone.utc)
                 
             except Exception as e:
                 # Remove the user message if the API call failed
@@ -791,10 +791,58 @@ async def rag_query(request: Request, query_request: RAGQueryRequest):
         relevant_chunks = rag_system.search_relevant_chunks(query_request.question, k=query_request.k)
         relevant_chunks_count = len(relevant_chunks)
         
-        return RAGQueryResponse(
+        # Store the RAG conversation in conversation history
+        user_conversations = get_user_conversations(hashed_api_key)
+        
+        # Generate or retrieve conversation ID from request headers
+        conversation_id = request.headers.get("X-Conversation-ID") or str(uuid.uuid4())
+        
+        # Initialize conversation if it doesn't exist
+        if conversation_id not in user_conversations:
+            user_conversations[conversation_id] = {
+                "messages": [],
+                "system_message": "You are a helpful AI assistant with access to uploaded documents. Use the document content to answer questions accurately.",
+                "title": None,  # Will be set when first user message is added
+                "created_at": datetime.now(timezone.utc),
+                "last_updated": datetime.now(timezone.utc)
+            }
+        
+        # Add user message to conversation history
+        user_message = Message(
+            role="user",
+            content=query_request.question,
+            timestamp=datetime.now(timezone.utc)
+        )
+        user_conversations[conversation_id]["messages"].append(user_message)
+        user_conversations[conversation_id]["last_updated"] = datetime.now(timezone.utc)
+        
+        # Set conversation title from first user message if not already set
+        if user_conversations[conversation_id]["title"] is None:
+            # Use first line of the user message as title (max 50 characters)
+            first_line = query_request.question.split('\n')[0].strip()
+            user_conversations[conversation_id]["title"] = first_line[:50] + ("..." if len(first_line) > 50 else "")
+        
+        # Add assistant message to conversation history
+        assistant_message = Message(
+            role="assistant",
+            content=answer,
+            timestamp=datetime.now(timezone.utc)
+        )
+        user_conversations[conversation_id]["messages"].append(assistant_message)
+        user_conversations[conversation_id]["last_updated"] = datetime.now(timezone.utc)
+        
+        # Create response with conversation ID in headers
+        response = RAGQueryResponse(
             answer=answer,
             relevant_chunks_count=relevant_chunks_count,
             document_info=doc_info
+        )
+        
+        # Return response with conversation ID in headers
+        from fastapi.responses import JSONResponse
+        return JSONResponse(
+            content=response.dict(),
+            headers={"X-Conversation-ID": conversation_id}
         )
     
     except Exception as e:

@@ -34,7 +34,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const [conversationId, setConversationId] = useState<string | null>(null)
   const [conversations, setConversations] = useState<any[]>([])
   const [isPanelCollapsed, setIsPanelCollapsed] = useState(false)
-  const [showConversationInfoBanner, setShowConversationInfoBanner] = useState(false)
+  const [showConversationInfoBanner, setShowConversationInfoBanner] = useState(() => {
+    // Check if user has previously dismissed the banner
+    return localStorage.getItem('conversationInfoBannerDismissed') !== 'true'
+  })
   const [expandedSections, setExpandedSections] = useState({
     apiKey: true,
     model: false,
@@ -248,7 +251,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         },
         body: JSON.stringify(shouldUseRAG ? {
           question: currentMessage,
-          k: 5
+          k: 3
         } : {
           conversation_id: conversationId,
           developer_message: developerMessage,
@@ -283,8 +286,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         const newConversationId = response.headers.get('X-Conversation-ID') || conversationId || `conv_${Date.now()}`
         if (!conversationId) {
           setConversationId(newConversationId)
-          // Show info banner when first conversation is created
-          setShowConversationInfoBanner(true)
         }
         
         setMessages(prev => 
@@ -305,8 +306,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         const newConversationId = response.headers.get('X-Conversation-ID') || conversationId || `conv_${Date.now()}`
         if (!conversationId) {
           setConversationId(newConversationId)
-          // Show info banner when first conversation is created
-          setShowConversationInfoBanner(true)
         }
 
         const reader = response.body?.getReader()
@@ -378,6 +377,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
   const dismissInfoBanner = () => {
     setShowConversationInfoBanner(false)
+    // Store dismissal in localStorage so it doesn't show again
+    localStorage.setItem('conversationInfoBannerDismissed', 'true')
   }
 
 
@@ -446,8 +447,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       // Show PDF banner
       setShowPdfBanner(true)
       
-      // Clear success message after 5 seconds
-      setTimeout(() => setPdfUploadSuccess(null), 5000)
+      // Clear success message after 10 seconds
+      setTimeout(() => setPdfUploadSuccess(null), 10000)
 
     } catch (error) {
       console.error('Upload error:', error)
