@@ -7,14 +7,16 @@ import uuid
 from typing import List, Dict, Any, Optional
 from pathlib import Path
 import asyncio
+import re
 
 from docling.document_converter import DocumentConverter
-from docling.datamodel.base_models import InputFormat
-from docling.datamodel.pipeline_options import PdfPipelineOptions
-from docling.backend.pypdfium2_backend import PyPdfiumDocumentBackend
-from docling.document_converter import PdfFormatOption
-from docling.parsing.chunker import HybridChunker
-from docling.parsing.tokenizer import OpenAITokenizer
+from docling.chunking import HybridChunker
+import tiktoken
+from docling_core.transforms.chunker.tokenizer.openai import OpenAITokenizer
+
+import sys
+import os
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
 from aimakerspace.vectordatabase import VectorDatabase
 from aimakerspace.openai_utils.embedding import EmbeddingModel
@@ -26,7 +28,11 @@ class PDFProcessor:
     
     def __init__(self):
         self.converter = DocumentConverter()
-        self.tokenizer = OpenAITokenizer()
+        # Initialize tokenizer and chunker for HybridChunker
+        self.tokenizer = OpenAITokenizer(
+            tokenizer=tiktoken.encoding_for_model("text-embedding-3-small"),
+            max_tokens=8091,  # context window length required for OpenAI tokenizers
+        )
         self.chunker = HybridChunker(tokenizer=self.tokenizer)
         
     def process_pdf(self, pdf_path: str) -> Dict[str, Any]:
@@ -48,17 +54,12 @@ class PDFProcessor:
             text_content = doc.export_to_markdown()
             
             # Create chunks using HybridChunker
-            chunks = self.chunker.chunk(doc)
-            
-            # Extract chunk texts
-            chunk_texts = []
-            for chunk in chunks:
-                chunk_texts.append(chunk.text)
+            chunks = self._create_chunks(doc)
             
             return {
                 "full_text": text_content,
-                "chunks": chunk_texts,
-                "chunk_count": len(chunk_texts),
+                "chunks": chunks,
+                "chunk_count": len(chunks),
                 "metadata": {
                     "file_path": pdf_path,
                     "file_name": os.path.basename(pdf_path),
@@ -68,6 +69,76 @@ class PDFProcessor:
             
         except Exception as e:
             raise Exception(f"Error processing PDF: {str(e)}")
+    
+    def _create_chunks(self, doc) -> List[str]:
+        """
+        Create chunks from document using docling HybridChunker.
+        
+        Args:
+            doc: Document object from docling
+            
+        Returns:
+            List of text chunks
+        """
+        try:
+            # Use HybridChunker to chunk the document
+            chunk_iter = self.chunker.chunk(dl_doc=doc)
+            chunks = [self.chunker.contextualize(chunk=chunk) for chunk in chunk_iter]
+            
+            # Extract text content from chunks
+            chunk_texts = []
+            for chunk in chunks:
+                # Get the text content from the chunk
+                if hasattr(chunk, 'text'):
+                    chunk_texts.append(chunk.text)
+                elif hasattr(chunk, 'content'):
+                    chunk_texts.append(chunk.content)
+                else:
+                    # Fallback: convert chunk to string
+                    chunk_texts.append(str(chunk))
+            
+            return chunk_texts
+            
+        except Exception as e:
+            # Fallback to simple text splitting if HybridChunker fails
+            print(f"Warning: HybridChunker failed, falling back to simple chunking: {str(e)}")
+            text_content = doc.export_to_markdown()
+            return self._create_simple_chunks(text_content)
+    
+    def _create_simple_chunks(self, text: str, chunk_size: int = 1000, overlap: int = 200) -> List[str]:
+        """
+        Fallback method to create chunks from text using simple splitting approach.
+        
+        Args:
+            text: Input text to chunk
+            chunk_size: Maximum size of each chunk
+            overlap: Overlap between chunks
+            
+        Returns:
+            List of text chunks
+        """
+        # Split text into sentences
+        sentences = re.split(r'[.!?]+', text)
+        sentences = [s.strip() for s in sentences if s.strip()]
+        
+        chunks = []
+        current_chunk = ""
+        
+        for sentence in sentences:
+            # If adding this sentence would exceed chunk size, save current chunk
+            if len(current_chunk) + len(sentence) > chunk_size and current_chunk:
+                chunks.append(current_chunk.strip())
+                # Start new chunk with overlap from previous chunk
+                overlap_text = current_chunk[-overlap:] if len(current_chunk) > overlap else current_chunk
+                current_chunk = overlap_text + " " + sentence
+            else:
+                current_chunk += " " + sentence if current_chunk else sentence
+        
+        # Add the last chunk if it's not empty
+        if current_chunk.strip():
+            chunks.append(current_chunk.strip())
+        
+        return chunks
 
 
 class RAGSystem:
