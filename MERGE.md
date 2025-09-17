@@ -1,18 +1,20 @@
 # Merge Instructions
 
-## Feature: Chat Mode Indicator
+## Feature: Chat Mode Indicator with Conversation Persistence
 
-This feature adds a visual indicator to the chat panel header that shows whether the current chat is in RAG mode or regular chat mode.
+This feature adds a visual indicator to the chat panel header that shows whether the current chat is in RAG mode or regular chat mode, with full conversation history support.
 
 ### Changes Made
 
-- **ChatInterface.tsx**: Added mode indicator component with Database and MessageCircle icons
-- **ChatInterface.css**: Added styling for the mode indicator with appropriate colors and responsive design
+- **Backend (app.py)**: Added conversation mode storage and retrieval
+- **Frontend (ChatInterface.tsx)**: Added mode indicator component and conversation mode handling
+- **Frontend (ChatInterface.css)**: Added styling for mode indicators and conversation backgrounds
 
 ### Files Modified
 
-- `frontend/src/components/ChatInterface.tsx`
-- `frontend/src/components/ChatInterface.css`
+- `api/app.py` - Backend conversation mode storage
+- `frontend/src/components/ChatInterface.tsx` - Mode indicator and conversation handling
+- `frontend/src/components/ChatInterface.css` - Styling for indicators and backgrounds
 
 ### How to Merge
 
@@ -25,18 +27,23 @@ This feature adds a visual indicator to the chat panel header that shows whether
 5. Add description:
    ```
    ## Summary
-   Added a visual indicator to the chat header that shows the current chat mode (RAG or Regular).
+   Added a visual indicator to the chat header that shows the current chat mode (RAG or Regular) with full conversation history support.
 
    ## Changes
    - Added mode indicator chip in chat header
    - Shows 'RAG Mode' with database icon when PDFs are uploaded
    - Shows 'Regular Chat' with message circle icon for normal chat
    - Styled with appropriate colors (green for RAG, blue for regular)
+   - Conversation items have colored transparent backgrounds
+   - Mode indicator updates when selecting conversations from history
+   - Backend stores and retrieves conversation mode information
    - Responsive design for mobile devices
 
    ## Testing
    - Mode indicator appears in chat header
    - Changes from "Regular Chat" to "RAG Mode" when PDF is uploaded
+   - Conversation items show appropriate colored backgrounds
+   - Mode indicator updates when loading conversations from history
    - Responsive design works on mobile devices
    ```
 6. Click "Create pull request"
@@ -46,19 +53,24 @@ This feature adds a visual indicator to the chat panel header that shows whether
 
 ```bash
 # Create and push the pull request
-gh pr create --title "Add Chat Mode Indicator" --body "## Summary
-Added a visual indicator to the chat header that shows the current chat mode (RAG or Regular).
+gh pr create --title "Add Chat Mode Indicator with Conversation Persistence" --body "## Summary
+Added a visual indicator to the chat header that shows the current chat mode (RAG or Regular) with full conversation history support.
 
 ## Changes
 - Added mode indicator chip in chat header
 - Shows 'RAG Mode' with database icon when PDFs are uploaded
 - Shows 'Regular Chat' with message circle icon for normal chat
 - Styled with appropriate colors (green for RAG, blue for regular)
+- Conversation items have colored transparent backgrounds
+- Mode indicator updates when selecting conversations from history
+- Backend stores and retrieves conversation mode information
 - Responsive design for mobile devices
 
 ## Testing
 - Mode indicator appears in chat header
 - Changes from 'Regular Chat' to 'RAG Mode' when PDF is uploaded
+- Conversation items show appropriate colored backgrounds
+- Mode indicator updates when loading conversations from history
 - Responsive design works on mobile devices"
 
 # Review the PR
@@ -81,5 +93,7 @@ After merging, verify that:
 - The mode indicator appears in the chat header
 - It shows "Regular Chat" by default
 - It changes to "RAG Mode" when a PDF is uploaded
+- Conversation items in the left panel have colored backgrounds (green for RAG, blue for regular)
+- The mode indicator updates when selecting conversations from history
 - The styling looks correct on both desktop and mobile
 - The indicator is properly positioned next to the "Chat with AI" title
