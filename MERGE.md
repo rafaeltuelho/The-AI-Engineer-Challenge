@@ -10,6 +10,7 @@ This feature adds comprehensive PDF upload and Retrieval-Augmented Generation (R
 - **PDF Processing**: Documents are processed using the docling library with HybridChunker and OpenAITokenizer
 - **RAG System**: Built using the aimakerspace library for vector database and retrieval
 - **Document Chat**: Users can ask questions about uploaded documents with context-aware responses
+- **Enhanced API Documentation**: Updated README with uv dependency management and comprehensive OpenAPI docs with Swagger UI
 
 ## Changes Made
 
@@ -24,7 +25,8 @@ This feature adds comprehensive PDF upload and Retrieval-Augmented Generation (R
    - `aimakerspace/`: Local aimakerspace library implementation
 
 3. **Updated Files**:
-   - `api/app.py`: Added PDF upload and RAG query endpoints
+   - `api/app.py`: Added PDF upload and RAG query endpoints, enhanced OpenAPI documentation
+   - `api/README.md`: Updated with uv dependency management instructions
    - Added new data models for PDF upload and RAG responses
 
 ### Frontend Changes
@@ -124,17 +126,21 @@ This feature adds comprehensive PDF upload and Retrieval-Augmented Generation (R
 
 After merging, ensure the following:
 
-1. **Install Dependencies**:
+1. **Install Dependencies using uv**:
    ```bash
-   cd api
-   pip install -r requirements.txt
+   # From the project root directory
+   uv sync
+   
+   # Activate the virtual environment
+   source .venv/bin/activate  # On Windows, use: .venv\Scripts\activate
    ```
 
 2. **Test the Application**:
-   - Start the backend: `cd api && python app.py`
+   - Start the backend: `uv run python api/app.py` or `uv run uvicorn api.app:app --host 0.0.0.0 --port 8000 --reload`
    - Start the frontend: `cd frontend && npm run dev`
    - Test PDF upload functionality
    - Test RAG query functionality
+   - Test API documentation at `http://localhost:8000/docs`
 
 3. **Environment Variables**:
    - Ensure `OPENAI_API_KEY` is set for the RAG functionality
@@ -145,6 +151,14 @@ After merging, ensure the following:
 - `POST /api/upload-pdf`: Upload and process PDF documents
 - `POST /api/rag-query`: Query documents using RAG
 - `GET /api/documents`: Get information about uploaded documents
+
+## API Documentation Enhancements
+
+- **Swagger UI**: Interactive API documentation at `/docs`
+- **ReDoc**: Clean documentation at `/redoc`
+- **OpenAPI JSON**: Raw specification at `/openapi.json`
+- **Enhanced Documentation**: Detailed descriptions, tags, and response schemas
+- **Dependency Management**: Updated README with uv instructions
 
 ## Frontend Features Added
 
