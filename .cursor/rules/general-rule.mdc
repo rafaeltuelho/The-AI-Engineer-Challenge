@@ -9,4 +9,5 @@ alwaysApply: true
 - You must always try and write code that is well documented. (self or commented is fine)
 - You must only work on a single feature at a time.
 - You must explain your decisions thouroughly to the user.
-- Ensure bothe the frontend and backend apps is Containerized (provide a Dockerfile that runs as non-root) so it can run on Container management tools like (Docker or Podman) and also can be packaged and deployed on Cloud Container-based environments like Kubernetes or Red Hat OpenShift.
+- Make sure any sensitive information (eg. API keys, passwords) are not persisted anywhere withoiut hashing. Also never pass API keys or any sort of sensitive keys as HTTP query params.
+- Aways ensure the beckend API use security good practicess to avoid know HTTP/web security flaws.

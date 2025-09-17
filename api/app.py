@@ -1,5 +1,5 @@
 # Import required FastAPI components for building the API
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, UploadFile, File, Form
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 # Import Pydantic for data validation and settings management
@@ -19,6 +19,11 @@ import hashlib
 import asyncio
 import threading
 import time
+import tempfile
+from pathlib import Path
+
+# Import our PDF RAG functionality
+from pdf_rag import PDFProcessor, get_or_create_rag_system
 
 # Initialize FastAPI application with a title
 app = FastAPI(title="OpenAI Chat API")
@@ -254,6 +259,51 @@ class SessionResponse(BaseModel):
     session_id: str
     message: str
 
+class PDFUploadResponse(BaseModel):
+    document_id: str
+    message: str
+    chunk_count: int
+    file_name: str
+
+class RAGQueryRequest(BaseModel):
+    question: str
+    k: Optional[int] = 5  # Number of relevant chunks to retrieve
+    
+    @field_validator('question')
+    @classmethod
+    def validate_question(cls, v):
+        """Validate question content"""
+        if not v or not isinstance(v, str):
+            raise ValueError('Question is required')
+        
+        if len(v.strip()) == 0:
+            raise ValueError('Question cannot be empty')
+        
+        if len(v) > 2000:  # Reasonable limit for question length
+            raise ValueError('Question is too long (max 2,000 characters)')
+        
+        return v.strip()
+    
+    @field_validator('k')
+    @classmethod
+    def validate_k(cls, v):
+        """Validate k parameter"""
+        if v is None:
+            return 5
+        
+        if not isinstance(v, int):
+            raise ValueError('k must be an integer')
+        
+        if v < 1 or v > 20:
+            raise ValueError('k must be between 1 and 20')
+        
+        return v
+
+class RAGQueryResponse(BaseModel):
+    answer: str
+    relevant_chunks_count: int
+    document_info: Dict[str, Any]
+
 # Endpoint to create a new session
 @app.post("/api/session")
 @limiter.limit("5/minute")  # Limit to 5 session creations per minute per IP
@@ -485,6 +535,150 @@ async def clear_all_conversations(request: Request):
     user_conversations.clear()
     
     return {"message": "All conversations cleared successfully"}
+
+# PDF Upload endpoint
+@app.post("/api/upload-pdf")
+@limiter.limit("3/minute")  # Limit to 3 PDF uploads per minute per IP
+async def upload_pdf(
+    request: Request,
+    file: UploadFile = File(...),
+    api_key: str = Form(...)
+):
+    """Upload and process a PDF file for RAG functionality."""
+    try:
+        # Get session ID from headers
+        session_id = request.headers.get("X-Session-ID")
+        if not session_id:
+            raise HTTPException(status_code=401, detail="Session ID required")
+        
+        # Get hashed API key from session
+        hashed_api_key = get_session_api_key(session_id)
+        if not hashed_api_key:
+            raise HTTPException(status_code=401, detail="Invalid or expired session")
+        
+        # Validate file type
+        if not file.filename.lower().endswith('.pdf'):
+            raise HTTPException(status_code=400, detail="Only PDF files are allowed")
+        
+        # Validate file size (max 10MB)
+        file_content = await file.read()
+        if len(file_content) > 10 * 1024 * 1024:  # 10MB
+            raise HTTPException(status_code=400, detail="File size too large (max 10MB)")
+        
+        # Create temporary file
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as temp_file:
+            temp_file.write(file_content)
+            temp_file_path = temp_file.name
+        
+        try:
+            # Process PDF using docling
+            pdf_processor = PDFProcessor()
+            processed_data = pdf_processor.process_pdf(temp_file_path)
+            
+            # Generate document ID
+            document_id = str(uuid.uuid4())
+            
+            # Get or create RAG system for this session
+            rag_system = get_or_create_rag_system(session_id, api_key)
+            
+            # Index the document
+            await rag_system.index_document(
+                document_id=document_id,
+                chunks=processed_data["chunks"],
+                metadata=processed_data["metadata"]
+            )
+            
+            return PDFUploadResponse(
+                document_id=document_id,
+                message="PDF processed and indexed successfully",
+                chunk_count=processed_data["chunk_count"],
+                file_name=processed_data["metadata"]["file_name"]
+            )
+            
+        finally:
+            # Clean up temporary file
+            os.unlink(temp_file_path)
+    
+    except Exception as e:
+        print(f"Error in PDF upload: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# RAG Query endpoint
+@app.post("/api/rag-query")
+@limiter.limit("20/minute")  # Limit to 20 RAG queries per minute per IP
+async def rag_query(request: Request, query_request: RAGQueryRequest):
+    """Query the RAG system with a question."""
+    try:
+        # Get session ID from headers
+        session_id = request.headers.get("X-Session-ID")
+        if not session_id:
+            raise HTTPException(status_code=401, detail="Session ID required")
+        
+        # Get hashed API key from session
+        hashed_api_key = get_session_api_key(session_id)
+        if not hashed_api_key:
+            raise HTTPException(status_code=401, detail="Invalid or expired session")
+        
+        # Get API key from request body (we need it for the RAG system)
+        api_key = request.headers.get("X-API-Key")
+        if not api_key:
+            raise HTTPException(status_code=401, detail="API key required")
+        
+        # Get RAG system for this session
+        rag_system = get_or_create_rag_system(session_id, api_key)
+        
+        # Query the RAG system
+        answer = rag_system.query(query_request.question, k=query_request.k)
+        
+        # Get document info
+        doc_info = rag_system.get_document_info()
+        
+        # Get relevant chunks count (approximate)
+        relevant_chunks = rag_system.search_relevant_chunks(query_request.question, k=query_request.k)
+        relevant_chunks_count = len(relevant_chunks)
+        
+        return RAGQueryResponse(
+            answer=answer,
+            relevant_chunks_count=relevant_chunks_count,
+            document_info=doc_info
+        )
+    
+    except Exception as e:
+        print(f"Error in RAG query: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Get document info endpoint
+@app.get("/api/documents")
+@limiter.limit("10/minute")  # Limit to 10 requests per minute per IP
+async def get_documents(request: Request):
+    """Get information about uploaded documents for the session."""
+    try:
+        # Get session ID from headers
+        session_id = request.headers.get("X-Session-ID")
+        if not session_id:
+            raise HTTPException(status_code=401, detail="Session ID required")
+        
+        # Get hashed API key from session
+        hashed_api_key = get_session_api_key(session_id)
+        if not hashed_api_key:
+            raise HTTPException(status_code=401, detail="Invalid or expired session")
+        
+        # Get API key from request headers
+        api_key = request.headers.get("X-API-Key")
+        if not api_key:
+            raise HTTPException(status_code=401, detail="API key required")
+        
+        # Get RAG system for this session
+        rag_system = get_or_create_rag_system(session_id, api_key)
+        
+        # Get document info
+        doc_info = rag_system.get_document_info()
+        
+        return doc_info
+    
+    except Exception as e:
+        print(f"Error getting documents: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 # Define a health check endpoint to verify API status
 @app.get("/api/health")

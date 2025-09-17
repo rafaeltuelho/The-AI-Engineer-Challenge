@@ -1,6 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react'
-import { Send, Key, MessageSquare, User, Bot, Trash2, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Settings, ArrowDown, X } from 'lucide-react'
+import { Send, Key, MessageSquare, User, Bot, Trash2, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Settings, ArrowDown, X, FileText, Search } from 'lucide-react'
 import MarkdownRenderer from './MarkdownRenderer'
+import PDFUpload from './PDFUpload'
+import RAGQuery from './RAGQuery'
 import './ChatInterface.css'
 
 interface Message {
@@ -39,8 +41,12 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     apiKey: true,
     model: false,
     systemMessage: false,
-    conversations: false
+    conversations: false,
+    pdfUpload: false,
+    ragQuery: false
   })
+  const [uploadedDocuments, setUploadedDocuments] = useState<any[]>([])
+  const [ragQueryResult, setRagQueryResult] = useState<any>(null)
 
   const availableModels = Object.keys(modelDescriptions)
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -395,6 +401,50 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             <div className="setting-section">
               <div 
                 className="section-header"
+                onClick={() => toggleSection('pdfUpload')}
+              >
+                <div className="section-title">
+                  <FileText size={14} />
+                  <span>PDF Upload</span>
+                </div>
+                {expandedSections.pdfUpload ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+              </div>
+              {expandedSections.pdfUpload && (
+                <div className="section-content">
+                  <PDFUpload 
+                    sessionId={sessionId}
+                    apiKey={apiKey}
+                    onDocumentUploaded={(doc) => setUploadedDocuments(prev => [doc, ...prev])}
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className="setting-section">
+              <div 
+                className="section-header"
+                onClick={() => toggleSection('ragQuery')}
+              >
+                <div className="section-title">
+                  <Search size={14} />
+                  <span>RAG Query</span>
+                </div>
+                {expandedSections.ragQuery ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+              </div>
+              {expandedSections.ragQuery && (
+                <div className="section-content">
+                  <RAGQuery 
+                    sessionId={sessionId}
+                    apiKey={apiKey}
+                    onQueryResult={(result) => setRagQueryResult(result)}
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className="setting-section">
+              <div 
+                className="section-header"
                 onClick={() => toggleSection('conversations')}
               >
                 <div className="section-title">
@@ -498,6 +548,18 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
               <Bot size={48} />
               <h3>Start a conversation</h3>
               <p>Enter your message below to begin chatting with the AI assistant.</p>
+              {uploadedDocuments.length > 0 && (
+                <div className="pdf-info-banner">
+                  <FileText size={16} />
+                  <div className="pdf-info-content">
+                    <div className="pdf-info-title">PDF Documents Ready</div>
+                    <div className="pdf-info-text">
+                      You have {uploadedDocuments.length} PDF document{uploadedDocuments.length !== 1 ? 's' : ''} uploaded. 
+                      Use the RAG Query section in the left panel to ask questions about your documents.
+                    </div>
+                  </div>
+                </div>
+              )}
               {conversations.length > 0 && (
                 <p className="conversation-hint">
                   💡 You have {conversations.length} previous conversation{conversations.length !== 1 ? 's' : ''}. 
