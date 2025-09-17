@@ -10,7 +10,15 @@
     },
     {
       "src": "api/app.py",
-      "use": "@vercel/python"
+      "use": "@vercel/python",
+      "config": {
+        "includeFiles": [
+          "api/**",
+          "aimakerspace/**",
+          "pyproject.toml",
+          "uv.lock"
+        ]
+      }
     }
   ],
   "routes": [
@@ -22,5 +30,10 @@
       "src": "/(.*)",
       "dest": "/frontend/$1"
     }
-  ]
+  ],
+  "functions": {
+    "api/app.py": {
+      "maxDuration": 30
+    }
+  }
 } 
