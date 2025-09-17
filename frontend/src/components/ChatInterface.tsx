@@ -561,7 +561,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
               placeholder="Type your message here... (Cmd|Ctrl+Enter to send)"
               className="message-input"
               disabled={isLoading || !apiKey.trim()}
-              rows={1}
+              rows={2}
             />
             <button
               type="submit"

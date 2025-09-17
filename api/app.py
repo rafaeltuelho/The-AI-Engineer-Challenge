@@ -329,6 +329,8 @@ async def chat(request: Request, chat_request: ChatRequest):
         recent_messages = user_conversations[conversation_id]["messages"][-20:]
         for msg in recent_messages:
             # Map our roles to OpenAI's expected roles
+            # By using alternating user and assistant messages, 
+            # you capture the previous state of a conversation in one request to the model.
             openai_role = "assistant" if msg.role == "assistant" else msg.role
             messages_for_openai.append({
                 "role": openai_role,
