@@ -1,5 +1,5 @@
 # Import required FastAPI components for building the API
-from fastapi import FastAPI, HTTPException, Request, UploadFile, File, Form
+from fastapi import FastAPI, HTTPException, Request, UploadFile, File, Form, Header
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 # Import Pydantic for data validation and settings management
@@ -22,19 +22,19 @@ import time
 import tempfile
 from pathlib import Path
 
-# Import our PDF RAG functionality
-from pdf_rag import PDFProcessor, get_or_create_rag_system
+# Import our lightweight PDF RAG functionality
+from pdf_rag_lightweight import LightweightPDFProcessor, get_or_create_rag_system
 
 # Initialize FastAPI application with comprehensive OpenAPI configuration
 app = FastAPI(
-    title="OpenAI Chat API",
+    title="OpenAI Chat API (Lightweight)",
     description="""
-    A comprehensive FastAPI-based backend service that provides:
+    A lightweight FastAPI-based backend service optimized for Vercel deployment:
     
     * **Streaming Chat Interface**: Real-time chat with OpenAI's GPT models
     * **Session Management**: Secure session-based authentication
     * **Conversation History**: Persistent conversation storage and retrieval
-    * **PDF RAG System**: Upload and query PDF documents using Retrieval-Augmented Generation
+    * **Lightweight PDF RAG**: Upload and query PDF documents using simple text extraction
     * **Rate Limiting**: Built-in protection against abuse
     * **Security**: Input validation and secure API key handling
     
@@ -42,16 +42,21 @@ app = FastAPI(
     
     - 🔄 **Real-time Streaming**: Get responses as they're generated
     - 💬 **Conversation Management**: Create, retrieve, and delete conversations
-    - 📄 **PDF Processing**: Upload and query PDF documents
+    - 📄 **PDF Processing**: Upload and query PDF documents (lightweight extraction)
     - 🔍 **RAG Queries**: Ask questions about uploaded documents
     - 🛡️ **Security**: Rate limiting, input validation, and secure session management
     - 📚 **Interactive Docs**: Test the API directly from the browser
+    
+    ## Optimization Notes
+    
+    This version uses lightweight dependencies (PyPDF2, pdfplumber) instead of heavy ML libraries
+    to work within Vercel's free tier memory constraints.
     
     ## Authentication
     
     This API uses session-based authentication. First, create a session with your OpenAI API key, then use the returned session ID in subsequent requests.
     """,
-    version="1.0.0",
+    version="1.0.0-lightweight",
     contact={
         "name": "API Support",
         "email": "support@example.com",
@@ -423,12 +428,14 @@ async def create_session_endpoint(request: Request, session_request: SessionRequ
     }
 )
 @limiter.limit("10/minute")  # Limit to 10 requests per minute per IP
-async def chat(request: Request, chat_request: ChatRequest):
+async def chat(
+    request: Request, 
+    chat_request: ChatRequest,
+    x_session_id: str = Header(..., alias="X-Session-ID", description="Session ID for authentication")
+):
     try:
-        # Get session ID from headers
-        session_id = request.headers.get("X-Session-ID")
-        if not session_id:
-            raise HTTPException(status_code=401, detail="Session ID required")
+        # Use session ID from header parameter
+        session_id = x_session_id
         
         # Get hashed API key from session
         hashed_api_key = get_session_api_key(session_id)
@@ -549,11 +556,13 @@ async def chat(request: Request, chat_request: ChatRequest):
     }
 )
 @limiter.limit("30/minute")  # Limit to 30 requests per minute per IP
-async def get_conversation(request: Request, conversation_id: str):
-    # Get session ID from headers
-    session_id = request.headers.get("X-Session-ID")
-    if not session_id:
-        raise HTTPException(status_code=401, detail="Session ID required")
+async def get_conversation(
+    request: Request, 
+    conversation_id: str,
+    x_session_id: str = Header(..., alias="X-Session-ID", description="Session ID for authentication")
+):
+    # Use session ID from header parameter
+    session_id = x_session_id
     
     # Get hashed API key from session
     hashed_api_key = get_session_api_key(session_id)
@@ -589,11 +598,12 @@ async def get_conversation(request: Request, conversation_id: str):
     }
 )
 @limiter.limit("20/minute")  # Limit to 20 requests per minute per IP
-async def list_conversations(request: Request):
-    # Get session ID from headers
-    session_id = request.headers.get("X-Session-ID")
-    if not session_id:
-        raise HTTPException(status_code=401, detail="Session ID required")
+async def list_conversations(
+    request: Request,
+    x_session_id: str = Header(..., alias="X-Session-ID", description="Session ID for authentication")
+):
+    # Use session ID from header parameter
+    session_id = x_session_id
     
     # Get hashed API key from session
     hashed_api_key = get_session_api_key(session_id)
@@ -633,11 +643,13 @@ async def list_conversations(request: Request):
     }
 )
 @limiter.limit("10/minute")  # Limit to 10 requests per minute per IP
-async def delete_conversation(request: Request, conversation_id: str):
-    # Get session ID from headers
-    session_id = request.headers.get("X-Session-ID")
-    if not session_id:
-        raise HTTPException(status_code=401, detail="Session ID required")
+async def delete_conversation(
+    request: Request, 
+    conversation_id: str,
+    x_session_id: str = Header(..., alias="X-Session-ID", description="Session ID for authentication")
+):
+    # Use session ID from header parameter
+    session_id = x_session_id
     
     # Get hashed API key from session
     hashed_api_key = get_session_api_key(session_id)
@@ -666,11 +678,12 @@ async def delete_conversation(request: Request, conversation_id: str):
     }
 )
 @limiter.limit("5/minute")  # Limit to 5 requests per minute per IP (more restrictive)
-async def clear_all_conversations(request: Request):
-    # Get session ID from headers
-    session_id = request.headers.get("X-Session-ID")
-    if not session_id:
-        raise HTTPException(status_code=401, detail="Session ID required")
+async def clear_all_conversations(
+    request: Request,
+    x_session_id: str = Header(..., alias="X-Session-ID", description="Session ID for authentication")
+):
+    # Use session ID from header parameter
+    session_id = x_session_id
     
     # Get hashed API key from session
     hashed_api_key = get_session_api_key(session_id)
@@ -701,24 +714,20 @@ async def clear_all_conversations(request: Request):
 @limiter.limit("3/minute")  # Limit to 3 PDF uploads per minute per IP
 async def upload_pdf(
     request: Request,
-    file: UploadFile = File(..., description="PDF file to upload (max 10MB)")
+    file: UploadFile = File(..., description="PDF file to upload (max 10MB)"),
+    x_session_id: str = Header(..., alias="X-Session-ID", description="Session ID for authentication"),
+    x_api_key: str = Header(..., alias="X-API-Key", description="OpenAI API key for document processing")
 ):
     """Upload and process a PDF file for RAG functionality."""
     try:
-        # Get session ID from headers
-        session_id = request.headers.get("X-Session-ID")
-        if not session_id:
-            raise HTTPException(status_code=401, detail="Session ID required")
+        # Use session ID and API key from header parameters
+        session_id = x_session_id
+        api_key = x_api_key
         
         # Get hashed API key from session
         hashed_api_key = get_session_api_key(session_id)
         if not hashed_api_key:
             raise HTTPException(status_code=401, detail="Invalid or expired session")
-        
-        # Get API key from request headers
-        api_key = request.headers.get("X-API-Key")
-        if not api_key:
-            raise HTTPException(status_code=401, detail="API key required in X-API-Key header")
         
         # Validate file type
         if not file.filename.lower().endswith('.pdf'):
@@ -736,7 +745,7 @@ async def upload_pdf(
         
         try:
             # Process PDF using docling
-            pdf_processor = PDFProcessor()
+            pdf_processor = LightweightPDFProcessor()
             processed_data = pdf_processor.process_pdf(temp_file_path)
             
             # Generate document ID
@@ -782,23 +791,23 @@ async def upload_pdf(
     }
 )
 @limiter.limit("20/minute")  # Limit to 20 RAG queries per minute per IP
-async def rag_query(request: Request, query_request: RAGQueryRequest):
+async def rag_query(
+    request: Request, 
+    query_request: RAGQueryRequest,
+    x_session_id: str = Header(..., alias="X-Session-ID", description="Session ID for authentication"),
+    x_api_key: str = Header(..., alias="X-API-Key", description="OpenAI API key for RAG processing"),
+    x_conversation_id: Optional[str] = Header(None, alias="X-Conversation-ID", description="Conversation ID for tracking RAG queries")
+):
     """Query the RAG system with a question."""
     try:
-        # Get session ID from headers
-        session_id = request.headers.get("X-Session-ID")
-        if not session_id:
-            raise HTTPException(status_code=401, detail="Session ID required")
+        # Use session ID and API key from header parameters
+        session_id = x_session_id
+        api_key = x_api_key
         
         # Get hashed API key from session
         hashed_api_key = get_session_api_key(session_id)
         if not hashed_api_key:
             raise HTTPException(status_code=401, detail="Invalid or expired session")
-        
-        # Get API key from request headers (we need it for the RAG system)
-        api_key = request.headers.get("X-API-Key")
-        if not api_key:
-            raise HTTPException(status_code=401, detail="API key required in X-API-Key header")
         
         # Get RAG system for this session with the specified model
         rag_system = get_or_create_rag_system(session_id, api_key, query_request.model)
@@ -816,8 +825,8 @@ async def rag_query(request: Request, query_request: RAGQueryRequest):
         # Store the RAG conversation in conversation history
         user_conversations = get_user_conversations(hashed_api_key)
         
-        # Generate or retrieve conversation ID from request headers
-        conversation_id = request.headers.get("X-Conversation-ID") or str(uuid.uuid4())
+        # Generate or retrieve conversation ID from header parameter
+        conversation_id = x_conversation_id or str(uuid.uuid4())
         
         # Initialize conversation if it doesn't exist
         if conversation_id not in user_conversations:
@@ -886,23 +895,21 @@ async def rag_query(request: Request, query_request: RAGQueryRequest):
     }
 )
 @limiter.limit("10/minute")  # Limit to 10 requests per minute per IP
-async def get_documents(request: Request):
+async def get_documents(
+    request: Request,
+    x_session_id: str = Header(..., alias="X-Session-ID", description="Session ID for authentication"),
+    x_api_key: str = Header(..., alias="X-API-Key", description="OpenAI API key for document processing")
+):
     """Get information about uploaded documents for the session."""
     try:
-        # Get session ID from headers
-        session_id = request.headers.get("X-Session-ID")
-        if not session_id:
-            raise HTTPException(status_code=401, detail="Session ID required")
+        # Use session ID and API key from header parameters
+        session_id = x_session_id
+        api_key = x_api_key
         
         # Get hashed API key from session
         hashed_api_key = get_session_api_key(session_id)
         if not hashed_api_key:
             raise HTTPException(status_code=401, detail="Invalid or expired session")
-        
-        # Get API key from request headers
-        api_key = request.headers.get("X-API-Key")
-        if not api_key:
-            raise HTTPException(status_code=401, detail="API key required in X-API-Key header")
         
         # Get RAG system for this session (using default model for document info)
         rag_system = get_or_create_rag_system(session_id, api_key)
