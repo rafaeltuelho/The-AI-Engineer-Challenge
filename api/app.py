@@ -22,6 +22,12 @@ import time
 import tempfile
 from pathlib import Path
 
+# Add current directory to Python path for Vercel deployment
+import sys
+current_dir = os.path.dirname(os.path.abspath(__file__))
+if current_dir not in sys.path:
+    sys.path.insert(0, current_dir)
+
 # Import our lightweight PDF RAG functionality
 from pdf_rag_lightweight import LightweightPDFProcessor, get_or_create_rag_system
 
