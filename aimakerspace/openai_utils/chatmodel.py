@@ -26,3 +26,18 @@ class ChatOpenAI:
             return response.choices[0].message.content
 
         return response
+    
+    async def arun(self, messages, text_only: bool = True, **kwargs):
+        """Async version of run method."""
+        if not isinstance(messages, list):
+            raise ValueError("messages must be a list")
+
+        client = OpenAI(api_key=self.openai_api_key)
+        response = await client.chat.completions.create(
+            model=self.model_name, messages=messages, **kwargs
+        )
+
+        if text_only:
+            return response.choices[0].message.content
+
+        return response
