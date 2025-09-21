@@ -40,7 +40,7 @@ app = FastAPI(
     * **Streaming Chat Interface**: Real-time chat with OpenAI's GPT models
     * **Session Management**: Secure session-based authentication
     * **Conversation History**: Persistent conversation storage and retrieval
-    * **Lightweight PDF RAG**: Upload and query PDF documents using simple text extraction
+    * **Multi-format Document RAG**: Upload and query documents (PDF, Word, PowerPoint) using simple text extraction
     * **Rate Limiting**: Built-in protection against abuse
     * **Security**: Input validation and secure API key handling
     
@@ -48,7 +48,7 @@ app = FastAPI(
     
     - 🔄 **Real-time Streaming**: Get responses as they're generated
     - 💬 **Conversation Management**: Create, retrieve, and delete conversations
-    - 📄 **PDF Processing**: Upload and query PDF documents (lightweight extraction)
+    - 📄 **Document Processing**: Upload and query documents (PDF, Word, PowerPoint) with lightweight extraction
     - 🔍 **RAG Queries**: Ask questions about uploaded documents
     - 🛡️ **Security**: Rate limiting, input validation, and secure session management
     - 📚 **Interactive Docs**: Test the API directly from the browser
@@ -332,11 +332,12 @@ class SessionResponse(BaseModel):
     session_id: str
     message: str
 
-class PDFUploadResponse(BaseModel):
+class DocumentUploadResponse(BaseModel):
     document_id: str
     message: str
     chunk_count: int
     file_name: str
+    file_type: str
 
 class RAGQueryRequest(BaseModel):
     question: str
@@ -703,29 +704,29 @@ async def clear_all_conversations(
     
     return {"message": "All conversations cleared successfully"}
 
-# PDF Upload endpoint
+# Document Upload endpoint
 @app.post(
-    "/api/upload-pdf",
-    response_model=PDFUploadResponse,
-    tags=["PDF RAG"],
-    summary="Upload a PDF document",
-    description="Upload and process a PDF document for RAG (Retrieval-Augmented Generation) functionality. The document will be chunked and indexed for later querying.",
+    "/api/upload-document",
+    response_model=DocumentUploadResponse,
+    tags=["Document RAG"],
+    summary="Upload a document",
+    description="Upload and process a document (PDF, Word, PowerPoint) for RAG (Retrieval-Augmented Generation) functionality. The document will be chunked and indexed for later querying.",
     responses={
-        200: {"description": "PDF processed and indexed successfully"},
+        200: {"description": "Document processed and indexed successfully"},
         400: {"description": "Invalid file type or size"},
         401: {"description": "Invalid or expired session"},
         429: {"description": "Rate limit exceeded"},
         500: {"description": "Internal server error"}
     }
 )
-@limiter.limit("3/minute")  # Limit to 3 PDF uploads per minute per IP
-async def upload_pdf(
+@limiter.limit("3/minute")  # Limit to 3 document uploads per minute per IP
+async def upload_document(
     request: Request,
-    file: UploadFile = File(..., description="PDF file to upload (max 10MB)"),
+    file: UploadFile = File(..., description="Document file to upload (PDF, DOCX, PPTX - max 10MB)"),
     x_session_id: str = Header(..., alias="X-Session-ID", description="Session ID for authentication"),
     x_api_key: str = Header(..., alias="X-API-Key", description="OpenAI API key for document processing")
 ):
-    """Upload and process a PDF file for RAG functionality."""
+    """Upload and process a document file for RAG functionality."""
     try:
         # Use session ID and API key from header parameters
         session_id = x_session_id
@@ -737,23 +738,34 @@ async def upload_pdf(
             raise HTTPException(status_code=401, detail="Invalid or expired session")
         
         # Validate file type
-        if not file.filename.lower().endswith('.pdf'):
-            raise HTTPException(status_code=400, detail="Only PDF files are allowed")
+        if not file.filename:
+            raise HTTPException(status_code=400, detail="No file provided")
+        
+        file_extension = file.filename.lower().split('.')[-1]
+        supported_types = ['pdf', 'docx', 'doc', 'pptx', 'ppt']
+        
+        if file_extension not in supported_types:
+            supported_types_str = ', '.join(f'.{t}' for t in supported_types)
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Unsupported file type: .{file_extension}. Supported types: {supported_types_str}"
+            )
         
         # Validate file size (max 10MB)
         file_content = await file.read()
         if len(file_content) > 10 * 1024 * 1024:  # 10MB
             raise HTTPException(status_code=400, detail="File size too large (max 10MB)")
         
-        # Create temporary file
-        with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as temp_file:
+        # Create temporary file with appropriate extension
+        temp_suffix = f'.{file_extension}'
+        with tempfile.NamedTemporaryFile(delete=False, suffix=temp_suffix) as temp_file:
             temp_file.write(file_content)
             temp_file_path = temp_file.name
         
         try:
-            # Process PDF using docling
-            pdf_processor = LightweightPDFProcessor()
-            processed_data = pdf_processor.process_pdf(temp_file_path)
+            # Process document using DocumentProcessor
+            document_processor = DocumentProcessor()
+            processed_data = document_processor.process_document(temp_file_path)
             
             # Generate document ID
             document_id = str(uuid.uuid4())
@@ -768,11 +780,12 @@ async def upload_pdf(
                 metadata=processed_data["metadata"]
             )
             
-            return PDFUploadResponse(
+            return DocumentUploadResponse(
                 document_id=document_id,
-                message="PDF processed and indexed successfully",
+                message=f"{processed_data['metadata']['file_type'].upper()} document processed and indexed successfully",
                 chunk_count=processed_data["chunk_count"],
-                file_name=processed_data["metadata"]["file_name"]
+                file_name=processed_data["metadata"]["file_name"],
+                file_type=processed_data["metadata"]["file_type"]
             )
             
         finally:
@@ -780,16 +793,16 @@ async def upload_pdf(
             os.unlink(temp_file_path)
     
     except Exception as e:
-        print(f"Error in PDF upload: {str(e)}")
+        print(f"Error in document upload: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 # RAG Query endpoint
 @app.post(
     "/api/rag-query",
     response_model=RAGQueryResponse,
-    tags=["PDF RAG"],
+    tags=["Document RAG"],
     summary="Query uploaded documents",
-    description="Ask questions about uploaded PDF documents using RAG (Retrieval-Augmented Generation). Returns relevant answers based on document content.",
+    description="Ask questions about uploaded documents (PDF, Word, PowerPoint) using RAG (Retrieval-Augmented Generation). Returns relevant answers based on document content.",
     responses={
         200: {"description": "RAG query processed successfully"},
         401: {"description": "Invalid or expired session"},
@@ -891,7 +904,7 @@ async def rag_query(
 # Get document info endpoint
 @app.get(
     "/api/documents",
-    tags=["PDF RAG"],
+    tags=["Document RAG"],
     summary="Get uploaded documents info",
     description="Retrieve information about all uploaded documents for the current session, including metadata and chunk counts.",
     responses={

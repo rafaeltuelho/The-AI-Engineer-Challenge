@@ -394,8 +394,17 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       return
     }
 
-    if (file.type !== 'application/pdf') {
-      setPdfUploadError('Please select a PDF file')
+    // Check file type - support PDF, Word, and PowerPoint
+    const supportedTypes = [
+      'application/pdf',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // .docx
+      'application/vnd.openxmlformats-officedocument.presentationml.presentation', // .pptx
+      'application/msword', // .doc
+      'application/vnd.ms-powerpoint' // .ppt
+    ]
+    
+    if (!supportedTypes.includes(file.type)) {
+      setPdfUploadError('Please select a PDF, Word, or PowerPoint file')
       return
     }
 
@@ -412,7 +421,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       const formData = new FormData()
       formData.append('file', file)
 
-      const response = await fetch('/api/upload-pdf', {
+      const response = await fetch('/api/upload-document', {
         method: 'POST',
         headers: {
           'X-Session-ID': sessionId,
@@ -428,7 +437,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
       const data = await response.json()
       
-      setPdfUploadSuccess(`PDF "${data.file_name}" uploaded and processed successfully! ${data.chunk_count} chunks created.`)
+      setPdfUploadSuccess(`${data.file_type.toUpperCase()} document "${data.file_name}" uploaded and processed successfully! ${data.chunk_count} chunks created.`)
       
       // Set RAG mode for the current conversation
       setChatMode('rag')
@@ -783,7 +792,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
               className="pdf-upload-button"
               onClick={() => fileInputRef.current?.click()}
               disabled={isLoading || !apiKey.trim() || isPdfUploading}
-              title="Upload PDF"
+              title="Upload Document (PDF, Word, PowerPoint)"
             >
               <Upload size={20} />
             </button>
@@ -807,7 +816,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             <input
               ref={fileInputRef}
               type="file"
-              accept=".pdf"
+              accept=".pdf,.docx,.doc,.pptx,.ppt"
               onChange={handleFileSelect}
               style={{ display: 'none' }}
               disabled={isPdfUploading}

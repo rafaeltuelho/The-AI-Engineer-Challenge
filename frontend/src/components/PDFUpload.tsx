@@ -2,7 +2,7 @@ import React, { useState, useRef } from 'react'
 import { Upload, FileText, X, CheckCircle, AlertCircle, Loader } from 'lucide-react'
 import './PDFUpload.css'
 
-interface PDFUploadProps {
+interface DocumentUploadProps {
   sessionId: string
   apiKey: string
   onDocumentUploaded: (documentInfo: any) => void
@@ -15,7 +15,7 @@ interface UploadedDocument {
   upload_time: Date
 }
 
-const PDFUpload: React.FC<PDFUploadProps> = ({ sessionId, apiKey, onDocumentUploaded }) => {
+const DocumentUpload: React.FC<DocumentUploadProps> = ({ sessionId, apiKey, onDocumentUploaded }) => {
   const [isDragOver, setIsDragOver] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
   const [uploadedDocuments, setUploadedDocuments] = useState<UploadedDocument[]>([])
@@ -38,12 +38,20 @@ const PDFUpload: React.FC<PDFUploadProps> = ({ sessionId, apiKey, onDocumentUplo
     setIsDragOver(false)
     
     const files = Array.from(e.dataTransfer.files)
-    const pdfFiles = files.filter(file => file.type === 'application/pdf')
+    const supportedTypes = [
+      'application/pdf',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+      'application/msword',
+      'application/vnd.ms-powerpoint'
+    ]
     
-    if (pdfFiles.length > 0) {
-      handleFileUpload(pdfFiles[0])
+    const supportedFiles = files.filter(file => supportedTypes.includes(file.type))
+    
+    if (supportedFiles.length > 0) {
+      handleFileUpload(supportedFiles[0])
     } else {
-      setUploadError('Please upload a PDF file')
+      setUploadError('Please upload a PDF, Word, or PowerPoint file')
     }
   }
 
@@ -60,8 +68,16 @@ const PDFUpload: React.FC<PDFUploadProps> = ({ sessionId, apiKey, onDocumentUplo
       return
     }
 
-    if (file.type !== 'application/pdf') {
-      setUploadError('Please select a PDF file')
+    const supportedTypes = [
+      'application/pdf',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+      'application/msword',
+      'application/vnd.ms-powerpoint'
+    ]
+    
+    if (!supportedTypes.includes(file.type)) {
+      setUploadError('Please select a PDF, Word, or PowerPoint file')
       return
     }
 
@@ -78,7 +94,7 @@ const PDFUpload: React.FC<PDFUploadProps> = ({ sessionId, apiKey, onDocumentUplo
       const formData = new FormData()
       formData.append('file', file)
 
-      const response = await fetch('/api/upload-pdf', {
+      const response = await fetch('/api/upload-document', {
         method: 'POST',
         headers: {
           'X-Session-ID': sessionId,
@@ -102,7 +118,7 @@ const PDFUpload: React.FC<PDFUploadProps> = ({ sessionId, apiKey, onDocumentUplo
       }
 
       setUploadedDocuments(prev => [newDocument, ...prev])
-      setUploadSuccess(`PDF "${data.file_name}" uploaded and processed successfully! ${data.chunk_count} chunks created.`)
+      setUploadSuccess(`${data.file_type.toUpperCase()} document "${data.file_name}" uploaded and processed successfully! ${data.chunk_count} chunks created.`)
       
       // Notify parent component
       onDocumentUploaded(newDocument)
@@ -127,7 +143,7 @@ const PDFUpload: React.FC<PDFUploadProps> = ({ sessionId, apiKey, onDocumentUplo
     <div className="pdf-upload-container">
       <div className="pdf-upload-header">
         <FileText size={20} />
-        <h3>PDF Upload & RAG</h3>
+        <h3>Document Upload & RAG</h3>
       </div>
 
       <div 
@@ -140,7 +156,7 @@ const PDFUpload: React.FC<PDFUploadProps> = ({ sessionId, apiKey, onDocumentUplo
         <input
           ref={fileInputRef}
           type="file"
-          accept=".pdf"
+          accept=".pdf,.docx,.doc,.pptx,.ppt"
           onChange={handleFileSelect}
           style={{ display: 'none' }}
           disabled={isUploading}
@@ -149,13 +165,13 @@ const PDFUpload: React.FC<PDFUploadProps> = ({ sessionId, apiKey, onDocumentUplo
         {isUploading ? (
           <div className="upload-status">
             <Loader className="spinning" size={24} />
-            <p>Processing PDF...</p>
+            <p>Processing document...</p>
             <p className="upload-hint">This may take a few moments</p>
           </div>
         ) : (
           <div className="upload-content">
             <Upload size={32} />
-            <p className="upload-text">Drop your PDF here or click to browse</p>
+            <p className="upload-text">Drop your document here or click to browse</p>
             <p className="upload-hint">Max file size: 10MB</p>
           </div>
         )}
@@ -213,7 +229,7 @@ const PDFUpload: React.FC<PDFUploadProps> = ({ sessionId, apiKey, onDocumentUplo
         <div className="rag-info">
           <div className="info-icon">ℹ️</div>
           <div className="info-text">
-            You can now ask questions about your uploaded PDF documents. The AI will only use information from these documents to answer your questions.
+            You can now ask questions about your uploaded documents. The AI will only use information from these documents to answer your questions.
           </div>
         </div>
       )}
@@ -221,4 +237,4 @@ const PDFUpload: React.FC<PDFUploadProps> = ({ sessionId, apiKey, onDocumentUplo
   )
 }
 
-export default PDFUpload
+export default DocumentUpload
