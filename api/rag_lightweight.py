@@ -1,5 +1,5 @@
 """
-Lightweight PDF processing and RAG functionality using PyPDF2 and pdfplumber.
+Lightweight document processing and RAG functionality supporting PDF, Word (.docx), and PowerPoint (.pptx).
 This version avoids heavy ML dependencies for Vercel deployment.
 """
 import os
@@ -9,10 +9,13 @@ from typing import List, Dict, Any, Optional
 from pathlib import Path
 import asyncio
 import re
+import mimetypes
 
 import PyPDF2
 import pdfplumber
 import tiktoken
+from docx import Document
+from pptx import Presentation
 
 import sys
 import os
@@ -23,40 +26,45 @@ from aimakerspace.openai_utils.embedding import EmbeddingModel
 from aimakerspace.openai_utils.chatmodel import ChatOpenAI
 
 
-class LightweightPDFProcessor:
-    """Lightweight PDF processor using PyPDF2 and pdfplumber."""
+class DocumentProcessor:
+    """Lightweight document processor supporting PDF, Word (.docx), and PowerPoint (.pptx)."""
     
     def __init__(self):
         # Initialize tokenizer for chunking
         self.tokenizer = tiktoken.encoding_for_model("text-embedding-3-small")
         
-    def process_pdf(self, pdf_path: str) -> Dict[str, Any]:
+    def process_document(self, file_path: str) -> Dict[str, Any]:
         """
-        Process a PDF file and extract content with chunks.
+        Process a document file and extract content with chunks.
+        Supports PDF, Word (.docx), and PowerPoint (.pptx) files.
         
         Args:
-            pdf_path: Path to the PDF file
+            file_path: Path to the document file
             
         Returns:
             Dictionary containing processed content and metadata
         """
         try:
             # Check if file exists and is readable
-            if not os.path.exists(pdf_path):
-                raise Exception(f"PDF file not found: {pdf_path}")
+            if not os.path.exists(file_path):
+                raise Exception(f"Document file not found: {file_path}")
             
             # Check file size (limit to 50MB to prevent memory issues)
-            file_size = os.path.getsize(pdf_path)
+            file_size = os.path.getsize(file_path)
             if file_size > 50 * 1024 * 1024:  # 50MB limit
-                raise Exception(f"PDF file too large: {file_size / (1024*1024):.1f}MB (max 50MB)")
+                raise Exception(f"Document file too large: {file_size / (1024*1024):.1f}MB (max 50MB)")
             
-            print(f"Processing PDF: {os.path.basename(pdf_path)} ({file_size / (1024*1024):.1f}MB)")
+            # Detect file type
+            file_type = self._detect_file_type(file_path)
+            file_name = os.path.basename(file_path)
             
-            # Extract text using both libraries for better coverage
-            text_content = self._extract_text_hybrid(pdf_path)
+            print(f"Processing {file_type.upper()} document: {file_name} ({file_size / (1024*1024):.1f}MB)")
+            
+            # Extract text based on file type
+            text_content = self._extract_text_by_type(file_path, file_type)
             
             if not text_content.strip():
-                raise Exception("No text could be extracted from the PDF")
+                raise Exception(f"No text could be extracted from the {file_type} document")
             
             print(f"Extracted text length: {len(text_content)} characters")
             
@@ -70,19 +78,54 @@ class LightweightPDFProcessor:
                 "chunks": chunks,
                 "chunk_count": len(chunks),
                 "metadata": {
-                    "file_path": pdf_path,
-                    "file_name": os.path.basename(pdf_path),
+                    "file_path": file_path,
+                    "file_name": file_name,
+                    "file_type": file_type,
                     "file_size": file_size,
-                    "processing_method": "lightweight_hybrid"
+                    "processing_method": f"lightweight_{file_type}"
                 }
             }
             
         except Exception as e:
-            print(f"Error processing PDF: {str(e)}")
-            raise Exception(f"Error processing PDF: {str(e)}")
+            print(f"Error processing document: {str(e)}")
+            raise Exception(f"Error processing document: {str(e)}")
     
-    def _extract_text_hybrid(self, pdf_path: str) -> str:
-        """Extract text using both PyPDF2 and pdfplumber for better results."""
+    def _detect_file_type(self, file_path: str) -> str:
+        """Detect the file type based on extension and MIME type."""
+        file_extension = Path(file_path).suffix.lower()
+        
+        if file_extension in ['.pdf']:
+            return 'pdf'
+        elif file_extension in ['.docx', '.doc']:
+            return 'docx'
+        elif file_extension in ['.pptx', '.ppt']:
+            return 'pptx'
+        else:
+            # Try MIME type detection as fallback
+            mime_type, _ = mimetypes.guess_type(file_path)
+            if mime_type:
+                if 'pdf' in mime_type:
+                    return 'pdf'
+                elif 'wordprocessingml' in mime_type or 'msword' in mime_type:
+                    return 'docx'
+                elif 'presentationml' in mime_type or 'mspowerpoint' in mime_type:
+                    return 'pptx'
+            
+            raise Exception(f"Unsupported file type: {file_extension}. Supported types: .pdf, .docx, .pptx")
+    
+    def _extract_text_by_type(self, file_path: str, file_type: str) -> str:
+        """Extract text based on file type."""
+        if file_type == 'pdf':
+            return self._extract_text_pdf(file_path)
+        elif file_type == 'docx':
+            return self._extract_text_docx(file_path)
+        elif file_type == 'pptx':
+            return self._extract_text_pptx(file_path)
+        else:
+            raise Exception(f"Unsupported file type for extraction: {file_type}")
+    
+    def _extract_text_pdf(self, pdf_path: str) -> str:
+        """Extract text from PDF using both PyPDF2 and pdfplumber for better results."""
         text_pypdf2 = self._extract_text_pypdf2(pdf_path)
         text_pdfplumber = self._extract_text_pdfplumber(pdf_path)
         
@@ -91,6 +134,65 @@ class LightweightPDFProcessor:
             return text_pdfplumber
         else:
             return text_pypdf2
+    
+    def _extract_text_docx(self, docx_path: str) -> str:
+        """Extract text from Word document (.docx)."""
+        try:
+            doc = Document(docx_path)
+            text = ""
+            
+            # Extract text from paragraphs
+            for paragraph in doc.paragraphs:
+                if paragraph.text.strip():
+                    text += paragraph.text + "\n"
+            
+            # Extract text from tables
+            for table in doc.tables:
+                for row in table.rows:
+                    row_text = []
+                    for cell in row.cells:
+                        if cell.text.strip():
+                            row_text.append(cell.text.strip())
+                    if row_text:
+                        text += " | ".join(row_text) + "\n"
+            
+            return text
+        except Exception as e:
+            print(f"Word document extraction failed: {e}")
+            return ""
+    
+    def _extract_text_pptx(self, pptx_path: str) -> str:
+        """Extract text from PowerPoint presentation (.pptx)."""
+        try:
+            prs = Presentation(pptx_path)
+            text = ""
+            
+            for slide_num, slide in enumerate(prs.slides):
+                # Add slide header
+                text += f"Slide {slide_num + 1}:\n"
+                
+                # Extract text from shapes
+                for shape in slide.shapes:
+                    if hasattr(shape, "text") and shape.text.strip():
+                        text += shape.text + "\n"
+                    
+                    # Extract text from tables
+                    if shape.has_table:
+                        table = shape.table
+                        for row in table.rows:
+                            row_text = []
+                            for cell in row.cells:
+                                if cell.text.strip():
+                                    row_text.append(cell.text.strip())
+                            if row_text:
+                                text += " | ".join(row_text) + "\n"
+                
+                text += "\n"  # Add spacing between slides
+            
+            return text
+        except Exception as e:
+            print(f"PowerPoint extraction failed: {e}")
+            return ""
     
     def _extract_text_pypdf2(self, pdf_path: str) -> str:
         """Extract text using PyPDF2."""
@@ -232,6 +334,20 @@ class LightweightPDFProcessor:
         # Remove leading/trailing whitespace
         text = text.strip()
         return text
+
+    # Backward compatibility method
+    def process_pdf(self, pdf_path: str) -> Dict[str, Any]:
+        """
+        Backward compatibility method for PDF processing.
+        Use process_document() for new implementations.
+        
+        Args:
+            pdf_path: Path to the PDF file
+            
+        Returns:
+            Dictionary containing processed content and metadata
+        """
+        return self.process_document(pdf_path)
 
 
 class RAGSystem:

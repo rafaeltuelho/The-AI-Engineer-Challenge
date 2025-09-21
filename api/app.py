@@ -29,7 +29,7 @@ if current_dir not in sys.path:
     sys.path.insert(0, current_dir)
 
 # Import our lightweight PDF RAG functionality
-from pdf_rag_lightweight import LightweightPDFProcessor, get_or_create_rag_system
+from rag_lightweight import LightweightPDFProcessor, get_or_create_rag_system
 
 # Initialize FastAPI application with comprehensive OpenAPI configuration
 app = FastAPI(
