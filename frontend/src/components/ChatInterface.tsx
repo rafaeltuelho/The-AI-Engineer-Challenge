@@ -439,8 +439,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       
       setPdfUploadSuccess(`${data.file_type.toUpperCase()} document "${data.file_name}" uploaded and processed successfully! ${data.chunk_count} chunks created.`)
       
-      // Set RAG mode for the current conversation
-      setChatMode('rag')
+      // Only switch to RAG mode if currently in regular mode
+      // Preserve RAG or Topic Explorer mode if already selected
+      if (chatMode === 'regular') {
+        setChatMode('rag')
+      }
       
       // Clear success message after 10 seconds
       setTimeout(() => setPdfUploadSuccess(null), 10000)

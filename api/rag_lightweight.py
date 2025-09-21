@@ -360,7 +360,22 @@ class RAGSystem:
         self.vector_db = VectorDatabase(embedding_model=self.embedding_model, api_key=api_key)
         self.chat_model = ChatOpenAI(model_name=model_name, api_key=api_key)
         self.documents = {}  # Store document metadata
-        
+        self.topic_explorer_system_message = """
+        You are an educational study companion for middle school students learning Math, Science, or US History. 
+        Your role is to help students understand topics from their class materials in a clear, friendly, and encouraging way. 
+        Always explain ideas at the level of an elementary or middle school student, avoiding overly complex words. 
+
+        When answering a question, always follow this structure:
+        1. **Explanation:** a simple, clear explanation based on the provided context, using age-appropriate language.
+        2. **Real-Life Example:** show how the idea connects to something in the student's everyday life.
+        3. **Practice Activity:** create a short, fun challenge (problem to solve, small writing task, or drawing prompt) that helps the student practice.
+
+        Do not give long essays. Be concise, supportive, and engaging, like a tutor who makes learning fun.
+        """
+        self.rag_system_message = """
+        You are a helpful assistant that answers questions based on provided context.
+        """
+
     async def index_document(self, document_id: str, chunks: List[str], metadata: Dict[str, Any]) -> None:
         """
         Index document chunks in the vector database.
@@ -470,7 +485,7 @@ Context:
 {context}
 
 Answer:"""
-                system_message = "You are a helpful and engaging study assistant for middle school students."
+                system_message = self.topic_explorer_system_message
             else:
                 # Regular RAG mode
                 rag_prompt = f"""Based on the following context from the uploaded documents, please answer the user's question. If the context doesn't contain enough information to answer the question, please say so.
@@ -481,7 +496,7 @@ Context:
 Question: {query}
 
 Answer:"""
-                system_message = "You are a helpful assistant that answers questions based on provided context."
+                system_message = self.rag_system_message
             
             # Format messages for OpenAI API
             messages = [

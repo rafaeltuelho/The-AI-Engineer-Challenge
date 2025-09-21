@@ -20,6 +20,13 @@ class ChatOpenAI:
         client = OpenAI(api_key=self.openai_api_key)
         response = client.chat.completions.create(
             model=self.model_name, messages=messages, **kwargs
+            temperature=0.7,
+            # max_tokens=4096,
+            # top_p=1,
+            # frequency_penalty=0,
+            # presence_penalty=0,
+            # stop=None,
+            # n=1,
         )
 
         if text_only:
@@ -35,6 +42,13 @@ class ChatOpenAI:
         client = OpenAI(api_key=self.openai_api_key)
         response = await client.chat.completions.create(
             model=self.model_name, messages=messages, **kwargs
+            temperature=0.7,
+            # max_tokens=4096,
+            # top_p=1,
+            # frequency_penalty=0,
+            # presence_penalty=0,
+            # stop=None,
+            # n=1,
         )
 
         if text_only:

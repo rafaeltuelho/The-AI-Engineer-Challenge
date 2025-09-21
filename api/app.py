@@ -893,7 +893,7 @@ async def rag_query(
         # Return response with conversation ID in headers
         from fastapi.responses import JSONResponse
         return JSONResponse(
-            content=response.dict(),
+            content=response.model_dump(),
             headers={"X-Conversation-ID": conversation_id}
         )
     
