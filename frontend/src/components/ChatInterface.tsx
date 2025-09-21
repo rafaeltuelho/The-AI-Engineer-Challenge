@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react'
-import { Send, Key, MessageSquare, User, Bot, Trash2, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Settings, ArrowDown, X, FileText, Upload, Database, MessageCircle } from 'lucide-react'
+import { Send, Key, MessageSquare, User, Bot, Trash2, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Settings, ArrowDown, X, FileText, Upload, Database, MessageCircle, BookOpen } from 'lucide-react'
 import MarkdownRenderer from './MarkdownRenderer'
 import './ChatInterface.css'
 
@@ -49,7 +49,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const [isPdfUploading, setIsPdfUploading] = useState(false)
   const [showApiKeySuccess, setShowApiKeySuccess] = useState(false)
   const [showApiKeyInfo, setShowApiKeyInfo] = useState(true)
-  const [isRagMode, setIsRagMode] = useState(false)
+  const [chatMode, setChatMode] = useState<'regular' | 'rag' | 'topic-explorer'>('regular')
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const availableModels = Object.keys(modelDescriptions)
@@ -184,7 +184,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         
         // Set the conversation mode based on the response
         const conversationMode = data.mode || "regular"
-        setIsRagMode(conversationMode === "rag")
+        setChatMode(conversationMode as 'regular' | 'rag' | 'topic-explorer')
       } else {
         console.error('Failed to load conversation:', response.statusText)
       }
@@ -236,21 +236,23 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     setIsLoading(true)
 
     try {
-      // Use RAG mode if it's been set for this conversation
-      const shouldUseRAG = isRagMode
+      // Determine which endpoint to use based on chat mode
+      const isRagMode = chatMode === 'rag' || chatMode === 'topic-explorer'
+      const endpoint = isRagMode ? '/api/rag-query' : '/api/chat'
       
-      const response = await fetch(shouldUseRAG ? '/api/rag-query' : '/api/chat', {
+      const response = await fetch(endpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'X-Session-ID': sessionId,
           'X-API-Key': apiKey,
-          ...(shouldUseRAG && conversationId ? { 'X-Conversation-ID': conversationId } : {})
+          ...(isRagMode && conversationId ? { 'X-Conversation-ID': conversationId } : {})
         },
-        body: JSON.stringify(shouldUseRAG ? {
+        body: JSON.stringify(isRagMode ? {
           question: currentMessage,
           k: 3,
-          model: selectedModel
+          model: selectedModel,
+          mode: chatMode
         } : {
           conversation_id: conversationId,
           developer_message: developerMessage,
@@ -276,7 +278,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
       setMessages(prev => [...prev, assistantMessageObj])
 
-      if (shouldUseRAG) {
+      if (isRagMode) {
         // Handle RAG response (JSON)
         const ragResult = await response.json()
         assistantMessage = ragResult.answer
@@ -351,7 +353,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     setConversationId(null)
     setDeveloperMessage('You are a helpful AI assistant.')
     setShowConversationInfoBanner(false)
-    setIsRagMode(false)
+    setChatMode('regular')
   }
 
   const startNewConversation = () => {
@@ -429,7 +431,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       setPdfUploadSuccess(`PDF "${data.file_name}" uploaded and processed successfully! ${data.chunk_count} chunks created.`)
       
       // Set RAG mode for the current conversation
-      setIsRagMode(true)
+      setChatMode('rag')
       
       // Clear success message after 10 seconds
       setTimeout(() => setPdfUploadSuccess(null), 10000)
@@ -602,7 +604,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                       <p className="no-conversations">No conversations yet</p>
                     ) : (
                       conversations.map((conv) => (
-                        <div key={conv.conversation_id} className={`conversation-item ${conv.mode === 'rag' ? 'rag-mode' : 'regular-mode'}`}>
+                        <div key={conv.conversation_id} className={`conversation-item ${conv.mode === 'rag' ? 'rag-mode' : conv.mode === 'topic-explorer' ? 'topic-explorer-mode' : 'regular-mode'}`}>
                           <div 
                             className="conversation-content"
                             onClick={() => loadConversation(conv.conversation_id)}
@@ -645,18 +647,31 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         <div className="chat-header">
           <div className="chat-header-left">
             <h2>Chat with AI</h2>
-            <div className={`mode-indicator ${isRagMode ? 'rag-mode' : 'regular-mode'}`}>
-              {isRagMode ? (
-                <>
-                  <Database size={14} />
-                  <span>RAG Mode</span>
-                </>
-              ) : (
-                <>
-                  <MessageCircle size={14} />
-                  <span>Regular Chat</span>
-                </>
-              )}
+            <div className="mode-badges">
+              <button
+                className={`mode-badge ${chatMode === 'regular' ? 'active' : ''}`}
+                onClick={() => setChatMode('regular')}
+                title="AI Chat Mode - General conversation"
+              >
+                <MessageCircle size={14} />
+                <span>AI Chat</span>
+              </button>
+              <button
+                className={`mode-badge ${chatMode === 'rag' ? 'active' : ''}`}
+                onClick={() => setChatMode('rag')}
+                title="RAG Mode - Query uploaded documents"
+              >
+                <Database size={14} />
+                <span>RAG</span>
+              </button>
+              <button
+                className={`mode-badge ${chatMode === 'topic-explorer' ? 'active' : ''}`}
+                onClick={() => setChatMode('topic-explorer')}
+                title="Topic Explorer - Guided learning with structured responses"
+              >
+                <BookOpen size={14} />
+                <span>Topic Explorer</span>
+              </button>
             </div>
           </div>
           <button 

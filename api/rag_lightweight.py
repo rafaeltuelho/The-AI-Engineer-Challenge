@@ -418,7 +418,7 @@ class RAGSystem:
         except Exception as e:
             raise Exception(f"Error searching chunks: {str(e)}")
     
-    async def query_documents(self, query: str, k: int = 3) -> str:
+    async def query_documents(self, query: str, k: int = 3, mode: str = "rag") -> str:
         """
         Query documents using RAG approach.
         
@@ -445,8 +445,35 @@ class RAGSystem:
             
             context = "\n\n".join(context_parts)
             
-            # Create RAG prompt
-            rag_prompt = f"""Based on the following context from the uploaded documents, please answer the user's question. If the context doesn't contain enough information to answer the question, please say so.
+            # Create prompt based on mode
+            if mode == "topic-explorer":
+                # Topic Explorer mode with structured 3-part response
+                rag_prompt = f"""You are a helpful and engaging study assistant for middle school students.
+You will receive:
+1. A student question
+2. Context extracted from their study material (PDF, Word, or PowerPoint)
+
+Your task:
+- Use the context when possible, but also explain in a clear, simple way.
+- Always return the answer in **three structured sections**:
+  1. **Explanation** → Simple, student-friendly explanation of the topic.
+  2. **Real-Life Example** → Show how the concept applies in daily life or something relatable.
+  3. **Practice Activity** → Give a short challenge (question, drawing, or exercise) the student can do to practice.
+
+Format your answer clearly with section headers.
+
+---
+Student Question:
+{query}
+
+Context:
+{context}
+
+Answer:"""
+                system_message = "You are a helpful and engaging study assistant for middle school students."
+            else:
+                # Regular RAG mode
+                rag_prompt = f"""Based on the following context from the uploaded documents, please answer the user's question. If the context doesn't contain enough information to answer the question, please say so.
 
 Context:
 {context}
@@ -454,10 +481,11 @@ Context:
 Question: {query}
 
 Answer:"""
+                system_message = "You are a helpful assistant that answers questions based on provided context."
             
             # Format messages for OpenAI API
             messages = [
-                {"role": "system", "content": "You are a helpful assistant that answers questions based on provided context."},
+                {"role": "system", "content": system_message},
                 {"role": "user", "content": rag_prompt}
             ]
             
@@ -468,7 +496,7 @@ Answer:"""
         except Exception as e:
             raise Exception(f"Error querying documents: {str(e)}")
     
-    def query(self, query: str, k: int = 3) -> str:
+    def query(self, query: str, k: int = 3, mode: str = "rag") -> str:
         """
         Synchronous wrapper for query_documents.
         
@@ -495,8 +523,35 @@ Answer:"""
             
             context = "\n\n".join(context_parts)
             
-            # Create RAG prompt
-            rag_prompt = f"""Based on the following context from the uploaded documents, please answer the user's question. If the context doesn't contain enough information to answer the question, please say so.
+            # Create prompt based on mode
+            if mode == "topic-explorer":
+                # Topic Explorer mode with structured 3-part response
+                rag_prompt = f"""You are a helpful and engaging study assistant for middle school students.
+You will receive:
+1. A student question
+2. Context extracted from their study material (PDF, Word, or PowerPoint)
+
+Your task:
+- Use the context when possible, but also explain in a clear, simple way.
+- Always return the answer in **three structured sections**:
+  1. **Explanation** → Simple, student-friendly explanation of the topic.
+  2. **Real-Life Example** → Show how the concept applies in daily life or something relatable.
+  3. **Practice Activity** → Give a short challenge (question, drawing, or exercise) the student can do to practice.
+
+Format your answer clearly with section headers.
+
+---
+Student Question:
+{query}
+
+Context:
+{context}
+
+Answer:"""
+                system_message = "You are a helpful and engaging study assistant for middle school students."
+            else:
+                # Regular RAG mode
+                rag_prompt = f"""Based on the following context from the uploaded documents, please answer the user's question. If the context doesn't contain enough information to answer the question, please say so.
 
 Context:
 {context}
@@ -504,10 +559,11 @@ Context:
 Question: {query}
 
 Answer:"""
+                system_message = "You are a helpful assistant that answers questions based on provided context."
             
             # Format messages for OpenAI API
             messages = [
-                {"role": "system", "content": "You are a helpful assistant that answers questions based on provided context."},
+                {"role": "system", "content": system_message},
                 {"role": "user", "content": rag_prompt}
             ]
             

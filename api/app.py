@@ -29,7 +29,7 @@ if current_dir not in sys.path:
     sys.path.insert(0, current_dir)
 
 # Import our lightweight PDF RAG functionality
-from rag_lightweight import LightweightPDFProcessor, get_or_create_rag_system
+from rag_lightweight import DocumentProcessor, get_or_create_rag_system
 
 # Initialize FastAPI application with comprehensive OpenAPI configuration
 app = FastAPI(
@@ -342,6 +342,7 @@ class RAGQueryRequest(BaseModel):
     question: str
     k: Optional[int] = 5  # Number of relevant chunks to retrieve
     model: Optional[str] = "gpt-4.1-mini"  # Model selection for RAG queries
+    mode: Optional[str] = "rag"  # RAG mode: "rag" or "topic-explorer"
     
     @field_validator('question')
     @classmethod
@@ -818,8 +819,8 @@ async def rag_query(
         # Get RAG system for this session with the specified model
         rag_system = get_or_create_rag_system(session_id, api_key, query_request.model)
         
-        # Query the RAG system
-        answer = rag_system.query(query_request.question, k=query_request.k)
+        # Query the RAG system with the specified mode
+        answer = rag_system.query(query_request.question, k=query_request.k, mode=query_request.mode)
         
         # Get document info
         doc_info = rag_system.get_document_info()
@@ -842,7 +843,7 @@ async def rag_query(
                 "title": None,  # Will be set when first user message is added
                 "created_at": datetime.now(timezone.utc),
                 "last_updated": datetime.now(timezone.utc),
-                "mode": "rag"  # RAG mode for document queries
+                "mode": query_request.mode or "rag"  # RAG mode for document queries
             }
         
         # Add user message to conversation history
