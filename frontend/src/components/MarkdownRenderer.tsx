@@ -34,13 +34,36 @@ const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content }) => {
     }
   }
 
+  // Pre-process content to prevent JSON from being rendered as code blocks
+  const preprocessContent = (content: string): string => {
+    // Check if content looks like raw JSON (starts with { and ends with })
+    const trimmedContent = content.trim()
+    if (trimmedContent.startsWith('{') && trimmedContent.endsWith('}')) {
+      try {
+        // Try to parse as JSON to confirm it's valid JSON
+        const parsed = JSON.parse(trimmedContent)
+        if (parsed && typeof parsed === 'object') {
+          // If it's valid JSON, convert it to a user-friendly message
+          console.warn('MarkdownRenderer: Detected raw JSON content, converting to user message')
+          return 'I apologize, but I encountered an issue formatting my response. Please try asking your question again.'
+        }
+      } catch (e) {
+        // If it's not valid JSON, it might be markdown content that happens to start with {
+        // In this case, leave it as-is
+      }
+    }
+    return content
+  }
+
+  const processedContent = preprocessContent(content)
+
   // Math expressions are already in proper LaTeX format from the AI
   // No preprocessing needed - the AI uses $...$ for inline and $$...$$ for block math
 
   return (
     <div className="markdown-content">
       <ReactMarkdown
-        remarkPlugins={[remarkGfm, remarkMath]}
+        remarkPlugins={[remarkGfm, [remarkMath, { singleDollarTextMath: true }]]}
         rehypePlugins={[rehypeRaw, rehypeHighlight, rehypeKatex]}
         components={{
           // Customize code blocks
@@ -198,7 +221,7 @@ const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content }) => {
           }
         }}
       >
-        {content}
+        {processedContent}
       </ReactMarkdown>
     </div>
   )
