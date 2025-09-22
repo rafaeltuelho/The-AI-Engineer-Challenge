@@ -397,8 +397,8 @@ class RAGQueryRequest(BaseModel):
         
         # List of allowed models (you can expand this list)
         allowed_models = [
-            "gpt-4", "gpt-4-turbo", "gpt-4o", "gpt-4o-mini",
-            "gpt-4.1-mini", "gpt-4.1-nano", "gpt-5", "gpt-4-mini", "gpt-5-nano"
+            "gpt-4", "gpt-4-mini", "gpt-4-turbo", "gpt-4o", "gpt-4o-mini",
+            "gpt-4.1", "gpt-4.1-mini", "gpt-4.1-nano", "gpt-5", "gpt-5-mini", "gpt-5-nano"
         ]
         
         if v not in allowed_models:
@@ -735,7 +735,7 @@ async def clear_all_conversations(
 @limiter.limit("3/minute")  # Limit to 3 document uploads per minute per IP
 async def upload_document(
     request: Request,
-    file: UploadFile = File(..., description="Document file to upload (PDF, DOCX, PPTX - max 10MB)"),
+    file: UploadFile = File(..., description="Document file to upload (PDF, DOCX, PPTX - max 20MB)"),
     x_session_id: str = Header(..., alias="X-Session-ID", description="Session ID for authentication"),
     x_api_key: str = Header(..., alias="X-API-Key", description="OpenAI API key for document processing")
 ):
@@ -764,10 +764,10 @@ async def upload_document(
                 detail=f"Unsupported file type: .{file_extension}. Supported types: {supported_types_str}"
             )
         
-        # Validate file size (max 10MB)
+        # Validate file size (max20)
         file_content = await file.read()
-        if len(file_content) > 10 * 1024 * 1024:  # 10MB
-            raise HTTPException(status_code=400, detail="File size too large (max 10MB)")
+        if len(file_content) > 20 * 1024 * 1024:  # 20MB
+            raise HTTPException(status_code=400, detail="File size too large (max 20MB)")
         
         # Create temporary file with appropriate extension
         temp_suffix = f'.{file_extension}'

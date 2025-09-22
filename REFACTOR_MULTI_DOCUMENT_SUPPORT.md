@@ -73,7 +73,7 @@ The backend uses a two-step validation process:
 
 ### Error Handling
 - Clear error messages for unsupported file types
-- File size validation (10MB limit maintained)
+- File size validation (20MB limit maintained)
 - Proper cleanup of temporary files
 
 ### Backward Compatibility

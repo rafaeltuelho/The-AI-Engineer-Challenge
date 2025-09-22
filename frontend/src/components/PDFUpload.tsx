@@ -81,8 +81,8 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ sessionId, apiKey, onDo
       return
     }
 
-    if (file.size > 10 * 1024 * 1024) { // 10MB limit
-      setUploadError('File size must be less than 10MB')
+    if (file.size > 20 * 1024 * 1024) { // 20MB limit
+      setUploadError('File size must be less than 20MB')
       return
     }
 
@@ -172,7 +172,7 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ sessionId, apiKey, onDo
           <div className="upload-content">
             <Upload size={32} />
             <p className="upload-text">Drop your document here or click to browse</p>
-            <p className="upload-hint">Max file size: 10MB</p>
+            <p className="upload-hint">Max file size: 20MB</p>
           </div>
         )}
       </div>
