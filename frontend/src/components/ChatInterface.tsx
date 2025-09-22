@@ -355,6 +355,29 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           )
         }
 
+        // Extract suggested questions if in topic-explorer mode (fallback for regular chat)
+        if (chatMode === 'topic-explorer') {
+          console.log('Extracting suggested questions from complete streaming response:', assistantMessage)
+          const extractedContent = extractSuggestedQuestions(assistantMessage)
+          console.log('Extracted content from streaming:', extractedContent)
+          if (extractedContent.hasSuggestedQuestions) {
+            console.log('Setting suggested questions from streaming:', extractedContent.suggestedQuestions)
+            setLastSuggestedQuestions(extractedContent.suggestedQuestions)
+            // Update the message with the main content without suggested questions
+            setMessages(prev => 
+              prev.map(msg => 
+                msg.id === assistantMessageId 
+                  ? { ...msg, content: extractedContent.mainContent, extractedContent }
+                  : msg
+              )
+            )
+          } else {
+            setLastSuggestedQuestions([])
+          }
+        } else {
+          setLastSuggestedQuestions([])
+        }
+
         // Reload conversations to show the updated list
         setTimeout(() => {
           loadConversations()
