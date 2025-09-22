@@ -353,8 +353,8 @@ Return your output in JSON with two keys:
             // Handle both formats: single string or object with sections
             let formattedMarkdown = ''
             if (typeof answer === 'string') {
-              // Single string format - use as-is since it already contains formatted sections
-              formattedMarkdown = answer
+              // Single string format - remove "Suggested Questions" section to avoid duplication
+              formattedMarkdown = answer.replace(/\n\nSuggested Questions?:?\s*\n.*$/s, '')
             } else if (typeof answer === 'object' && answer !== null) {
               // Object format with separate sections
               const explanation = answer.Explanation || answer.explanation || ''
@@ -485,21 +485,20 @@ Return your output in JSON with two keys:
   }
 
   const handleSuggestedQuestionClick = (question: string) => {
-    setInputMessage(question)
     setLastSuggestedQuestions([]) // Clear suggested questions when one is clicked
     
     // In Topic Explorer mode, automatically submit the question
     if (chatMode === 'topic-explorer') {
-      // Create a synthetic form event to trigger submission
-      const syntheticEvent = {
-        preventDefault: () => {},
-        target: { value: question }
-      } as unknown as React.FormEvent
+      // Set the input message and immediately submit
+      setInputMessage(question)
       
-      // Submit the question automatically
-      handleSubmit(syntheticEvent)
+      // Use setTimeout to ensure state update is processed before submission
+      setTimeout(() => {
+        handleSubmit({ preventDefault: () => {} } as React.FormEvent)
+      }, 0)
     } else {
-      // In other modes, just focus the textarea for manual submission
+      // In other modes, set the message and focus the textarea for manual submission
+      setInputMessage(question)
       if (textareaRef.current) {
         textareaRef.current.focus()
       }
