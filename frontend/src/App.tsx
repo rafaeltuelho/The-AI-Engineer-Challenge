@@ -8,8 +8,10 @@ function App() {
   const [sessionId, setSessionId] = useState<string>('')
   const [theme, setTheme] = useState<'light' | 'dark'>('light')
   const [selectedModel, setSelectedModel] = useState<string>('gpt-5-nano')
+  const [selectedProvider, setSelectedProvider] = useState<string>('openai')
 
   const modelDescriptions = {
+    // OpenAI models
     'gpt-4': 'Standard GPT-4 model',
     'gpt-4-mini': 'Compact GPT-4 variant',
     'gpt-4-turbo': 'Enhanced GPT-4 with improved performance',
@@ -20,7 +22,14 @@ function App() {
     'gpt-4.1-nano': 'Ultra-lightweight GPT-4.1',
     'gpt-5': 'Latest GPT-5 model',
     'gpt-5-mini': 'Compact GPT-5 variant',
-    'gpt-5-nano': 'Ultra-lightweight GPT-5 (default)'
+    'gpt-5-nano': 'Ultra-lightweight GPT-5 (default)',
+    // Together.ai models
+    'deepseek-ai/DeepSeek-R1': 'DeepSeek R1 reasoning model',
+    'deepseek-ai/DeepSeek-V3.1': 'DeepSeek V3.1 (default Together.ai)',
+    'meta-llama/Llama-3.3-70B-Instruct-Turbo': 'Llama 3.3 70B Turbo',
+    'meta-llama/Llama-4-Scout-17B-16E-Instruct': 'Llama 4 Scout 17B',
+    'openai/gpt-oss-20b': 'OpenAI GPT OSS 20B',
+    'openai/gpt-oss-120b': 'OpenAI GPT OSS 120B'
   }
 
   // Load theme preference from localStorage on component mount
@@ -41,14 +50,14 @@ function App() {
   }, [theme])
 
   // Create session when API key is provided
-  const createSession = async (apiKey: string) => {
+  const createSession = async (apiKey: string, provider: string) => {
     try {
       const response = await fetch('/api/session', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ api_key: apiKey })
+        body: JSON.stringify({ api_key: apiKey, provider: provider })
       })
       
       if (response.ok) {
@@ -69,9 +78,25 @@ function App() {
   const handleApiKeyChange = async (newApiKey: string) => {
     setApiKey(newApiKey)
     if (newApiKey.trim()) {
-      await createSession(newApiKey)
+      await createSession(newApiKey, selectedProvider)
     } else {
       setSessionId('')
+    }
+  }
+
+  // Handle provider changes
+  const handleProviderChange = async (newProvider: string) => {
+    setSelectedProvider(newProvider)
+    // Set default model based on provider
+    if (newProvider === 'together') {
+      setSelectedModel('deepseek-ai/DeepSeek-V3.1')
+    } else {
+      setSelectedModel('gpt-5-nano')
+    }
+    
+    // Recreate session if API key is present
+    if (apiKey.trim()) {
+      await createSession(apiKey, newProvider)
     }
   }
 
@@ -94,6 +119,8 @@ function App() {
           sessionId={sessionId}
           selectedModel={selectedModel}
           setSelectedModel={setSelectedModel}
+          selectedProvider={selectedProvider}
+          setSelectedProvider={handleProviderChange}
           modelDescriptions={modelDescriptions}
         />
       </main>

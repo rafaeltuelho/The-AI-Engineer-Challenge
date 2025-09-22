@@ -223,21 +223,34 @@ class ChatRequest(BaseModel):
     developer_message: str  # Message from the developer/system
     user_message: str      # Message from the user
     model: Optional[str] = "gpt-4.1-mini"  # Optional model selection with default
-    api_key: str          # OpenAI API key for authentication
+    api_key: str          # API key for authentication
+    provider: Optional[str] = "openai"  # Provider selection: "openai" or "together"
     
     @field_validator('api_key')
     @classmethod
     def validate_api_key(cls, v):
-        """Validate OpenAI API key format"""
+        """Validate API key format"""
         if not v or not isinstance(v, str):
             raise ValueError('API key is required')
         
-        # Temporarily disable strict validation for debugging
         # Just check that it's not empty and is a string
         if len(v.strip()) == 0:
             raise ValueError('API key cannot be empty')
         
         return v
+    
+    @field_validator('provider')
+    @classmethod
+    def validate_provider(cls, v):
+        """Validate provider selection"""
+        if not v:
+            return "openai"  # Default provider
+        
+        allowed_providers = ["openai", "together"]
+        if v.lower() not in allowed_providers:
+            raise ValueError(f'Invalid provider: {v}. Allowed providers: {", ".join(allowed_providers)}')
+        
+        return v.lower()
     
     @field_validator('user_message')
     @classmethod
@@ -273,14 +286,23 @@ class ChatRequest(BaseModel):
         if not v:
             return "gpt-4.1-mini"  # Default model
         
-        # List of allowed models (you can expand this list)
-        allowed_models = [
+        # List of allowed models for OpenAI
+        openai_models = [
             "gpt-4", "gpt-4-turbo", "gpt-4o", "gpt-4o-mini",
             "gpt-4.1-mini", "gpt-4.1-nano", "gpt-5", "gpt-4-mini", "gpt-5-nano"
         ]
         
-        if v not in allowed_models:
-            raise ValueError(f'Invalid model: {v}. Allowed models: {", ".join(allowed_models)}')
+        # List of allowed models for Together.ai
+        together_models = [
+            "deepseek-ai/DeepSeek-R1", "deepseek-ai/DeepSeek-V3.1", 
+            "meta-llama/Llama-3.3-70B-Instruct-Turbo", "meta-llama/Llama-4-Scout-17B-16E-Instruct",
+            "openai/gpt-oss-20b", "openai/gpt-oss-120b"
+        ]
+        
+        all_models = openai_models + together_models
+        
+        if v not in all_models:
+            raise ValueError(f'Invalid model: {v}. Allowed models: {", ".join(all_models)}')
         
         return v
     
@@ -315,11 +337,12 @@ class ConversationResponse(BaseModel):
 
 class SessionRequest(BaseModel):
     api_key: str
+    provider: Optional[str] = "openai"  # Provider selection: "openai" or "together"
     
     @field_validator('api_key')
     @classmethod
     def validate_api_key(cls, v):
-        """Validate OpenAI API key format"""
+        """Validate API key format"""
         if not v or not isinstance(v, str):
             raise ValueError('API key is required')
         
@@ -327,6 +350,19 @@ class SessionRequest(BaseModel):
             raise ValueError('API key cannot be empty')
         
         return v
+    
+    @field_validator('provider')
+    @classmethod
+    def validate_provider(cls, v):
+        """Validate provider selection"""
+        if not v:
+            return "openai"  # Default provider
+        
+        allowed_providers = ["openai", "together"]
+        if v.lower() not in allowed_providers:
+            raise ValueError(f'Invalid provider: {v}. Allowed providers: {", ".join(allowed_providers)}')
+        
+        return v.lower()
 
 class SessionResponse(BaseModel):
     session_id: str
@@ -345,6 +381,7 @@ class RAGQueryRequest(BaseModel):
     k: Optional[int] = 5  # Number of relevant chunks to retrieve
     model: Optional[str] = "gpt-4.1-mini"  # Model selection for RAG queries
     mode: Optional[str] = "rag"  # RAG mode: "rag" or "topic-explorer"
+    provider: Optional[str] = "openai"  # Provider selection: "openai" or "together"
     
     @field_validator('question')
     @classmethod
@@ -395,16 +432,38 @@ class RAGQueryRequest(BaseModel):
         if not v:
             return "gpt-4.1-mini"  # Default model
         
-        # List of allowed models (you can expand this list)
-        allowed_models = [
+        # List of allowed models for OpenAI
+        openai_models = [
             "gpt-4", "gpt-4-mini", "gpt-4-turbo", "gpt-4o", "gpt-4o-mini",
             "gpt-4.1", "gpt-4.1-mini", "gpt-4.1-nano", "gpt-5", "gpt-5-mini", "gpt-5-nano"
         ]
         
-        if v not in allowed_models:
-            raise ValueError(f'Invalid model: {v}. Allowed models: {", ".join(allowed_models)}')
+        # List of allowed models for Together.ai
+        together_models = [
+            "deepseek-ai/DeepSeek-R1", "deepseek-ai/DeepSeek-V3.1", 
+            "meta-llama/Llama-3.3-70B-Instruct-Turbo", "meta-llama/Llama-4-Scout-17B-16E-Instruct",
+            "openai/gpt-oss-20b", "openai/gpt-oss-120b"
+        ]
+        
+        all_models = openai_models + together_models
+        
+        if v not in all_models:
+            raise ValueError(f'Invalid model: {v}. Allowed models: {", ".join(all_models)}')
         
         return v
+    
+    @field_validator('provider')
+    @classmethod
+    def validate_provider(cls, v):
+        """Validate provider selection"""
+        if not v:
+            return "openai"  # Default provider
+        
+        allowed_providers = ["openai", "together"]
+        if v.lower() not in allowed_providers:
+            raise ValueError(f'Invalid provider: {v}. Allowed providers: {", ".join(allowed_providers)}')
+        
+        return v.lower()
 
 class RAGQueryResponse(BaseModel):
     answer: str
@@ -466,8 +525,11 @@ async def chat(
         # Debug logging
         print(f"Received chat request: session_id={session_id[:8]}..., hashed_api_key={hashed_api_key[:8]}..., model={chat_request.model}, user_message_length={len(chat_request.user_message)}")
         
-        # Initialize OpenAI client with the provided API key
-        client = OpenAI(api_key=chat_request.api_key)
+        # Initialize OpenAI client with the provided API key and provider
+        client_kwargs = {"api_key": chat_request.api_key}
+        if chat_request.provider == "together":
+            client_kwargs["base_url"] = "https://api.together.xyz/v1"
+        client = OpenAI(**client_kwargs)
         
         # Get user-specific conversations
         user_conversations = get_user_conversations(hashed_api_key)
@@ -784,8 +846,8 @@ async def upload_document(
             # document_id = str(uuid.uuid4())
             document_id = file.filename
             
-            # Get or create RAG system for this session
-            rag_system = get_or_create_rag_system(session_id, api_key)
+            # Get or create RAG system for this session (default to OpenAI for document processing)
+            rag_system = get_or_create_rag_system(session_id, api_key, "openai")
             
             # Index the document
             await rag_system.index_document(
@@ -843,8 +905,8 @@ async def rag_query(
         if not hashed_api_key:
             raise HTTPException(status_code=401, detail="Invalid or expired session")
         
-        # Get RAG system for this session with the specified model
-        rag_system = get_or_create_rag_system(session_id, api_key)
+        # Get RAG system for this session with the specified model and provider
+        rag_system = get_or_create_rag_system(session_id, api_key, query_request.provider)
         
         # Query the RAG system with the specified mode and developer message
         answer = rag_system.query(query_request.question, k=query_request.k, mode=query_request.mode, model_name=query_request.model, system_message=query_request.developer_message)
@@ -946,7 +1008,7 @@ async def get_documents(
             raise HTTPException(status_code=401, detail="Invalid or expired session")
         
         # Get RAG system for this session (using default model for document info)
-        rag_system = get_or_create_rag_system(session_id, api_key)
+        rag_system = get_or_create_rag_system(session_id, api_key, "openai")
         
         # Get document info
         doc_info = rag_system.get_document_info()

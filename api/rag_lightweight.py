@@ -353,11 +353,12 @@ class DocumentProcessor:
 class RAGSystem:
     """RAG (Retrieval-Augmented Generation) system using aimakerspace library."""
     
-    def __init__(self, api_key: str):
+    def __init__(self, api_key: str, provider: str = "openai"):
         self.api_key = api_key
+        self.provider = provider
         self.embedding_model = EmbeddingModel(api_key=api_key)
         self.vector_db = VectorDatabase(embedding_model=self.embedding_model, api_key=api_key)
-        self.chat_model = ChatOpenAI(api_key=api_key)
+        self.chat_model = ChatOpenAI(api_key=api_key, provider=provider)
         self.documents = {}  # Store document metadata
         self.topic_explorer_system_message = """
         You are an educational study companion for middle school students learning Math, Science, or US History. 
@@ -518,8 +519,16 @@ class RAGSystem:
             # Generate response
             # Add response_format for Topic Explorer mode to ensure JSON output
             kwargs = {}
-            if mode == "topic-explorer" and model_name in ['gpt-4.1', 'gpt-4o', 'gpt-5']:
-                kwargs["response_format"] = {"type": "json_object"}
+            if mode == "topic-explorer":
+                # Support JSON mode for OpenAI models and Together.ai models
+                openai_json_models = ['gpt-4.1', 'gpt-4o', 'gpt-5']
+                together_json_models = [
+                    'deepseek-ai/DeepSeek-R1', 'deepseek-ai/DeepSeek-V3.1', 
+                    'meta-llama/Llama-3.3-70B-Instruct-Turbo', 'meta-llama/Llama-4-Scout-17B-16E-Instruct',
+                    'openai/gpt-oss-20b', 'openai/gpt-oss-120b'
+                ]
+                if model_name in openai_json_models or model_name in together_json_models:
+                    kwargs["response_format"] = {"type": "json_object"}
             
             response = await self.chat_model.arun(messages, model_name=model_name, **kwargs)
             return response
@@ -595,8 +604,16 @@ class RAGSystem:
             # Generate response synchronously
             # Add response_format for Topic Explorer mode to ensure JSON output
             kwargs = {}
-            if mode == "topic-explorer" and model_name in ['gpt-4.1', 'gpt-4o', 'gpt-5']:
-                kwargs["response_format"] = {"type": "json_object"}
+            if mode == "topic-explorer":
+                # Support JSON mode for OpenAI models and Together.ai models
+                openai_json_models = ['gpt-4.1', 'gpt-4o', 'gpt-5']
+                together_json_models = [
+                    'deepseek-ai/DeepSeek-R1', 'deepseek-ai/DeepSeek-V3.1', 
+                    'meta-llama/Llama-3.3-70B-Instruct-Turbo', 'meta-llama/Llama-4-Scout-17B-16E-Instruct',
+                    'openai/gpt-oss-20b', 'openai/gpt-oss-120b'
+                ]
+                if model_name in openai_json_models or model_name in together_json_models:
+                    kwargs["response_format"] = {"type": "json_object"}
             response = self.chat_model.run(messages, model_name=model_name, **kwargs)
             return response
             
@@ -631,8 +648,8 @@ class RAGSystem:
 # Global RAG systems storage
 rag_systems = {}
 
-def get_or_create_rag_system(session_id: str, api_key: str) -> RAGSystem:
+def get_or_create_rag_system(session_id: str, api_key: str, provider: str = "openai") -> RAGSystem:
     """Get existing or create new RAG system for session."""
     if session_id not in rag_systems:
-        rag_systems[session_id] = RAGSystem(api_key=api_key)
+        rag_systems[session_id] = RAGSystem(api_key=api_key, provider=provider)
     return rag_systems[session_id]

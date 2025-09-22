@@ -19,6 +19,8 @@ interface ChatInterfaceProps {
   sessionId: string
   selectedModel: string
   setSelectedModel: (model: string) => void
+  selectedProvider: string
+  setSelectedProvider: (provider: string) => void
   modelDescriptions: Record<string, string>
 }
 
@@ -28,6 +30,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   sessionId,
   selectedModel, 
   setSelectedModel, 
+  selectedProvider,
+  setSelectedProvider,
   modelDescriptions 
 }) => {
   const [messages, setMessages] = useState<Message[]>([])
@@ -43,6 +47,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   })
   const [expandedSections, setExpandedSections] = useState({
     apiKey: true,
+    provider: false,
     model: false,
     systemMessage: false,
     conversations: false
@@ -106,13 +111,32 @@ Sample JSON output:
     }
   }
 
-  // Filter available models based on chat mode
+  // Filter available models based on chat mode and provider
   const getAvailableModels = () => {
+    const openaiModels = [
+      'gpt-4', 'gpt-4-mini', 'gpt-4-turbo', 'gpt-4o', 'gpt-4o-mini',
+      'gpt-4.1', 'gpt-4.1-mini', 'gpt-4.1-nano', 'gpt-5', 'gpt-5-mini', 'gpt-5-nano'
+    ]
+    
+    const togetherModels = [
+      'deepseek-ai/DeepSeek-R1', 'deepseek-ai/DeepSeek-V3.1', 
+      'meta-llama/Llama-3.3-70B-Instruct-Turbo', 'meta-llama/Llama-4-Scout-17B-16E-Instruct',
+      'openai/gpt-oss-20b', 'openai/gpt-oss-120b'
+    ]
+    
+    // Filter by provider first
+    let availableModels = selectedProvider === 'together' ? togetherModels : openaiModels
+    
     if (chatMode === 'topic-explorer') {
       // Only allow specific models for Topic Explorer mode
-      return ['gpt-4.1', 'gpt-4o', 'gpt-5']
+      if (selectedProvider === 'together') {
+        return ['deepseek-ai/DeepSeek-V3.1', 'meta-llama/Llama-3.3-70B-Instruct-Turbo']
+      } else {
+        return ['gpt-4.1', 'gpt-4o', 'gpt-5']
+      }
     }
-    return Object.keys(modelDescriptions)
+    
+    return availableModels
   }
   
   const availableModels = getAvailableModels()
@@ -392,13 +416,15 @@ Sample JSON output:
           developer_message: developerMessage,
           k: 3,
           model: selectedModel,
-          mode: chatMode
+          mode: chatMode,
+          provider: selectedProvider
         } : {
           conversation_id: conversationId,
           developer_message: developerMessage,
           user_message: currentMessage,
           model: selectedModel,
-          api_key: apiKey
+          api_key: apiKey,
+          provider: selectedProvider
         })
       })
 
@@ -776,7 +802,7 @@ Sample JSON output:
                     type="password"
                     value={apiKey}
                     onChange={(e) => setApiKey(e.target.value)}
-                    placeholder="Enter your OpenAI API key"
+                    placeholder={`Enter your ${selectedProvider === 'together' ? 'Together.ai' : 'OpenAI'} API key`}
                     className="api-key-input"
                   />
                   {apiKey.trim() && showApiKeyInfo && (
@@ -794,6 +820,38 @@ Sample JSON output:
                       </button>
                     </div>
                   )}
+                </div>
+              )}
+            </div>
+
+            <div className="setting-section">
+              <div 
+                className="section-header"
+                onClick={() => toggleSection('provider')}
+              >
+                <div className="section-title">
+                  <Settings size={14} />
+                  <span>Provider</span>
+                </div>
+                {expandedSections.provider ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+              </div>
+              {expandedSections.provider && (
+                <div className="section-content">
+                  <select
+                    value={selectedProvider}
+                    onChange={(e) => setSelectedProvider(e.target.value)}
+                    className="provider-select"
+                  >
+                    <option value="openai">OpenAI</option>
+                    <option value="together">Together.ai</option>
+                  </select>
+                  <div className="provider-info">
+                    {selectedProvider === 'openai' ? (
+                      <span>Using OpenAI's GPT models</span>
+                    ) : (
+                      <span>Using Together.ai's open-source models</span>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
@@ -998,7 +1056,7 @@ Sample JSON output:
         {!apiKey.trim() && (
           <div className="api-key-warning">
             <Key size={16} />
-            Please enter your OpenAI API key in settings to start chatting
+            Please enter your {selectedProvider === 'together' ? 'Together.ai' : 'OpenAI'} API key in settings to start chatting
           </div>
         )}
 

@@ -716,7 +716,7 @@
   color: var(--text-primary);
 }
 
-.api-key-input, .developer-message-input, .model-select {
+.api-key-input, .developer-message-input, .model-select, .provider-select {
   width: 100%;
   padding: 0.5rem 0.75rem;
   border: 1px solid var(--border-primary);
@@ -730,7 +730,7 @@
   color: var(--text-muted);
 }
 
-.api-key-input:focus, .developer-message-input:focus, .model-select:focus {
+.api-key-input:focus, .developer-message-input:focus, .model-select:focus, .provider-select:focus {
   outline: none;
   border-color: var(--accent-primary);
   box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
@@ -742,6 +742,13 @@
   overflow-y: auto;
   line-height: 1.4;
   margin-bottom: 0.25rem;
+}
+
+.provider-info {
+  margin-top: 0.5rem;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  font-style: italic;
 }
 
 .conversation-id-display {
