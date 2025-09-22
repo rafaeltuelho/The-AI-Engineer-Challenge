@@ -388,6 +388,11 @@ class RAGSystem:
             metadata: Document metadata
         """
         try:
+            # Check if document is already indexed
+            if document_id in self.documents:
+                print(f"Document {document_id} is already indexed. Skipping indexing.")
+                return
+            
             # Get embeddings for all chunks
             embeddings = await self.embedding_model.async_get_embeddings(chunks)
             
@@ -411,6 +416,8 @@ class RAGSystem:
                 "chunk_count": len(chunks),
                 "metadata": metadata
             }
+            
+            print(f"Successfully indexed document {document_id} with {len(chunks)} chunks.")
             
         except Exception as e:
             raise Exception(f"Error indexing document: {str(e)}")
