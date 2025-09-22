@@ -11,6 +11,12 @@ import 'highlight.js/styles/github.css'
 import 'highlight.js/styles/github-dark.css'
 import './MarkdownRenderer.css'
 
+// Escape a `$` only when it is followed by a digit, to avoid
+// remark-math treating currency like `$100` as math. Leaves `$n$` intact.
+const escapeCurrencyLikeDollars = (text: string): string => {
+  return text.replace(/(?<![$\\])\$(?=\d)/g, '\\$')
+}
+
 interface MarkdownRendererProps {
   content: string
 }
@@ -52,13 +58,15 @@ const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content }) => {
         // In this case, leave it as-is
       }
     }
-    return content
+    // Escape currency-like dollar usages to avoid false math parsing,
+    // while keeping inline math like $n$ intact.
+    return escapeCurrencyLikeDollars(content)
   }
 
   const processedContent = preprocessContent(content)
 
-  // Math expressions are already in proper LaTeX format from the AI
-  // No preprocessing needed - the AI uses $...$ for inline and $$...$$ for block math
+  // Math: keep $...$ for inline and $$...$$ for blocks. We pre-escape `$`
+  // followed by digits (e.g., `$100`) to avoid false math detection.
 
   return (
     <div className="markdown-content">
