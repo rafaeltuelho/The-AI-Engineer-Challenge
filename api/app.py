@@ -768,7 +768,8 @@ async def upload_document(
             processed_data = document_processor.process_document(temp_file_path)
             
             # Generate document ID
-            document_id = str(uuid.uuid4())
+            # document_id = str(uuid.uuid4())
+            document_id = file.filename
             
             # Get or create RAG system for this session
             rag_system = get_or_create_rag_system(session_id, api_key)
@@ -830,10 +831,10 @@ async def rag_query(
             raise HTTPException(status_code=401, detail="Invalid or expired session")
         
         # Get RAG system for this session with the specified model
-        rag_system = get_or_create_rag_system(session_id, api_key, query_request.model)
+        rag_system = get_or_create_rag_system(session_id, api_key)
         
         # Query the RAG system with the specified mode
-        answer = rag_system.query(query_request.question, k=query_request.k, mode=query_request.mode)
+        answer = rag_system.query(query_request.question, k=query_request.k, mode=query_request.mode, model_name=query_request.model)
         
         # Get document info
         doc_info = rag_system.get_document_info()

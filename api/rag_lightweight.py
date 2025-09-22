@@ -353,17 +353,18 @@ class DocumentProcessor:
 class RAGSystem:
     """RAG (Retrieval-Augmented Generation) system using aimakerspace library."""
     
-    def __init__(self, api_key: str, model_name: str = "gpt-4o-mini"):
+    def __init__(self, api_key: str):
         self.api_key = api_key
-        self.model_name = model_name
         self.embedding_model = EmbeddingModel(api_key=api_key)
         self.vector_db = VectorDatabase(embedding_model=self.embedding_model, api_key=api_key)
-        self.chat_model = ChatOpenAI(model_name=model_name, api_key=api_key)
+        self.chat_model = ChatOpenAI(api_key=api_key)
         self.documents = {}  # Store document metadata
         self.topic_explorer_system_message = """
         You are an educational study companion for middle school students learning Math, Science, or US History. 
         Your role is to help students understand topics from their class materials in a clear, friendly, and encouraging way. 
         Always explain ideas at the level of an elementary or middle school student, avoiding overly complex words. 
+        If the topic involves math, always write equations or expressions in LaTeX notation, enclosed in double dollar signs ($$ ... $$) for block equations or single dollar signs ($ ... $) for inline expressions.
+        Do not explain LaTeX syntax to the student, only show the math properly formatted.
 
         When answering a question, always follow this structure:
         1. **Explanation:** a simple, clear explanation based on the provided context, using age-appropriate language.
@@ -371,6 +372,7 @@ class RAGSystem:
         3. **Practice Activity:** create a short, fun challenge (problem to solve, small writing task, or drawing prompt) that helps the student practice.
 
         Do not give long essays. Be concise, supportive, and engaging, like a tutor who makes learning fun.
+        Additionally, at the end of your response, propose 2-3 short follow-up questions the student could ask next to keep learning. Label this section 'Suggested Questions'.
         """
         self.rag_system_message = """
         You are a helpful assistant that answers questions based on provided context.
@@ -433,7 +435,7 @@ class RAGSystem:
         except Exception as e:
             raise Exception(f"Error searching chunks: {str(e)}")
     
-    async def query_documents(self, query: str, k: int = 3, mode: str = "rag") -> str:
+    async def query_documents(self, query: str, k: int = 3, mode: str = "rag", model_name: str = "gpt-4o-mini") -> str:
         """
         Query documents using RAG approach.
         
@@ -463,39 +465,26 @@ class RAGSystem:
             # Create prompt based on mode
             if mode == "topic-explorer":
                 # Topic Explorer mode with structured 3-part response
-                rag_prompt = f"""You are a helpful and engaging study assistant for middle school students.
-You will receive:
-1. A student question
-2. Context extracted from their study material (PDF, Word, or PowerPoint)
+                rag_prompt = f"""
+                Student Question:
+                {query}
 
-Your task:
-- Use the context when possible, but also explain in a clear, simple way.
-- Always return the answer in **three structured sections**:
-  1. **Explanation** → Simple, student-friendly explanation of the topic.
-  2. **Real-Life Example** → Show how the concept applies in daily life or something relatable.
-  3. **Practice Activity** → Give a short challenge (question, drawing, or exercise) the student can do to practice.
+                Context:
+                {context}
 
-Format your answer clearly with section headers.
-
----
-Student Question:
-{query}
-
-Context:
-{context}
-
-Answer:"""
+                Answer:"""
                 system_message = self.topic_explorer_system_message
             else:
                 # Regular RAG mode
-                rag_prompt = f"""Based on the following context from the uploaded documents, please answer the user's question. If the context doesn't contain enough information to answer the question, please say so.
+                rag_prompt = f"""
+                Based on the following context from the uploaded documents, please answer the user's question. If the context doesn't contain enough information to answer the question, please say so.
 
-Context:
-{context}
+                Context:
+                {context}
 
-Question: {query}
+                Question: {query}
 
-Answer:"""
+                Answer:"""
                 system_message = self.rag_system_message
             
             # Format messages for OpenAI API
@@ -505,15 +494,15 @@ Answer:"""
             ]
             
             # Generate response
-            response = await self.chat_model.arun(messages)
+            response = await self.chat_model.arun(messages, model_name=model_name)
             return response
             
         except Exception as e:
             raise Exception(f"Error querying documents: {str(e)}")
     
-    def query(self, query: str, k: int = 3, mode: str = "rag") -> str:
+    def query(self, query: str, k: int = 3, mode: str = "rag", model_name: str = "gpt-4o-mini") -> str:
         """
-        Synchronous wrapper for query_documents.
+        Synchronous version of Query.
         
         Args:
             query: User query
@@ -541,40 +530,27 @@ Answer:"""
             # Create prompt based on mode
             if mode == "topic-explorer":
                 # Topic Explorer mode with structured 3-part response
-                rag_prompt = f"""You are a helpful and engaging study assistant for middle school students.
-You will receive:
-1. A student question
-2. Context extracted from their study material (PDF, Word, or PowerPoint)
+                rag_prompt = f"""
+                Student Question:
+                {query}
 
-Your task:
-- Use the context when possible, but also explain in a clear, simple way.
-- Always return the answer in **three structured sections**:
-  1. **Explanation** → Simple, student-friendly explanation of the topic.
-  2. **Real-Life Example** → Show how the concept applies in daily life or something relatable.
-  3. **Practice Activity** → Give a short challenge (question, drawing, or exercise) the student can do to practice.
+                Context:
+                {context}
 
-Format your answer clearly with section headers.
-
----
-Student Question:
-{query}
-
-Context:
-{context}
-
-Answer:"""
-                system_message = "You are a helpful and engaging study assistant for middle school students."
+                Answer:"""
+                system_message = self.topic_explorer_system_message
             else:
                 # Regular RAG mode
-                rag_prompt = f"""Based on the following context from the uploaded documents, please answer the user's question. If the context doesn't contain enough information to answer the question, please say so.
+                rag_prompt = f"""
+                Based on the following context from the uploaded documents, please answer the user's question. If the context doesn't contain enough information to answer the question, please say so.
 
-Context:
-{context}
+                Context:
+                {context}
 
-Question: {query}
+                Question: {query}
 
-Answer:"""
-                system_message = "You are a helpful assistant that answers questions based on provided context."
+                Answer:"""
+                system_message = self.rag_system_message
             
             # Format messages for OpenAI API
             messages = [
@@ -583,7 +559,7 @@ Answer:"""
             ]
             
             # Generate response synchronously
-            response = self.chat_model.run(messages)
+            response = self.chat_model.run(messages, model_name=model_name)
             return response
             
         except Exception as e:
@@ -603,15 +579,13 @@ Answer:"""
             return {
                 "total_documents": total_documents,
                 "total_chunks": total_chunks,
-                "documents": list(self.documents.keys()),
-                "model_name": self.model_name
+                "documents": list(self.documents.keys())
             }
         except Exception as e:
             return {
                 "total_documents": 0,
                 "total_chunks": 0,
                 "documents": [],
-                "model_name": self.model_name,
                 "error": str(e)
             }
 
@@ -619,8 +593,8 @@ Answer:"""
 # Global RAG systems storage
 rag_systems = {}
 
-def get_or_create_rag_system(session_id: str, api_key: str, model_name: str = "gpt-4o-mini") -> RAGSystem:
+def get_or_create_rag_system(session_id: str, api_key: str) -> RAGSystem:
     """Get existing or create new RAG system for session."""
     if session_id not in rag_systems:
-        rag_systems[session_id] = RAGSystem(api_key=api_key, model_name=model_name)
+        rag_systems[session_id] = RAGSystem(api_key=api_key)
     return rag_systems[session_id]
