@@ -19,9 +19,10 @@ const escapeCurrencyLikeDollars = (text: string): string => {
 
 interface MarkdownRendererProps {
   content: string
+  chatMode?: 'regular' | 'rag' | 'topic-explorer'
 }
 
-const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content }) => {
+const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, chatMode = 'regular' }) => {
   const [copiedBlocks, setCopiedBlocks] = React.useState<Set<string>>(new Set())
 
   const copyToClipboard = async (text: string, blockId: string) => {
@@ -42,6 +43,12 @@ const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content }) => {
 
   // Pre-process content to prevent JSON from being rendered as code blocks
   const preprocessContent = (content: string): string => {
+    // For Topic Explorer mode, don't preprocess JSON content as it's expected
+    if (chatMode === 'topic-explorer') {
+      // Still escape currency-like dollar usages for Topic Explorer
+      return escapeCurrencyLikeDollars(content)
+    }
+    
     // Check if content looks like raw JSON (starts with { and ends with })
     const trimmedContent = content.trim()
     if (trimmedContent.startsWith('{') && trimmedContent.endsWith('}')) {
