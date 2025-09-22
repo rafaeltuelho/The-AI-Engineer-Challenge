@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react'
 import { Send, Key, MessageSquare, User, Bot, Trash2, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Settings, ArrowDown, X, FileText, Upload, Database, MessageCircle, BookOpen } from 'lucide-react'
 import MarkdownRenderer from './MarkdownRenderer'
 import SuggestedQuestions from './SuggestedQuestions'
-import { extractSuggestedQuestions, ExtractedContent } from '../utils/suggestedQuestionsExtractor'
+import type { ExtractedContent } from '../utils/suggestedQuestionsExtractor'
 import './ChatInterface.css'
 
 interface Message {
@@ -74,18 +74,23 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         return 'You are a helpful assistant that answers questions based on provided context. If the context doesn\'t contain enough information to answer the question, please say so.'
       case 'topic-explorer':
         return `You are an educational study companion for middle school students learning Math, Science, or US History. 
-        Your role is to help students understand topics from their class materials in a clear, friendly, and encouraging way. 
-        Always explain ideas at the level of an elementary or middle school student, avoiding overly complex words. 
-        If the topic involves math, always write equations or expressions in LaTeX notation, enclosed in double dollar signs ($$ ... $$) for block equations or single dollar signs ($ ... $) for inline expressions.
-        Do not explain LaTeX syntax to the student, only show the math properly formatted.
+Your role is to help students understand topics from their class materials in a clear, friendly, and encouraging way. 
+Always explain ideas at the level of an elementary or middle school student, avoiding overly complex words. 
+If the topic involves math, always write equations or expressions in LaTeX notation, enclosed in double dollar signs ($$ ... $$) for block equations or single dollar signs ($ ... $) for inline expressions.
+Do not explain LaTeX syntax to the student, only show the math properly formatted.
 
-        When answering a question, always follow this structure:
-        1. **Explanation:** a simple, clear explanation based on the provided context, using age-appropriate language.
-        2. **Real-Life Example:** show how the idea connects to something in the student's everyday life.
-        3. **Practice Activity:** create a short, fun challenge (problem to solve, small writing task, or drawing prompt) that helps the student practice.
+When answering a question, always follow this structure:
+1. **Explanation:** a simple, clear explanation based on the provided context, using age-appropriate language.
+2. **Real-Life Example:** show how the idea connects to something in the student's everyday life.
+3. **Practice Activity:** create a short, fun challenge (problem to solve, small writing task, or drawing prompt) that helps the student practice.
 
-        Do not give long essays. Be concise, supportive, and engaging, like a tutor who makes learning fun.
-        Additionally, at the end of your response, propose 2-3 short follow-up questions the student could ask next to keep learning. Label this section 'Suggested Questions'.`
+Do not give long essays. Be concise, supportive, and engaging, like a tutor who makes learning fun.
+Additionally, at the end of your response, propose 2-3 short follow-up questions the student could ask next to keep learning. Label this section 'Suggested Questions'.
+
+Return your output in JSON with two keys:
+- "answer": containing the Explanation, Real-Life Example, Practice Activity.
+- "suggested_questions": a list of 2-3 short follow-up questions.
+`
       default:
         return 'You are a helpful AI assistant.'
     }
@@ -337,15 +342,32 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           setConversationId(newConversationId)
         }
         
-        // Extract suggested questions if in topic-explorer mode
+        // Topic Explorer: parse JSON structure and render sections
         let extractedContent: ExtractedContent | undefined
         if (chatMode === 'topic-explorer') {
-          extractedContent = extractSuggestedQuestions(assistantMessage)
-          if (extractedContent.hasSuggestedQuestions) {
-            setLastSuggestedQuestions(extractedContent.suggestedQuestions)
-            // Use the main content without suggested questions for display
-            assistantMessage = extractedContent.mainContent
-          } else {
+          try {
+            const parsed = typeof assistantMessage === 'string' ? JSON.parse(assistantMessage) : assistantMessage
+            const answer = parsed?.answer
+            const suggested = parsed?.suggested_questions
+
+            const explanation = answer?.Explanation || answer?.explanation || ''
+            const example = answer?.['Real-Life Example'] || answer?.real_life_example || answer?.realLifeExample || ''
+            const practice = answer?.['Practice Activity'] || answer?.practice_activity || answer?.practiceActivity || ''
+
+            const formattedMarkdown = [
+              explanation ? `### Explanation\n\n${explanation}` : '',
+              example ? `### Real-Life Example\n\n${example}` : '',
+              practice ? `### Practice Activity\n\n${practice}` : ''
+            ].filter(Boolean).join('\n\n')
+
+            assistantMessage = formattedMarkdown || ''
+            if (Array.isArray(suggested)) {
+              setLastSuggestedQuestions(suggested.filter((s: unknown) => typeof s === 'string') as string[])
+            } else {
+              setLastSuggestedQuestions([])
+            }
+          } catch (e) {
+            // Fallback: if parse fails, clear suggestions
             setLastSuggestedQuestions([])
           }
         } else {
