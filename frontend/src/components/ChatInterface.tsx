@@ -299,15 +299,20 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         // Extract suggested questions if in topic-explorer mode
         let extractedContent: ExtractedContent | undefined
         if (chatMode === 'topic-explorer') {
+          console.log('Extracting suggested questions from:', assistantMessage)
           extractedContent = extractSuggestedQuestions(assistantMessage)
+          console.log('Extracted content:', extractedContent)
           if (extractedContent.hasSuggestedQuestions) {
+            console.log('Setting suggested questions:', extractedContent.suggestedQuestions)
             setLastSuggestedQuestions(extractedContent.suggestedQuestions)
             // Use the main content without suggested questions for display
             assistantMessage = extractedContent.mainContent
           } else {
+            console.log('No suggested questions found')
             setLastSuggestedQuestions([])
           }
         } else {
+          console.log('Not in topic-explorer mode, clearing suggested questions')
           setLastSuggestedQuestions([])
         }
         
@@ -812,6 +817,13 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                       onQuestionClick={handleSuggestedQuestionClick}
                       isVisible={true}
                     />
+                  )}
+                  {/* Debug info */}
+                  {message.role === 'assistant' && isLastAssistantMessage(message) && (
+                    <div style={{fontSize: '10px', color: '#666', marginTop: '5px'}}>
+                      Debug: mode={chatMode}, questions={lastSuggestedQuestions.length}, 
+                      isLast={isLastAssistantMessage(message).toString()}
+                    </div>
                   )}
                 </div>
               </div>
