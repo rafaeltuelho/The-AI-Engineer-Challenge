@@ -231,6 +231,43 @@ Sample JSON output:
     }
   }
 
+  // Helper function to process Topic Explorer JSON responses
+  const processTopicExplorerMessage = (content: string) => {
+    try {
+      const parsed = JSON.parse(content)
+      if (parsed && typeof parsed === 'object') {
+        const answer = parsed?.answer
+        const suggested = parsed?.suggested_questions
+
+        // Handle both formats: single string or object with sections
+        let formattedMarkdown = ''
+        if (typeof answer === 'string') {
+          // Single string format - remove "Suggested Questions" section to avoid duplication
+          formattedMarkdown = answer.replace(/\n\nSuggested Questions?:?\s*\n.*$/s, '')
+        } else if (typeof answer === 'object' && answer !== null) {
+          // Object format with separate sections
+          const explanation = answer.Explanation || answer.explanation || ''
+          const example = answer['Real-Life Example'] || answer.real_life_example || answer.realLifeExample || ''
+          const practice = answer['Practice Activity'] || answer.practice_activity || answer.practiceActivity || ''
+
+          formattedMarkdown = [
+            explanation ? `### Explanation\n\n${explanation}` : '',
+            example ? `### Real-Life Example\n\n${example}` : '',
+            practice ? `### Practice Activity\n\n${practice}` : ''
+          ].filter(Boolean).join('\n\n')
+        }
+
+        return {
+          content: formattedMarkdown || content,
+          suggestedQuestions: Array.isArray(suggested) ? suggested.filter((s: unknown) => typeof s === 'string') as string[] : []
+        }
+      }
+    } catch (e) {
+      // If parsing fails, return original content
+    }
+    return { content, suggestedQuestions: [] }
+  }
+
   const loadConversation = async (convId: string) => {
     try {
       const response = await fetch(`/api/conversations/${convId}`, {
@@ -240,22 +277,52 @@ Sample JSON output:
       })
       if (response.ok) {
         const data = await response.json()
-        // Clear current messages and load the conversation history
-        setMessages(data.messages.map((msg: any) => ({
-          id: msg.timestamp,
-          role: msg.role,
-          content: msg.content,
-          timestamp: new Date(msg.timestamp)
-        })))
-        setConversationId(convId)
-        setDeveloperMessage(data.system_message)
         
         // Set the conversation mode based on the response
         const conversationMode = data.mode || "regular"
         setChatMode(conversationMode as 'regular' | 'rag' | 'topic-explorer')
         
-        // Clear suggested questions when loading a conversation
-        setLastSuggestedQuestions([])
+        // Process messages based on conversation mode
+        const processedMessages = data.messages.map((msg: any) => {
+          const baseMessage = {
+            id: msg.timestamp,
+            role: msg.role,
+            content: msg.content,
+            timestamp: new Date(msg.timestamp)
+          }
+          
+          // Process Topic Explorer assistant messages
+          if (conversationMode === 'topic-explorer' && msg.role === 'assistant') {
+            const processed = processTopicExplorerMessage(msg.content)
+            return {
+              ...baseMessage,
+              content: processed.content
+            }
+          }
+          
+          return baseMessage
+        })
+        
+        setMessages(processedMessages)
+        setConversationId(convId)
+        setDeveloperMessage(data.system_message)
+        
+        // Set suggested questions for Topic Explorer mode from the last assistant message
+        if (conversationMode === 'topic-explorer') {
+          const lastAssistantMessage = processedMessages
+            .filter((msg: any) => msg.role === 'assistant')
+            .pop()
+          if (lastAssistantMessage) {
+            const processed = processTopicExplorerMessage(data.messages
+              .filter((msg: any) => msg.role === 'assistant')
+              .pop()?.content || '')
+            setLastSuggestedQuestions(processed.suggestedQuestions)
+          } else {
+            setLastSuggestedQuestions([])
+          }
+        } else {
+          setLastSuggestedQuestions([])
+        }
       } else {
         console.error('Failed to load conversation:', response.statusText)
       }
