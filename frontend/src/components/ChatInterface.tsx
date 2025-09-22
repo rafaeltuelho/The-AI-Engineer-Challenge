@@ -377,25 +377,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           )
         }
 
-        // Extract suggested questions if in topic-explorer mode (fallback for regular chat)
-        if (chatMode === 'topic-explorer') {
-          const extractedContent = extractSuggestedQuestions(assistantMessage)
-          if (extractedContent.hasSuggestedQuestions) {
-            setLastSuggestedQuestions(extractedContent.suggestedQuestions)
-            // Update the message with the main content without suggested questions
-            setMessages(prev => 
-              prev.map(msg => 
-                msg.id === assistantMessageId 
-                  ? { ...msg, content: extractedContent.mainContent, extractedContent }
-                  : msg
-              )
-            )
-          } else {
-            setLastSuggestedQuestions([])
-          }
-        } else {
-          setLastSuggestedQuestions([])
-        }
+        // Clear suggested questions for regular chat mode
+        setLastSuggestedQuestions([])
 
         // Reload conversations to show the updated list
         setTimeout(() => {
