@@ -77,7 +77,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
 Your role is to help students understand topics from their class materials in a clear, friendly, and encouraging way. 
 Always explain ideas at the level of an elementary or middle school student, avoiding overly complex words. 
 If the topic involves math, always write equations or expressions in LaTeX notation, enclosed in double dollar signs ($$ ... $$) for block equations or single dollar signs ($ ... $) for inline expressions.
-Do not explain LaTeX syntax to the student, only show the math properly formatted. If your response contains any sentece with money representation using the dollar currency sign followed by a number (money value), make sure you escape it with '\$' to not confuse with an inline LaTeX math notation.
+Do not explain LaTeX syntax to the student, only show the math properly formatted. If your response contains any sentece with money representation using the dollar currency sign followed by a number (money value), make sure you escape it with '\\$' to not confuse with an inline LaTeX math notation.
 
 When answering a question, always follow this structure:
 1. **Explanation:** a simple, clear explanation based on the provided context, using age-appropriate language.
@@ -355,9 +355,9 @@ Always format your output in a strict JSON object with only two keys:
               try {
                 parsed = JSON.parse(assistantMessage)
               } catch (parseError) {
-                // If it's not valid JSON, treat the entire string as the answer content
-                console.warn('Response is not valid JSON, treating as plain text:', parseError)
-                assistantMessage = assistantMessage
+                // If it's not valid JSON, replace with user-friendly message
+                console.warn('Response is not valid JSON, replacing with error message:', parseError)
+                assistantMessage = 'I apologize, but I encountered an issue formatting my response. Please try asking your question again.'
                 setLastSuggestedQuestions([])
                 parsed = null
               }
@@ -392,6 +392,14 @@ Always format your output in a strict JSON object with only two keys:
               if (Array.isArray(suggested)) {
                 setLastSuggestedQuestions(suggested.filter((s: unknown) => typeof s === 'string') as string[])
               } else {
+                setLastSuggestedQuestions([])
+              }
+            } else {
+              // If parsed is null or not an object, ensure we don't have raw JSON
+              const trimmedContent = assistantMessage.trim()
+              if (trimmedContent.startsWith('{') && trimmedContent.endsWith('}')) {
+                console.warn('Detected raw JSON content in Topic Explorer, replacing with error message')
+                assistantMessage = 'I apologize, but I encountered an issue formatting my response. Please try asking your question again.'
                 setLastSuggestedQuestions([])
               }
             }
