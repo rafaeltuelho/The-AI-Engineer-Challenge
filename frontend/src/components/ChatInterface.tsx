@@ -787,6 +787,38 @@ Sample JSON output:
             <div className="setting-section">
               <div 
                 className="section-header"
+                onClick={() => toggleSection('provider')}
+              >
+                <div className="section-title">
+                  <Settings size={14} />
+                  <span>Provider</span>
+                </div>
+                {expandedSections.provider ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+              </div>
+              {expandedSections.provider && (
+                <div className="section-content">
+                  <select
+                    value={selectedProvider}
+                    onChange={(e) => setSelectedProvider(e.target.value)}
+                    className="provider-select"
+                  >
+                    <option value="openai">OpenAI</option>
+                    <option value="together">Together.ai</option>
+                  </select>
+                  <div className="provider-info">
+                    {selectedProvider === 'openai' ? (
+                      <span>Using OpenAI's GPT models</span>
+                    ) : (
+                      <span>Using Together.ai's open-source models</span>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="setting-section">
+              <div 
+                className="section-header"
                 onClick={() => toggleSection('apiKey')}
               >
                 <div className="section-title">
@@ -820,38 +852,6 @@ Sample JSON output:
                       </button>
                     </div>
                   )}
-                </div>
-              )}
-            </div>
-
-            <div className="setting-section">
-              <div 
-                className="section-header"
-                onClick={() => toggleSection('provider')}
-              >
-                <div className="section-title">
-                  <Settings size={14} />
-                  <span>Provider</span>
-                </div>
-                {expandedSections.provider ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-              </div>
-              {expandedSections.provider && (
-                <div className="section-content">
-                  <select
-                    value={selectedProvider}
-                    onChange={(e) => setSelectedProvider(e.target.value)}
-                    className="provider-select"
-                  >
-                    <option value="openai">OpenAI</option>
-                    <option value="together">Together.ai</option>
-                  </select>
-                  <div className="provider-info">
-                    {selectedProvider === 'openai' ? (
-                      <span>Using OpenAI's GPT models</span>
-                    ) : (
-                      <span>Using Together.ai's open-source models</span>
-                    )}
-                  </div>
                 </div>
               )}
             </div>
@@ -1031,8 +1031,12 @@ Sample JSON output:
                   setChatMode('topic-explorer')
                   setDeveloperMessage(getDefaultDeveloperMessage('topic-explorer'))
                   setLastSuggestedQuestions([])
-                  // Set gpt-4.1 as default model for Topic Explorer mode
-                  setSelectedModel('gpt-4.1')
+                  // Set appropriate default model for Topic Explorer mode based on provider
+                  if (selectedProvider === 'together') {
+                    setSelectedModel('deepseek-ai/DeepSeek-V3.1')
+                  } else {
+                    setSelectedModel('gpt-4.1')
+                  }
                 }}
                 title="Topic Explorer - Guided learning with structured responses"
                 data-mode="topic-explorer"
