@@ -77,18 +77,20 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
 Your role is to help students understand topics from their class materials in a clear, friendly, and encouraging way. 
 Always explain ideas at the level of an elementary or middle school student, avoiding overly complex words. 
 If the topic involves math, always write equations or expressions in LaTeX notation, enclosed in double dollar signs ($$ ... $$) for block equations or single dollar signs ($ ... $) for inline expressions.
-Do not explain LaTeX syntax to the student, only show the math properly formatted.
+Do not explain LaTeX syntax to the student, only show the math properly formatted. If your response contains any sentece with money representation using the dollar currency sign followed by a number (money value), make sure you escape it with '\$' to not confuse with an inline LaTeX math notation.
 
 When answering a question, always follow this structure:
 1. **Explanation:** a simple, clear explanation based on the provided context, using age-appropriate language.
 2. **Real-Life Example:** show how the idea connects to something in the student's everyday life.
 3. **Practice Activity:** create a short, fun challenge (problem to solve, small writing task, or drawing prompt) that helps the student practice.
 
-Do not give long essays. Be concise, supportive, and engaging, like a tutor who makes learning fun.
+Do not give long essays at first. Be concise, supportive, and engaging, like a tutor who makes learning fun. As the student start to interact by asking more questions, you can start to give more detailed and engaging answers.
 Additionally, at the end of your response, propose 2-3 short follow-up questions the student could ask next to keep learning. Label this section 'Suggested Questions'.
 
-Return your output in JSON with two keys:
-- "answer": containing the Explanation, Real-Life Example, Practice Activity.
+Aways enrich the markdown response with emoji markups and engaging workds to make the content more apealing for young students.
+
+Always format your output in a strict JSON object with only two keys:
+- "answer": containing the Explanation, Real-Life Example and Practice Activity as the answer contetn body.
 - "suggested_questions": a list of 2-3 short follow-up questions.
 `
       default:
@@ -346,37 +348,57 @@ Return your output in JSON with two keys:
         let extractedContent: ExtractedContent | undefined
         if (chatMode === 'topic-explorer') {
           try {
-            const parsed = typeof assistantMessage === 'string' ? JSON.parse(assistantMessage) : assistantMessage
-            const answer = parsed?.answer
-            const suggested = parsed?.suggested_questions
-
-            // Handle both formats: single string or object with sections
-            let formattedMarkdown = ''
-            if (typeof answer === 'string') {
-              // Single string format - remove "Suggested Questions" section to avoid duplication
-              formattedMarkdown = answer.replace(/\n\nSuggested Questions?:?\s*\n.*$/s, '')
-            } else if (typeof answer === 'object' && answer !== null) {
-              // Object format with separate sections
-              const explanation = answer.Explanation || answer.explanation || ''
-              const example = answer['Real-Life Example'] || answer.real_life_example || answer.realLifeExample || ''
-              const practice = answer['Practice Activity'] || answer.practice_activity || answer.practiceActivity || ''
-
-              formattedMarkdown = [
-                explanation ? `### Explanation\n\n${explanation}` : '',
-                example ? `### Real-Life Example\n\n${example}` : '',
-                practice ? `### Practice Activity\n\n${practice}` : ''
-              ].filter(Boolean).join('\n\n')
+            // Ensure we have a string to parse
+            let parsed: any
+            if (typeof assistantMessage === 'string') {
+              // Try to parse as JSON
+              try {
+                parsed = JSON.parse(assistantMessage)
+              } catch (parseError) {
+                // If it's not valid JSON, treat the entire string as the answer content
+                console.warn('Response is not valid JSON, treating as plain text:', parseError)
+                assistantMessage = assistantMessage
+                setLastSuggestedQuestions([])
+                parsed = null
+              }
+            } else {
+              // Already an object
+              parsed = assistantMessage
             }
 
-            assistantMessage = formattedMarkdown || ''
-            if (Array.isArray(suggested)) {
-              setLastSuggestedQuestions(suggested.filter((s: unknown) => typeof s === 'string') as string[])
-            } else {
-              setLastSuggestedQuestions([])
+            if (parsed && typeof parsed === 'object') {
+              const answer = parsed?.answer
+              const suggested = parsed?.suggested_questions
+
+              // Handle both formats: single string or object with sections
+              let formattedMarkdown = ''
+              if (typeof answer === 'string') {
+                // Single string format - remove "Suggested Questions" section to avoid duplication
+                formattedMarkdown = answer.replace(/\n\nSuggested Questions?:?\s*\n.*$/s, '')
+              } else if (typeof answer === 'object' && answer !== null) {
+                // Object format with separate sections
+                const explanation = answer.Explanation || answer.explanation || ''
+                const example = answer['Real-Life Example'] || answer.real_life_example || answer.realLifeExample || ''
+                const practice = answer['Practice Activity'] || answer.practice_activity || answer.practiceActivity || ''
+
+                formattedMarkdown = [
+                  explanation ? `### Explanation\n\n${explanation}` : '',
+                  example ? `### Real-Life Example\n\n${example}` : '',
+                  practice ? `### Practice Activity\n\n${practice}` : ''
+                ].filter(Boolean).join('\n\n')
+              }
+
+              assistantMessage = formattedMarkdown || assistantMessage
+              if (Array.isArray(suggested)) {
+                setLastSuggestedQuestions(suggested.filter((s: unknown) => typeof s === 'string') as string[])
+              } else {
+                setLastSuggestedQuestions([])
+              }
             }
           } catch (e) {
-            // Fallback: if parse fails, clear suggestions and use raw message
-            console.warn('Failed to parse Topic Explorer JSON:', e)
+            // Fallback: if all parsing fails, show a user-friendly message instead of raw JSON
+            console.warn('Failed to parse Topic Explorer response:', e)
+            assistantMessage = 'I apologize, but I encountered an issue formatting my response. Please try asking your question again.'
             setLastSuggestedQuestions([])
           }
         } else {
@@ -436,7 +458,7 @@ Return your output in JSON with two keys:
       const errorMessage: Message = {
         id: Date.now().toString(),
         role: 'assistant',
-        content: 'Sorry, there was an error processing your request. Please check your API key and try again.',
+        content: 'Sorry, there was an error processing your request.\n\nError: ' + error,
         timestamp: new Date()
       }
       setMessages(prev => [...prev, errorMessage])
