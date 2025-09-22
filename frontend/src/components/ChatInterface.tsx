@@ -350,15 +350,23 @@ Return your output in JSON with two keys:
             const answer = parsed?.answer
             const suggested = parsed?.suggested_questions
 
-            const explanation = answer?.Explanation || answer?.explanation || ''
-            const example = answer?.['Real-Life Example'] || answer?.real_life_example || answer?.realLifeExample || ''
-            const practice = answer?.['Practice Activity'] || answer?.practice_activity || answer?.practiceActivity || ''
+            // Handle both formats: single string or object with sections
+            let formattedMarkdown = ''
+            if (typeof answer === 'string') {
+              // Single string format - use as-is since it already contains formatted sections
+              formattedMarkdown = answer
+            } else if (typeof answer === 'object' && answer !== null) {
+              // Object format with separate sections
+              const explanation = answer.Explanation || answer.explanation || ''
+              const example = answer['Real-Life Example'] || answer.real_life_example || answer.realLifeExample || ''
+              const practice = answer['Practice Activity'] || answer.practice_activity || answer.practiceActivity || ''
 
-            const formattedMarkdown = [
-              explanation ? `### Explanation\n\n${explanation}` : '',
-              example ? `### Real-Life Example\n\n${example}` : '',
-              practice ? `### Practice Activity\n\n${practice}` : ''
-            ].filter(Boolean).join('\n\n')
+              formattedMarkdown = [
+                explanation ? `### Explanation\n\n${explanation}` : '',
+                example ? `### Real-Life Example\n\n${example}` : '',
+                practice ? `### Practice Activity\n\n${practice}` : ''
+              ].filter(Boolean).join('\n\n')
+            }
 
             assistantMessage = formattedMarkdown || ''
             if (Array.isArray(suggested)) {
@@ -367,7 +375,8 @@ Return your output in JSON with two keys:
               setLastSuggestedQuestions([])
             }
           } catch (e) {
-            // Fallback: if parse fails, clear suggestions
+            // Fallback: if parse fails, clear suggestions and use raw message
+            console.warn('Failed to parse Topic Explorer JSON:', e)
             setLastSuggestedQuestions([])
           }
         } else {
