@@ -432,9 +432,22 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const handleSuggestedQuestionClick = (question: string) => {
     setInputMessage(question)
     setLastSuggestedQuestions([]) // Clear suggested questions when one is clicked
-    // Focus the textarea
-    if (textareaRef.current) {
-      textareaRef.current.focus()
+    
+    // In Topic Explorer mode, automatically submit the question
+    if (chatMode === 'topic-explorer') {
+      // Create a synthetic form event to trigger submission
+      const syntheticEvent = {
+        preventDefault: () => {},
+        target: { value: question }
+      } as React.FormEvent
+      
+      // Submit the question automatically
+      handleSubmit(syntheticEvent)
+    } else {
+      // In other modes, just focus the textarea for manual submission
+      if (textareaRef.current) {
+        textareaRef.current.focus()
+      }
     }
   }
 
