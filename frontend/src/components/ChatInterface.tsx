@@ -105,7 +105,16 @@ Sample JSON output:
     }
   }
 
-  const availableModels = Object.keys(modelDescriptions)
+  // Filter available models based on chat mode
+  const getAvailableModels = () => {
+    if (chatMode === 'topic-explorer') {
+      // Only allow specific models for Topic Explorer mode
+      return ['gpt-4.1', 'gpt-4o', 'gpt-5']
+    }
+    return Object.keys(modelDescriptions)
+  }
+  
+  const availableModels = getAvailableModels()
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
@@ -896,6 +905,8 @@ Sample JSON output:
                   setChatMode('topic-explorer')
                   setDeveloperMessage(getDefaultDeveloperMessage('topic-explorer'))
                   setLastSuggestedQuestions([])
+                  // Set gpt-4.1 as default model for Topic Explorer mode
+                  setSelectedModel('gpt-4.1')
                 }}
                 title="Topic Explorer - Guided learning with structured responses"
                 data-mode="topic-explorer"

@@ -501,7 +501,12 @@ class RAGSystem:
             ]
             
             # Generate response
-            response = await self.chat_model.arun(messages, model_name=model_name)
+            # Add response_format for Topic Explorer mode to ensure JSON output
+            kwargs = {}
+            if mode == "topic-explorer":
+                kwargs["response_format"] = {"type": "json_object"}
+            
+            response = await self.chat_model.arun(messages, model_name=model_name, **kwargs)
             return response
             
         except Exception as e:
@@ -573,7 +578,12 @@ class RAGSystem:
             ]
             
             # Generate response synchronously
-            response = self.chat_model.run(messages, model_name=model_name)
+            # Add response_format for Topic Explorer mode to ensure JSON output
+            kwargs = {}
+            if mode == "topic-explorer":
+                kwargs["response_format"] = {"type": "json_object"}
+            
+            response = self.chat_model.run(messages, model_name=model_name, **kwargs)
             return response
             
         except Exception as e:
