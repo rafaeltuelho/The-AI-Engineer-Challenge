@@ -19,7 +19,7 @@ export function extractSuggestedQuestions(responseText: string): ExtractedConten
   }
 
   // Look for "Suggested Questions" section (case insensitive)
-  const suggestedQuestionsRegex = /(?:^|\n)\s*(?:##\s*)?Suggested Questions?\s*:?\s*(?:\n|$)/i
+  const suggestedQuestionsRegex = /(?:^|\n)\s*(?:#{1,6}\s*)?Suggested Questions?\s*:?\s*(?:\n|$)/i
   const match = responseText.match(suggestedQuestionsRegex)
   
   if (!match) {
