@@ -20,7 +20,7 @@ class ChatOpenAI:
         response = client.chat.completions.create(
             model=model_name, 
             messages=messages, 
-            temperature=0.7,
+            # temperature=0.7,
             **kwargs,
             # max_tokens=4096,
             # top_p=1,
@@ -44,7 +44,7 @@ class ChatOpenAI:
         response = await client.chat.completions.create(
             model=model_name, 
             messages=messages, 
-            temperature=0.7,
+            # temperature=0.7,
             **kwargs
             # max_tokens=4096,
             # top_p=1,

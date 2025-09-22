@@ -1,6 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { Send, Key, MessageSquare, User, Bot, Trash2, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Settings, ArrowDown, X, FileText, Upload, Database, MessageCircle, BookOpen } from 'lucide-react'
 import MarkdownRenderer from './MarkdownRenderer'
+import SuggestedQuestions from './SuggestedQuestions'
+import { extractSuggestedQuestions, ExtractedContent } from '../utils/suggestedQuestionsExtractor'
 import './ChatInterface.css'
 
 interface Message {
@@ -8,6 +10,7 @@ interface Message {
   role: 'user' | 'assistant'
   content: string
   timestamp: Date
+  extractedContent?: ExtractedContent
 }
 
 interface ChatInterfaceProps {
@@ -50,6 +53,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const [showApiKeySuccess, setShowApiKeySuccess] = useState(false)
   const [showApiKeyInfo, setShowApiKeyInfo] = useState(true)
   const [chatMode, setChatMode] = useState<'regular' | 'rag' | 'topic-explorer'>('regular')
+  const [lastSuggestedQuestions, setLastSuggestedQuestions] = useState<string[]>([])
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const availableModels = Object.keys(modelDescriptions)
@@ -185,6 +189,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         // Set the conversation mode based on the response
         const conversationMode = data.mode || "regular"
         setChatMode(conversationMode as 'regular' | 'rag' | 'topic-explorer')
+        
+        // Clear suggested questions when loading a conversation
+        setLastSuggestedQuestions([])
       } else {
         console.error('Failed to load conversation:', response.statusText)
       }
@@ -289,10 +296,25 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           setConversationId(newConversationId)
         }
         
+        // Extract suggested questions if in topic-explorer mode
+        let extractedContent: ExtractedContent | undefined
+        if (chatMode === 'topic-explorer') {
+          extractedContent = extractSuggestedQuestions(assistantMessage)
+          if (extractedContent.hasSuggestedQuestions) {
+            setLastSuggestedQuestions(extractedContent.suggestedQuestions)
+            // Use the main content without suggested questions for display
+            assistantMessage = extractedContent.mainContent
+          } else {
+            setLastSuggestedQuestions([])
+          }
+        } else {
+          setLastSuggestedQuestions([])
+        }
+        
         setMessages(prev => 
           prev.map(msg => 
             msg.id === assistantMessageId 
-              ? { ...msg, content: assistantMessage }
+              ? { ...msg, content: assistantMessage, extractedContent }
               : msg
           )
         )
@@ -354,6 +376,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     setDeveloperMessage('You are a helpful AI assistant.')
     setShowConversationInfoBanner(false)
     setChatMode('regular')
+    setLastSuggestedQuestions([])
   }
 
   const startNewConversation = () => {
@@ -384,6 +407,15 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
   const dismissApiKeyInfo = () => {
     setShowApiKeyInfo(false)
+  }
+
+  const handleSuggestedQuestionClick = (question: string) => {
+    setInputMessage(question)
+    setLastSuggestedQuestions([]) // Clear suggested questions when one is clicked
+    // Focus the textarea
+    if (textareaRef.current) {
+      textareaRef.current.focus()
+    }
   }
 
 
@@ -468,6 +500,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       return <MarkdownRenderer content={message.content} />
     }
     return <div className="message-text">{message.content}</div>
+  }
+
+  const isLastAssistantMessage = (message: Message) => {
+    const assistantMessages = messages.filter(msg => msg.role === 'assistant')
+    return assistantMessages.length > 0 && assistantMessages[assistantMessages.length - 1].id === message.id
   }
 
   return (
@@ -662,7 +699,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             <div className="mode-badges">
               <button
                 className={`mode-badge ${chatMode === 'regular' ? 'active regular-mode' : ''}`}
-                onClick={() => setChatMode('regular')}
+                onClick={() => {
+                  setChatMode('regular')
+                  setLastSuggestedQuestions([])
+                }}
                 title="AI Chat Mode - General conversation"
                 data-mode="regular"
               >
@@ -671,7 +711,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
               </button>
               <button
                 className={`mode-badge ${chatMode === 'rag' ? 'active rag-mode' : ''}`}
-                onClick={() => setChatMode('rag')}
+                onClick={() => {
+                  setChatMode('rag')
+                  setLastSuggestedQuestions([])
+                }}
                 title="RAG Mode - Query uploaded documents"
                 data-mode="rag"
               >
@@ -680,7 +723,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
               </button>
               <button
                 className={`mode-badge ${chatMode === 'topic-explorer' ? 'active topic-explorer-mode' : ''}`}
-                onClick={() => setChatMode('topic-explorer')}
+                onClick={() => {
+                  setChatMode('topic-explorer')
+                  setLastSuggestedQuestions([])
+                }}
                 title="Topic Explorer - Guided learning with structured responses"
                 data-mode="topic-explorer"
               >
@@ -756,6 +802,17 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                   <div className="message-timestamp">
                     {message.timestamp.toLocaleTimeString()}
                   </div>
+                  {/* Show suggested questions after the last assistant message in topic-explorer mode */}
+                  {message.role === 'assistant' && 
+                   isLastAssistantMessage(message) && 
+                   chatMode === 'topic-explorer' && 
+                   lastSuggestedQuestions.length > 0 && (
+                    <SuggestedQuestions
+                      questions={lastSuggestedQuestions}
+                      onQuestionClick={handleSuggestedQuestionClick}
+                      isVisible={true}
+                    />
+                  )}
                 </div>
               </div>
             ))
