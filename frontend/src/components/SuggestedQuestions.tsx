@@ -13,10 +13,7 @@ const SuggestedQuestions: React.FC<SuggestedQuestionsProps> = ({
   onQuestionClick, 
   isVisible 
 }) => {
-  console.log('SuggestedQuestions render:', { isVisible, questionsCount: questions.length, questions })
-  
   if (!isVisible || questions.length === 0) {
-    console.log('SuggestedQuestions returning null - isVisible:', isVisible, 'questions.length:', questions.length)
     return null
   }
 

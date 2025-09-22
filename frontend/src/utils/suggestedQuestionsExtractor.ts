@@ -78,6 +78,11 @@ function extractQuestionsFromSection(section: string): string[] {
       .replace(/^\*\s*/, '')              // Remove asterisks
       .trim()
 
+    // Skip header lines (lines that start with # or contain "Suggested Questions")
+    if (question.startsWith('#') || question.toLowerCase().includes('suggested questions')) {
+      continue
+    }
+
     // Skip empty lines or very short content
     if (question && question.length > 10) {
       // Remove trailing question marks and clean up
