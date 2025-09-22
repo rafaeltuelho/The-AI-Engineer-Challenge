@@ -55,6 +55,15 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const [chatMode, setChatMode] = useState<'regular' | 'rag' | 'topic-explorer'>('regular')
   const [lastSuggestedQuestions, setLastSuggestedQuestions] = useState<string[]>([])
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const dragStartXRef = useRef<number | null>(null)
+  const dragStartWidthRef = useRef<number | null>(null)
+  const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
+    const stored = localStorage.getItem('chat_sidebar_width')
+    const parsed = stored ? parseInt(stored, 10) : 280
+    return isNaN(parsed) ? 280 : parsed
+  })
+  const [isResizing, setIsResizing] = useState<boolean>(false)
 
   // Default developer messages for each chat mode
   const getDefaultDeveloperMessage = (mode: 'regular' | 'rag' | 'topic-explorer'): string => {
@@ -117,6 +126,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       })
     }
   }, [messages, shouldAutoScroll])
+
+  // Persist sidebar width
+  useEffect(() => {
+    localStorage.setItem('chat_sidebar_width', String(sidebarWidth))
+  }, [sidebarWidth])
 
   // Auto-scroll when new messages are added during streaming
   useEffect(() => {
@@ -461,6 +475,42 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     }
   }
 
+  // Resizer Handlers
+  const MIN_WIDTH = 180
+  const MAX_WIDTH = 600
+
+  const handleMouseMove = (e: MouseEvent) => {
+    if (!isResizing) return
+    if (dragStartXRef.current === null || dragStartWidthRef.current === null) return
+
+    const delta = e.clientX - dragStartXRef.current
+    let newWidth = dragStartWidthRef.current + delta
+    if (newWidth < MIN_WIDTH) newWidth = MIN_WIDTH
+    if (newWidth > MAX_WIDTH) newWidth = MAX_WIDTH
+    if (isPanelCollapsed) {
+      setIsPanelCollapsed(false)
+    }
+    setSidebarWidth(newWidth)
+  }
+
+  const handleMouseUp = () => {
+    if (!isResizing) return
+    setIsResizing(false)
+    dragStartXRef.current = null
+    dragStartWidthRef.current = null
+    window.removeEventListener('mousemove', handleMouseMove as any)
+    window.removeEventListener('mouseup', handleMouseUp as any)
+  }
+
+  const handleResizerMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    dragStartXRef.current = e.clientX
+    dragStartWidthRef.current = isPanelCollapsed ? 280 : sidebarWidth
+    setIsResizing(true)
+    window.addEventListener('mousemove', handleMouseMove as any)
+    window.addEventListener('mouseup', handleMouseUp as any)
+  }
+
 
 
   const handlePdfUpload = async (file: File) => {
@@ -552,8 +602,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   }
 
   return (
-    <div className="chat-interface">
-      <div className={`left-panel ${isPanelCollapsed ? 'collapsed' : ''}`}>
+    <div className="chat-interface" ref={containerRef}>
+      <div className={`left-panel ${isPanelCollapsed ? 'collapsed' : ''}`} style={!isPanelCollapsed ? { width: `${sidebarWidth}px` } : undefined}>
         <div className="panel-header">
           <h2>Chat settings</h2>
           <button 
@@ -735,6 +785,15 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           </div>
         )}
       </div>
+
+      <div
+        className={`panel-resizer ${isResizing ? 'resizing' : ''}`}
+        onMouseDown={handleResizerMouseDown}
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Resize sidebar"
+        title="Drag to resize"
+      />
 
       <div className="chat-container">
         <div className="chat-header">
