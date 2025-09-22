@@ -507,13 +507,16 @@ class RAGSystem:
         except Exception as e:
             raise Exception(f"Error querying documents: {str(e)}")
     
-    def query(self, query: str, k: int = 3, mode: str = "rag", model_name: str = "gpt-4o-mini") -> str:
+    def query(self, query: str, k: int = 3, mode: str = "rag", model_name: str = "gpt-4o-mini", system_message: Optional[str] = None) -> str:
         """
         Synchronous version of Query.
         
         Args:
             query: User query
             k: Number of chunks to retrieve
+            mode: Query mode ("rag" or "topic-explorer")
+            model_name: OpenAI model name to use
+            system_message: Custom system message to use instead of default
         
         Returns:
             Generated response based on retrieved chunks
@@ -545,7 +548,9 @@ class RAGSystem:
                 {context}
 
                 Answer:"""
-                system_message = self.topic_explorer_system_message
+                # Use custom system message if provided, otherwise use default topic explorer message
+                if system_message is None:
+                    system_message = self.topic_explorer_system_message
             else:
                 # Regular RAG mode
                 rag_prompt = f"""
@@ -557,7 +562,9 @@ class RAGSystem:
                 Question: {query}
 
                 Answer:"""
-                system_message = self.rag_system_message
+                # Use custom system message if provided, otherwise use default RAG message
+                if system_message is None:
+                    system_message = self.rag_system_message
             
             # Format messages for OpenAI API
             messages = [

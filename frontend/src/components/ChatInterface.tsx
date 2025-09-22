@@ -56,6 +56,32 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const [lastSuggestedQuestions, setLastSuggestedQuestions] = useState<string[]>([])
   const fileInputRef = useRef<HTMLInputElement>(null)
 
+  // Default developer messages for each chat mode
+  const getDefaultDeveloperMessage = (mode: 'regular' | 'rag' | 'topic-explorer'): string => {
+    switch (mode) {
+      case 'regular':
+        return 'You are a helpful AI assistant.'
+      case 'rag':
+        return 'You are a helpful assistant that answers questions based on provided context. If the context doesn\'t contain enough information to answer the question, please say so.'
+      case 'topic-explorer':
+        return `You are an educational study companion for middle school students learning Math, Science, or US History. 
+        Your role is to help students understand topics from their class materials in a clear, friendly, and encouraging way. 
+        Always explain ideas at the level of an elementary or middle school student, avoiding overly complex words. 
+        If the topic involves math, always write equations or expressions in LaTeX notation, enclosed in double dollar signs ($$ ... $$) for block equations or single dollar signs ($ ... $) for inline expressions.
+        Do not explain LaTeX syntax to the student, only show the math properly formatted.
+
+        When answering a question, always follow this structure:
+        1. **Explanation:** a simple, clear explanation based on the provided context, using age-appropriate language.
+        2. **Real-Life Example:** show how the idea connects to something in the student's everyday life.
+        3. **Practice Activity:** create a short, fun challenge (problem to solve, small writing task, or drawing prompt) that helps the student practice.
+
+        Do not give long essays. Be concise, supportive, and engaging, like a tutor who makes learning fun.
+        Additionally, at the end of your response, propose 2-3 short follow-up questions the student could ask next to keep learning. Label this section 'Suggested Questions'.`
+      default:
+        return 'You are a helpful AI assistant.'
+    }
+  }
+
   const availableModels = Object.keys(modelDescriptions)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -257,6 +283,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         },
         body: JSON.stringify(isRagMode ? {
           question: currentMessage,
+          developer_message: developerMessage,
           k: 3,
           model: selectedModel,
           mode: chatMode
@@ -393,7 +420,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const clearChat = () => {
     setMessages([])
     setConversationId(null)
-    setDeveloperMessage('You are a helpful AI assistant.')
+    setDeveloperMessage(getDefaultDeveloperMessage('regular'))
     setShowConversationInfoBanner(false)
     setChatMode('regular')
     setLastSuggestedQuestions([])
@@ -439,7 +466,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       const syntheticEvent = {
         preventDefault: () => {},
         target: { value: question }
-      } as React.FormEvent
+      } as unknown as React.FormEvent
       
       // Submit the question automatically
       handleSubmit(syntheticEvent)
@@ -508,6 +535,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       // Preserve RAG or Topic Explorer mode if already selected
       if (chatMode === 'regular') {
         setChatMode('rag')
+        setDeveloperMessage(getDefaultDeveloperMessage('rag'))
       }
       
       // Clear success message after 10 seconds
@@ -734,6 +762,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                 className={`mode-badge ${chatMode === 'regular' ? 'active regular-mode' : ''}`}
                 onClick={() => {
                   setChatMode('regular')
+                  setDeveloperMessage(getDefaultDeveloperMessage('regular'))
                   setLastSuggestedQuestions([])
                 }}
                 title="AI Chat Mode - General conversation"
@@ -746,6 +775,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                 className={`mode-badge ${chatMode === 'rag' ? 'active rag-mode' : ''}`}
                 onClick={() => {
                   setChatMode('rag')
+                  setDeveloperMessage(getDefaultDeveloperMessage('rag'))
                   setLastSuggestedQuestions([])
                 }}
                 title="RAG Mode - Query uploaded documents"
@@ -758,6 +788,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                 className={`mode-badge ${chatMode === 'topic-explorer' ? 'active topic-explorer-mode' : ''}`}
                 onClick={() => {
                   setChatMode('topic-explorer')
+                  setDeveloperMessage(getDefaultDeveloperMessage('topic-explorer'))
                   setLastSuggestedQuestions([])
                 }}
                 title="Topic Explorer - Guided learning with structured responses"

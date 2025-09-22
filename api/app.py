@@ -341,6 +341,7 @@ class DocumentUploadResponse(BaseModel):
 
 class RAGQueryRequest(BaseModel):
     question: str
+    developer_message: str  # System message from the developer/UI
     k: Optional[int] = 5  # Number of relevant chunks to retrieve
     model: Optional[str] = "gpt-4.1-mini"  # Model selection for RAG queries
     mode: Optional[str] = "rag"  # RAG mode: "rag" or "topic-explorer"
@@ -357,6 +358,18 @@ class RAGQueryRequest(BaseModel):
         
         if len(v) > 2000:  # Reasonable limit for question length
             raise ValueError('Question is too long (max 2,000 characters)')
+        
+        return v.strip()
+    
+    @field_validator('developer_message')
+    @classmethod
+    def validate_developer_message(cls, v):
+        """Validate developer/system message content"""
+        if not v or not isinstance(v, str):
+            raise ValueError('Developer message is required')
+        
+        if len(v) > 5000:  # Reasonable limit for system message
+            raise ValueError('Developer message is too long (max 5,000 characters)')
         
         return v.strip()
     
@@ -785,7 +798,7 @@ async def upload_document(
                 document_id=document_id,
                 message=f"{processed_data['metadata']['file_type'].upper()} document processed and indexed successfully",
                 chunk_count=processed_data["chunk_count"],
-                file_name=processed_data["metadata"]["file_name"],
+                file_name=document_id, #processed_data["metadata"]["file_name"],
                 file_type=processed_data["metadata"]["file_type"]
             )
             
@@ -833,8 +846,8 @@ async def rag_query(
         # Get RAG system for this session with the specified model
         rag_system = get_or_create_rag_system(session_id, api_key)
         
-        # Query the RAG system with the specified mode
-        answer = rag_system.query(query_request.question, k=query_request.k, mode=query_request.mode, model_name=query_request.model)
+        # Query the RAG system with the specified mode and developer message
+        answer = rag_system.query(query_request.question, k=query_request.k, mode=query_request.mode, model_name=query_request.model, system_message=query_request.developer_message)
         
         # Get document info
         doc_info = rag_system.get_document_info()
@@ -853,7 +866,7 @@ async def rag_query(
         if conversation_id not in user_conversations:
             user_conversations[conversation_id] = {
                 "messages": [],
-                "system_message": "You are a helpful AI assistant with access to uploaded documents. Use the document content to answer questions accurately.",
+                "system_message": query_request.developer_message,
                 "title": None,  # Will be set when first user message is added
                 "created_at": datetime.now(timezone.utc),
                 "last_updated": datetime.now(timezone.utc),
