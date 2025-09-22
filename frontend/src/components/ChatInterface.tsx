@@ -661,25 +661,28 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             <h2>Chat with AI</h2>
             <div className="mode-badges">
               <button
-                className={`mode-badge ${chatMode === 'regular' ? 'active' : ''}`}
+                className={`mode-badge ${chatMode === 'regular' ? 'active regular-mode' : ''}`}
                 onClick={() => setChatMode('regular')}
                 title="AI Chat Mode - General conversation"
+                data-mode="regular"
               >
                 <MessageCircle size={14} />
                 <span>AI Chat</span>
               </button>
               <button
-                className={`mode-badge ${chatMode === 'rag' ? 'active' : ''}`}
+                className={`mode-badge ${chatMode === 'rag' ? 'active rag-mode' : ''}`}
                 onClick={() => setChatMode('rag')}
                 title="RAG Mode - Query uploaded documents"
+                data-mode="rag"
               >
                 <Database size={14} />
                 <span>RAG</span>
               </button>
               <button
-                className={`mode-badge ${chatMode === 'topic-explorer' ? 'active' : ''}`}
+                className={`mode-badge ${chatMode === 'topic-explorer' ? 'active topic-explorer-mode' : ''}`}
                 onClick={() => setChatMode('topic-explorer')}
                 title="Topic Explorer - Guided learning with structured responses"
+                data-mode="topic-explorer"
               >
                 <BookOpen size={14} />
                 <span>Topic Explorer</span>
