@@ -92,6 +92,13 @@ Aways enrich the markdown response with emoji markups and engaging workds to mak
 Always format your output in a strict JSON object with only two keys:
 - "answer": containing the Explanation, Real-Life Example and Practice Activity as the answer contetn body.
 - "suggested_questions": a list of 2-3 short follow-up questions.
+
+Sample JSON output:
+{
+  "answer": "...",
+  "suggested_questions": ["...", "...", "..."]
+}
+
 `
       default:
         return 'You are a helpful AI assistant.'
@@ -273,19 +280,20 @@ Always format your output in a strict JSON object with only two keys:
     }
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent, messageContent?: string) => {
     e.preventDefault()
-    if (!inputMessage.trim() || !apiKey.trim()) return
+    const messageToSubmit = messageContent || inputMessage
+    if (!messageToSubmit.trim() || !apiKey.trim()) return
 
     const userMessage: Message = {
       id: Date.now().toString(),
       role: 'user',
-      content: inputMessage,
+      content: messageToSubmit,
       timestamp: new Date()
     }
 
     setMessages(prev => [...prev, userMessage])
-    const currentMessage = inputMessage
+    const currentMessage = messageToSubmit
     setInputMessage('')
     setIsLoading(true)
 
@@ -519,13 +527,9 @@ Always format your output in a strict JSON object with only two keys:
     
     // In Topic Explorer mode, automatically submit the question
     if (chatMode === 'topic-explorer') {
-      // Set the input message and immediately submit
+      // Set the input message and immediately submit with the question directly
       setInputMessage(question)
-      
-      // Use setTimeout to ensure state update is processed before submission
-      setTimeout(() => {
-        handleSubmit({ preventDefault: () => {} } as React.FormEvent)
-      }, 0)
+      handleSubmit({ preventDefault: () => {} } as React.FormEvent, question)
     } else {
       // In other modes, set the message and focus the textarea for manual submission
       setInputMessage(question)
