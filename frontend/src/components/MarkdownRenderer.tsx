@@ -34,12 +34,8 @@ const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content }) => {
     }
   }
 
-  // Preprocess content to convert square bracket math expressions to LaTeX format
-  const preprocessMathContent = (text: string): string => {
-    // Convert [ math expression ] to $math expression$ (inline math)
-    // This regex matches [ followed by optional whitespace, then content, then optional whitespace and ]
-    return text.replace(/\[\s*([^[\]]+?)\s*\]/g, '$$1$')
-  }
+  // Math expressions are already in proper LaTeX format from the AI
+  // No preprocessing needed - the AI uses $...$ for inline and $$...$$ for block math
 
   return (
     <div className="markdown-content">
@@ -202,7 +198,7 @@ const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content }) => {
           }
         }}
       >
-        {preprocessMathContent(content)}
+        {content}
       </ReactMarkdown>
     </div>
   )
