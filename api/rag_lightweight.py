@@ -356,7 +356,7 @@ class RAGSystem:
     def __init__(self, api_key: str, provider: str = "openai"):
         self.api_key = api_key
         self.provider = provider
-        self.embedding_model = EmbeddingModel(api_key=api_key)
+        self.embedding_model = EmbeddingModel(api_key=api_key, provider=provider)
         self.vector_db = VectorDatabase(embedding_model=self.embedding_model, api_key=api_key)
         self.chat_model = ChatOpenAI(api_key=api_key, provider=provider)
         self.documents = {}  # Store document metadata

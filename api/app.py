@@ -288,8 +288,8 @@ class ChatRequest(BaseModel):
         
         # List of allowed models for OpenAI
         openai_models = [
-            "gpt-4", "gpt-4-turbo", "gpt-4o", "gpt-4o-mini",
-            "gpt-4.1-mini", "gpt-4.1-nano", "gpt-5", "gpt-4-mini", "gpt-5-nano"
+            "gpt-4", "gpt-4-mini", "gpt-4-turbo", "gpt-4o", "gpt-4o-mini",
+            "gpt-4.1", "gpt-4.1-mini", "gpt-4.1-nano", "gpt-5", "gpt-5-mini", "gpt-5-nano"
         ]
         
         # List of allowed models for Together.ai
@@ -379,7 +379,7 @@ class RAGQueryRequest(BaseModel):
     question: str
     developer_message: str  # System message from the developer/UI
     k: Optional[int] = 5  # Number of relevant chunks to retrieve
-    model: Optional[str] = "gpt-4.1-mini"  # Model selection for RAG queries
+    model: Optional[str] = "gpt-4.1"  # Model selection for RAG queries
     mode: Optional[str] = "rag"  # RAG mode: "rag" or "topic-explorer"
     provider: Optional[str] = "openai"  # Provider selection: "openai" or "together"
     
