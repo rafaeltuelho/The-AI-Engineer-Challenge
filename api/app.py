@@ -799,13 +799,19 @@ async def upload_document(
     request: Request,
     file: UploadFile = File(..., description="Document file to upload (PDF, DOCX, PPTX - max 20MB)"),
     x_session_id: str = Header(..., alias="X-Session-ID", description="Session ID for authentication"),
-    x_api_key: str = Header(..., alias="X-API-Key", description="OpenAI API key for document processing")
+    x_api_key: str = Header(..., alias="X-API-Key", description="API key for document processing"),
+    x_provider: str = Header("openai", alias="X-Provider", description="Provider for document processing (openai or together)")
 ):
     """Upload and process a document file for RAG functionality."""
     try:
-        # Use session ID and API key from header parameters
+        # Use session ID, API key, and provider from header parameters
         session_id = x_session_id
         api_key = x_api_key
+        provider = x_provider.lower()
+        
+        # Validate provider
+        if provider not in ["openai", "together"]:
+            raise HTTPException(status_code=400, detail="Invalid provider. Must be 'openai' or 'together'")
         
         # Get hashed API key from session
         hashed_api_key = get_session_api_key(session_id)
@@ -846,8 +852,8 @@ async def upload_document(
             # document_id = str(uuid.uuid4())
             document_id = file.filename
             
-            # Get or create RAG system for this session (default to OpenAI for document processing)
-            rag_system = get_or_create_rag_system(session_id, api_key, "openai")
+            # Get or create RAG system for this session with the specified provider
+            rag_system = get_or_create_rag_system(session_id, api_key, provider)
             
             # Index the document
             await rag_system.index_document(
@@ -994,21 +1000,27 @@ async def rag_query(
 async def get_documents(
     request: Request,
     x_session_id: str = Header(..., alias="X-Session-ID", description="Session ID for authentication"),
-    x_api_key: str = Header(..., alias="X-API-Key", description="OpenAI API key for document processing")
+    x_api_key: str = Header(..., alias="X-API-Key", description="API key for document processing"),
+    x_provider: str = Header("openai", alias="X-Provider", description="Provider for document processing (openai or together)")
 ):
     """Get information about uploaded documents for the session."""
     try:
-        # Use session ID and API key from header parameters
+        # Use session ID, API key, and provider from header parameters
         session_id = x_session_id
         api_key = x_api_key
+        provider = x_provider.lower()
+        
+        # Validate provider
+        if provider not in ["openai", "together"]:
+            raise HTTPException(status_code=400, detail="Invalid provider. Must be 'openai' or 'together'")
         
         # Get hashed API key from session
         hashed_api_key = get_session_api_key(session_id)
         if not hashed_api_key:
             raise HTTPException(status_code=401, detail="Invalid or expired session")
         
-        # Get RAG system for this session (using default model for document info)
-        rag_system = get_or_create_rag_system(session_id, api_key, "openai")
+        # Get RAG system for this session with the specified provider
+        rag_system = get_or_create_rag_system(session_id, api_key, provider)
         
         # Get document info
         doc_info = rag_system.get_document_info()

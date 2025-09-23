@@ -1,21 +1,16 @@
 from dotenv import load_dotenv
 from openai import AsyncOpenAI, OpenAI
 import openai
+from together import Together
 from typing import List, Optional
 import os
 import asyncio
-
-try:
-    import together
-except ImportError:
-    together = None
-
 
 class EmbeddingModel:
     def __init__(self, embeddings_model_name: str = "text-embedding-3-small", batch_size: int = 1024, api_key: str = None, provider: str = "openai"):
         load_dotenv()
         self.provider = provider.lower()
-        self.api_key = api_key or os.getenv("OPENAI_API_KEY")
+        self.api_key = api_key #or os.getenv("OPENAI_API_KEY")
         
         if self.api_key is None:
             raise ValueError(
@@ -27,12 +22,8 @@ class EmbeddingModel:
         
         # Initialize clients based on provider
         if self.provider == "together":
-            if together is None:
-                raise ImportError("Together.ai client library is required. Install with: pip install together")
-            # Set API key for Together.ai
-            together.api_key = self.api_key
             self.async_client = None  # Together.ai doesn't have async client in this version
-            self.client = together.Embeddings()
+            self.client = Together(api_key=self.api_key)
         else:
             # Default to OpenAI
             self.async_client = AsyncOpenAI(api_key=self.api_key)
@@ -70,7 +61,7 @@ class EmbeddingModel:
 
     def get_embeddings(self, list_of_text: List[str]) -> List[List[float]]:
         if self.provider == "together":
-            embedding_response = self.client.create(
+            embedding_response = self.client.embeddings.create(
                 model=self.embeddings_model_name,
                 input=list_of_text
             )
@@ -83,9 +74,8 @@ class EmbeddingModel:
 
     def get_embedding(self, text: str) -> List[float]:
         if self.provider == "together":
-            embedding = self.client.create(
-                model=self.embeddings_model_name,
-                input=text
+            embedding = self.client.embeddings.create(
+                input=text, model=self.embeddings_model_name
             )
         else:
             embedding = self.client.embeddings.create(
@@ -96,7 +86,25 @@ class EmbeddingModel:
 
 
 if __name__ == "__main__":
-    embedding_model = EmbeddingModel()
+    # Read provider name from stdin and create an EmbeddingModel with it
+    import sys
+    # Read API key securely from stdin without echoing (for security)
+    import getpass
+
+    # Prompt user for provider name
+    provider = input("Enter provider name (openai or together): ").strip().lower()
+    if provider not in ("openai", "together"):
+        print("Invalid provider. Defaulting to 'openai'.")
+        provider = "openai"
+    
+    api_key = getpass.getpass("Enter your API key (input hidden): ").strip()
+    if not api_key:
+        print("No API key provided. Exiting.")
+        sys.exit(1)
+
+    # Choose embedding model name based on provider using inline if-else
+    embedding_model_name = "text-embedding-3-small" if provider == "openai" else "BAAI/bge-base-en-v1.5"
+    embedding_model = EmbeddingModel(provider=provider, api_key=api_key, embeddings_model_name=embedding_model_name)
     print(asyncio.run(embedding_model.async_get_embedding("Hello, world!")))
     print(
         asyncio.run(

@@ -82,7 +82,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
 Your role is to help students understand topics from their class materials in a clear, friendly, and encouraging way. 
 Always explain ideas at the level of an elementary or middle school student, avoiding overly complex words. 
 If the topic involves math, always write equations or expressions in LaTeX notation, enclosed in double dollar signs ($$...$$) for block equations or single dollar signs ($...$) for inline expressions.
-Do not explain LaTeX syntax to the student, only show the math properly formatted. If your response contains any sentece with money representation using the dollar currency sign followed by a number (money value), make sure you escape it with '\\$' to not confuse with an inline LaTeX math notation.
+Do not explain LaTeX syntax to the student, only show the math properly formatted. If your response contains any sentence with money representation using the dollar currency sign followed by a number (money value), make sure you escape it with '\\$' to not confuse with an inline LaTeX math notation.
 
 When answering a question, always follow this structure:
 1. ### Explanation: 
@@ -717,7 +717,8 @@ Sample JSON output:
         method: 'POST',
         headers: {
           'X-Session-ID': sessionId,
-          'X-API-Key': apiKey
+          'X-API-Key': apiKey,
+          'X-Provider': selectedProvider
         },
         body: formData
       })
