@@ -74,9 +74,18 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const getDefaultDeveloperMessage = (mode: 'regular' | 'rag' | 'topic-explorer'): string => {
     switch (mode) {
       case 'regular':
-        return 'You are a helpful AI assistant.'
+        return `You are a helpful AI assistant.
+If the topic involves math, always write equations or expressions in LaTeX notation, enclosed in double dollar signs ($$...$$) for block equations or single dollar signs ($...$) for inline expressions.
+Do not explain LaTeX syntax to the user, only show the math properly formatted. If your response contains any sentence with money representation using the dollar currency sign followed by a number (money value), make sure you escape it with '\\$' to not confuse with an inline LaTeX math notation.
+Aways enrich the markdown response with emoji markups and engaging words to make the content more apealing for young students.
+If you need to show a picture, use the ![description](url) format.
+        `
       case 'rag':
-        return 'You are a helpful assistant that answers questions based on provided context. If the context doesn\'t contain enough information to answer the question, please say so.'
+        return `You are a helpful assistant that answers questions based on provided context. If the context doesn\'t contain enough information to answer the question, please say so.
+If the topic involves math, always write equations or expressions in LaTeX notation, enclosed in double dollar signs ($$...$$) for block equations or single dollar signs ($...$) for inline expressions.
+Do not explain LaTeX syntax to the user, only show the math properly formatted. If your response contains any sentence with money representation using the dollar currency sign followed by a number (money value), make sure you escape it with '\\$' to not confuse with an inline LaTeX math notation.
+Aways enrich the markdown response with emoji markups and engaging words to make the content more apealing for young students.
+If you need to show a picture, use the ![description](url) format.`
       case 'topic-explorer':
         return `You are an educational study companion for middle school students learning Math, Science, or US History. 
 Your role is to help students understand topics from their class materials in a clear, friendly, and encouraging way. 
@@ -95,7 +104,7 @@ When answering a question, always follow this structure:
 Do not give long essays at first. Be concise, supportive, and engaging, like a tutor who makes learning fun. As the student start to interact by asking more questions, you can start to give more detailed and engaging answers.
 Additionally, at the end of your response, propose 2-4 short follow-up questions the student could ask next to keep learning. Always offer to solve the proposed 'Practice Activity' in step-by-step approach as one of these suggestions. Label this section 'Suggested Questions'.
 
-Aways enrich the markdown response with emoji markups, pictures, graphical representations and engaging words to make the content more apealing for young students.
+Aways enrich the markdown response with emoji markups and engaging words to make the content more apealing for young students.
 
 Always format your output in a strict JSON object with only two keys:
 - "answer": containing the Explanation, Real-Life Example and Practice Activity as the answer contetn body.
@@ -119,8 +128,8 @@ Sample JSON output:
     ]
     
     const togetherModels = [
-      'deepseek-ai/DeepSeek-R1', 'deepseek-ai/DeepSeek-V3.1', 
-      'meta-llama/Llama-3.3-70B-Instruct-Turbo', 'meta-llama/Llama-4-Scout-17B-16E-Instruct',
+      'deepseek-ai/DeepSeek-R1', 'deepseek-ai/DeepSeek-V3.1', 'deepseek-ai/DeepSeek-V3',
+      'meta-llama/Llama-3.3-70B-Instruct-Turbo',
       'openai/gpt-oss-20b', 'openai/gpt-oss-120b'
     ]
     
@@ -130,7 +139,7 @@ Sample JSON output:
     if (chatMode === 'topic-explorer') {
       // Only allow specific models for Topic Explorer mode
       if (selectedProvider === 'together') {
-        return ['deepseek-ai/DeepSeek-V3.1', 'meta-llama/Llama-3.3-70B-Instruct-Turbo']
+        return ['deepseek-ai/DeepSeek-V3', 'deepseek-ai/DeepSeek-R1','meta-llama/Llama-3.3-70B-Instruct-Turbo']
       } else {
         return ['gpt-4.1', 'gpt-4o', 'gpt-5']
       }
@@ -1034,7 +1043,7 @@ Sample JSON output:
                   setLastSuggestedQuestions([])
                   // Set appropriate default model for Topic Explorer mode based on provider
                   if (selectedProvider === 'together') {
-                    setSelectedModel('deepseek-ai/DeepSeek-V3.1')
+                    setSelectedModel('deepseek-ai/DeepSeek-V3')
                   } else {
                     setSelectedModel('gpt-4.1')
                   }

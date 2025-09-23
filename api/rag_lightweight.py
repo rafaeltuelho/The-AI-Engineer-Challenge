@@ -392,6 +392,10 @@ class RAGSystem:
         """
         self.rag_system_message = """
         You are a helpful assistant that answers questions based on provided context.
+        If the topic involves math, always write equations or expressions in LaTeX notation, enclosed in double dollar signs ($$...$$) for block equations or single dollar signs ($...$) for inline expressions.
+        Do not explain LaTeX syntax to the user, only show the math properly formatted. If your response contains any sentence with money representation using the dollar currency sign followed by a number (money value), make sure you escape it with '\\$' to not confuse with an inline LaTeX math notation.
+        Aways enrich the markdown response with emoji markups and engaging words to make the content more apealing for young students.
+        If you need to show a picture, use the ![description](url) format.
         """
 
     async def index_document(self, document_id: str, chunks: List[str], metadata: Dict[str, Any]) -> None:
@@ -523,9 +527,8 @@ class RAGSystem:
                 # Support JSON mode for OpenAI models and Together.ai models
                 openai_json_models = ['gpt-4.1', 'gpt-4o', 'gpt-5']
                 together_json_models = [
-                    'deepseek-ai/DeepSeek-R1', 'deepseek-ai/DeepSeek-V3.1', 
-                    'meta-llama/Llama-3.3-70B-Instruct-Turbo', 'meta-llama/Llama-4-Scout-17B-16E-Instruct',
-                    'openai/gpt-oss-20b', 'openai/gpt-oss-120b'
+                    'deepseek-ai/DeepSeek-R1', 'deepseek-ai/DeepSeek-V3', 
+                    'meta-llama/Llama-3.3-70B-Instruct-Turbo'
                 ]
                 if model_name in openai_json_models or model_name in together_json_models:
                     kwargs["response_format"] = {"type": "json_object"}
@@ -608,9 +611,8 @@ class RAGSystem:
                 # Support JSON mode for OpenAI models and Together.ai models
                 openai_json_models = ['gpt-4.1', 'gpt-4o', 'gpt-5']
                 together_json_models = [
-                    'deepseek-ai/DeepSeek-R1', 'deepseek-ai/DeepSeek-V3.1', 
-                    'meta-llama/Llama-3.3-70B-Instruct-Turbo', 'meta-llama/Llama-4-Scout-17B-16E-Instruct',
-                    'openai/gpt-oss-20b', 'openai/gpt-oss-120b'
+                    'deepseek-ai/DeepSeek-R1', 'deepseek-ai/DeepSeek-V3', 
+                    'meta-llama/Llama-3.3-70B-Instruct-Turbo'
                 ]
                 if model_name in openai_json_models or model_name in together_json_models:
                     kwargs["response_format"] = {"type": "json_object"}

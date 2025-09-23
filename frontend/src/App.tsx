@@ -25,9 +25,9 @@ function App() {
     'gpt-5-nano': 'Ultra-lightweight GPT-5 (default)',
     // Together.ai models
     'deepseek-ai/DeepSeek-R1': 'DeepSeek R1 reasoning model',
+    'deepseek-ai/DeepSeek-V3': 'DeepSeek V3 reasoning model',
     'deepseek-ai/DeepSeek-V3.1': 'DeepSeek V3.1 (default Together.ai)',
     'meta-llama/Llama-3.3-70B-Instruct-Turbo': 'Llama 3.3 70B Turbo',
-    'meta-llama/Llama-4-Scout-17B-16E-Instruct': 'Llama 4 Scout 17B',
     'openai/gpt-oss-20b': 'OpenAI GPT OSS 20B',
     'openai/gpt-oss-120b': 'OpenAI GPT OSS 120B'
   }

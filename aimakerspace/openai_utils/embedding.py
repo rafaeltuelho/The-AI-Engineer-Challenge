@@ -7,7 +7,7 @@ import os
 import asyncio
 
 class EmbeddingModel:
-    def __init__(self, embeddings_model_name: str = "text-embedding-3-small", batch_size: int = 1024, api_key: str = None, provider: str = "openai"):
+    def __init__(self, batch_size: int = 1024, api_key: str = None, provider: str = "openai"):
         load_dotenv()
         self.provider = provider.lower()
         self.api_key = api_key #or os.getenv("OPENAI_API_KEY")
@@ -17,15 +17,17 @@ class EmbeddingModel:
                 f"{self.provider.title()} API key must be provided either as parameter or environment variable."
             )
         
-        self.embeddings_model_name = embeddings_model_name
         self.batch_size = batch_size
         
         # Initialize clients based on provider
         if self.provider == "together":
             self.async_client = None  # Together.ai doesn't have async client in this version
+            # https://docs.together.ai/docs/serverless-models#embedding-models
+            self.embeddings_model_name = "togethercomputer/m2-bert-80M-32k-retrieval"
             self.client = Together(api_key=self.api_key)
         else:
             # Default to OpenAI
+            self.embeddings_model_name = "text-embedding-3-small"
             self.async_client = AsyncOpenAI(api_key=self.api_key)
             self.client = OpenAI(api_key=self.api_key)
 
@@ -103,8 +105,7 @@ if __name__ == "__main__":
         sys.exit(1)
 
     # Choose embedding model name based on provider using inline if-else
-    embedding_model_name = "text-embedding-3-small" if provider == "openai" else "BAAI/bge-base-en-v1.5"
-    embedding_model = EmbeddingModel(provider=provider, api_key=api_key, embeddings_model_name=embedding_model_name)
+    embedding_model = EmbeddingModel(provider=provider, api_key=api_key)
     print(asyncio.run(embedding_model.async_get_embedding("Hello, world!")))
     print(
         asyncio.run(

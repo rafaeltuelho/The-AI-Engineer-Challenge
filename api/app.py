@@ -294,8 +294,8 @@ class ChatRequest(BaseModel):
         
         # List of allowed models for Together.ai
         together_models = [
-            "deepseek-ai/DeepSeek-R1", "deepseek-ai/DeepSeek-V3.1", 
-            "meta-llama/Llama-3.3-70B-Instruct-Turbo", "meta-llama/Llama-4-Scout-17B-16E-Instruct",
+            "deepseek-ai/DeepSeek-R1", "deepseek-ai/DeepSeek-V3.1", "deepseek-ai/DeepSeek-V3",
+            "meta-llama/Llama-3.3-70B-Instruct-Turbo", 
             "openai/gpt-oss-20b", "openai/gpt-oss-120b"
         ]
         
@@ -440,8 +440,8 @@ class RAGQueryRequest(BaseModel):
         
         # List of allowed models for Together.ai
         together_models = [
-            "deepseek-ai/DeepSeek-R1", "deepseek-ai/DeepSeek-V3.1", 
-            "meta-llama/Llama-3.3-70B-Instruct-Turbo", "meta-llama/Llama-4-Scout-17B-16E-Instruct",
+            "deepseek-ai/DeepSeek-R1", "deepseek-ai/DeepSeek-V3.1", "deepseek-ai/DeepSeek-V3",
+            "meta-llama/Llama-3.3-70B-Instruct-Turbo",
             "openai/gpt-oss-20b", "openai/gpt-oss-120b"
         ]
         

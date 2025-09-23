@@ -16,7 +16,7 @@ class ChatOpenAI:
             provider: Provider name ("openai" or "together")
         """
         self.provider = provider.lower()
-        self.api_key = api_key or os.getenv("OPENAI_API_KEY")
+        self.api_key = api_key #or os.getenv("OPENAI_API_KEY")
         
         if self.api_key is None:
             raise ValueError(f"{self.provider.title()} API key must be provided either as parameter or environment variable")
