@@ -667,11 +667,9 @@ Sample JSON output:
   const handleDocumentSuggestedQuestionClick = (question: string) => {
     // Don't clear document suggested questions - keep them visible in chat panel
     
-    // Set the message and focus the textarea for manual submission
+    // Auto-submit the question (same behavior as Topic Explorer)
     setInputMessage(question)
-    if (textareaRef.current) {
-      textareaRef.current.focus()
-    }
+    handleSubmit({ preventDefault: () => {} } as React.FormEvent, question)
   }
 
   // Resizer Handlers
@@ -1131,17 +1129,6 @@ Sample JSON output:
             </div>
           )}
           
-          {/* Show Topic Explorer suggested questions when available - always visible */}
-          {chatMode === 'topic-explorer' && lastSuggestedQuestions.length > 0 && (
-            <div className="topic-explorer-suggested-questions">
-              <SuggestedQuestions
-                questions={lastSuggestedQuestions}
-                onQuestionClick={handleSuggestedQuestionClick}
-                isVisible={true}
-              />
-            </div>
-          )}
-          
           {messages.length === 0 ? (
             <div className="empty-state">
               {/*uploadedDocuments.length > 0 && showPdfBanner && (
@@ -1181,6 +1168,19 @@ Sample JSON output:
                   <div className="message-timestamp">
                     {message.timestamp.toLocaleTimeString()}
                   </div>
+                  
+                  {/* Show Topic Explorer suggested questions after assistant messages */}
+                  {message.role === 'assistant' && 
+                   chatMode === 'topic-explorer' && 
+                   lastSuggestedQuestions.length > 0 && (
+                    <div className="topic-explorer-suggested-questions">
+                      <SuggestedQuestions
+                        questions={lastSuggestedQuestions}
+                        onQuestionClick={handleSuggestedQuestionClick}
+                        isVisible={true}
+                      />
+                    </div>
+                  )}
                   
                 </div>
               </div>
