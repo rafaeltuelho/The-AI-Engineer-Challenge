@@ -844,31 +844,35 @@ async def upload_document(
             suggested_questions = None
             
             try:
-                # Initialize ChatOpenAI with the provided API key and provider
-                chat_model = ChatOpenAI(api_key=api_key, provider=provider)
-                
                 # Prepare document content for summarization
                 document_content = "\n\n".join(processed_data["chunks"])
                 
                 # System message for summarization
-                system_message = """You are a helpful assistant. Please, summarize this document content and return 5 suggested prompts/questions about it. These questions will be presented to the user so it can start a conversation with you about.
+                system_message = """
+                You are a helpful assistant. Please, summarize this document content and return 5 suggested prompts/questions about it. 
+                These questions will be presented to the user so it can start a conversation with you about.
 
-Please respond with a JSON object in the following format:
-{
-  "summary": "Brief summary of the document content",
-  "suggested_questions": ["Question 1", "Question 2", "Question 3", "Question 4", "Question 5"]
-}"""
+                Aways respond with a JSON object in the following strict format:
+                {
+                    "summary": "Brief summary of the document content",
+                    "suggested_questions": ["Question 1", "Question 2", "Question 3", "Question 4", "Question 5"]
+                }"""
                 
                 # Create the prompt for summarization
                 user_message = f"Please summarize the following document content and provide 5 suggested questions:\n\n{document_content}"
                 
                 # Generate summary and suggested questions
+                # Initialize ChatOpenAI with the provided API key and provider
+                kwargs = {}
+                kwargs["response_format"] = {"type": "json_object"}
+                chat_model = ChatOpenAI(api_key=api_key, provider=provider)
                 response = chat_model.run(
+                    model_name="gpt-4.1-mini" if provider == "openai" else "deepseek-ai/DeepSeek-V3.1",
                     messages=[
                         {"role": "system", "content": system_message},
                         {"role": "user", "content": user_message}
                     ],
-                    model="gpt-4.1-mini" if provider == "openai" else "deepseek-ai/DeepSeek-V3.1"
+                    **kwargs
                 )
                 
                 # Parse the JSON response to extract summary and questions
