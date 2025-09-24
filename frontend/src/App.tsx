@@ -83,9 +83,10 @@ function App() {
       setOpenaiApiKey(newApiKey)
     }
     const effectiveKey = newApiKey.trim()
-    if (effectiveKey) {
+    // Only create a session if we don't have one yet. Keep existing session to preserve conversations.
+    if (!sessionId && effectiveKey) {
       await createSession(effectiveKey, selectedProvider)
-    } else {
+    } else if (!effectiveKey) {
       setSessionId('')
     }
   }
@@ -99,14 +100,9 @@ function App() {
     } else {
       setSelectedModel('gpt-5-nano')
     }
-    
-    // Recreate session using the API key for the newly selected provider (if present)
-    const keyForProvider = newProvider === 'together' ? togetherApiKey : openaiApiKey
-    if (keyForProvider?.trim()) {
-      await createSession(keyForProvider, newProvider)
-    } else {
-      setSessionId('')
-    }
+    // Do NOT recreate the session when switching providers to keep conversations intact.
+    // We will keep using the existing sessionId. Backend stores conversations by the
+    // original session's hashed key; API calls will pass the provider-specific key.
   }
 
   const handleThemeChange = (newTheme: 'light' | 'dark') => {
