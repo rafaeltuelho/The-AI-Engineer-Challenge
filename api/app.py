@@ -30,6 +30,8 @@ if current_dir not in sys.path:
 
 # Import our lightweight PDF RAG functionality
 from rag_lightweight import DocumentProcessor, get_or_create_rag_system
+# Import ChatOpenAI for document summarization
+from aimakerspace.openai_utils.chatmodel import ChatOpenAI
 
 # Initialize FastAPI application with comprehensive OpenAPI configuration
 app = FastAPI(
@@ -343,6 +345,8 @@ class DocumentUploadResponse(BaseModel):
     chunk_count: int
     file_name: str
     file_type: str
+    summary: Optional[str] = None
+    suggested_questions: Optional[List[str]] = None
 
 class RAGQueryRequest(BaseModel):
     question: str
@@ -491,7 +495,7 @@ async def chat(
             raise HTTPException(status_code=401, detail="Invalid or expired session")
         
         # Debug logging
-        print(f"Received chat request: session_id={session_id[:8]}..., model={chat_request.model}, user_message_length={len(chat_request.user_message)}")
+        print(f"Received chat request: session_id={session_id[:8]}..., provider={chat_request.provider}, model={chat_request.model}, user_message_length={len(chat_request.user_message)}")
         
         # Initialize OpenAI client with the provided API key and provider
         client_kwargs = {"api_key": chat_request.api_key}
@@ -835,12 +839,92 @@ async def upload_document(
                 metadata=processed_data["metadata"]
             )
             
+            # Generate document summary and suggested questions using ChatOpenAI
+            summary = None
+            suggested_questions = None
+            
+            try:
+                # Initialize ChatOpenAI with the provided API key and provider
+                chat_model = ChatOpenAI(api_key=api_key, provider=provider)
+                
+                # Prepare document content for summarization
+                document_content = "\n\n".join(processed_data["chunks"])
+                
+                # System message for summarization
+                system_message = """You are a helpful assistant. Please, summarize this document content and return 5 suggested prompts/questions about it. These questions will be presented to the user so it can start a conversation with you about.
+
+Please respond with a JSON object in the following format:
+{
+  "summary": "Brief summary of the document content",
+  "suggested_questions": ["Question 1", "Question 2", "Question 3", "Question 4", "Question 5"]
+}"""
+                
+                # Create the prompt for summarization
+                user_message = f"Please summarize the following document content and provide 5 suggested questions:\n\n{document_content}"
+                
+                # Generate summary and suggested questions
+                response = chat_model.run(
+                    messages=[
+                        {"role": "system", "content": system_message},
+                        {"role": "user", "content": user_message}
+                    ],
+                    model="gpt-4.1-mini" if provider == "openai" else "deepseek-ai/DeepSeek-V3.1"
+                )
+                
+                # Parse the JSON response to extract summary and questions
+                try:
+                    import json
+                    parsed_response = json.loads(response)
+                    summary = parsed_response.get("summary", "Summary not available")
+                    suggested_questions = parsed_response.get("suggested_questions", [])
+                    
+                    # Ensure we have exactly 5 questions
+                    if len(suggested_questions) < 5:
+                        # Add generic questions if we don't have enough
+                        generic_questions = [
+                            "What are the main topics covered in this document?",
+                            "Can you explain the key concepts mentioned?",
+                            "What are the important details I should know?",
+                            "How does this content relate to practical applications?",
+                            "What questions do you have about this material?"
+                        ]
+                        while len(suggested_questions) < 5:
+                            suggested_questions.append(generic_questions[len(suggested_questions)])
+                    elif len(suggested_questions) > 5:
+                        # Trim to 5 questions if we have too many
+                        suggested_questions = suggested_questions[:5]
+                        
+                except json.JSONDecodeError:
+                    # If JSON parsing fails, use the raw response as summary
+                    summary = response
+                    suggested_questions = [
+                        "What are the main topics covered in this document?",
+                        "Can you explain the key concepts mentioned?",
+                        "What are the important details I should know?",
+                        "How does this content relate to practical applications?",
+                        "What questions do you have about this material?"
+                    ]
+                
+            except Exception as e:
+                print(f"Error generating document summary: {str(e)}")
+                # Continue without summary if generation fails
+                summary = "Summary generation failed due to an error."
+                suggested_questions = [
+                    "What are the main topics covered in this document?",
+                    "Can you explain the key concepts mentioned?",
+                    "What are the important details I should know?",
+                    "How does this content relate to practical applications?",
+                    "What questions do you have about this material?"
+                ]
+            
             return DocumentUploadResponse(
                 document_id=document_id,
                 message=f"{processed_data['metadata']['file_type'].upper()} document processed and indexed successfully",
                 chunk_count=processed_data["chunk_count"],
                 file_name=document_id, #processed_data["metadata"]["file_name"],
-                file_type=processed_data["metadata"]["file_type"]
+                file_type=processed_data["metadata"]["file_type"],
+                summary=summary,
+                suggested_questions=suggested_questions
             )
             
         finally:
@@ -878,7 +962,10 @@ async def rag_query(
         # Use session ID and API key from header parameters
         session_id = x_session_id
         api_key = x_api_key
-        
+
+        # Debug logging
+        print(f"Received RAG query request: session_id={session_id[:8]}..., provider={query_request.provider}, model={query_request.model}, question_length={len(query_request.question)}")
+
         # Validate session
         if not get_session(session_id):
             raise HTTPException(status_code=401, detail="Invalid or expired session")
