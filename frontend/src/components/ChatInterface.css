@@ -507,6 +507,16 @@
   color: var(--text-primary);
 }
 
+/* Topic Explorer Suggested Questions Section */
+.topic-explorer-suggested-questions {
+  margin-top: 1rem;
+  padding: 1rem;
+  background: var(--bg-glass);
+  border-radius: 0.5rem;
+  border: 1px solid var(--border-primary);
+  backdrop-filter: blur(10px);
+}
+
 .new-chat-btn {
   padding: 0.5rem 0.75rem;
   background: var(--gradient-primary);

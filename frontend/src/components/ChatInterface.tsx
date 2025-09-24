@@ -648,7 +648,7 @@ Sample JSON output:
   }
 
   const handleSuggestedQuestionClick = (question: string) => {
-    setLastSuggestedQuestions([]) // Clear suggested questions when one is clicked
+    // Don't clear Topic Explorer suggested questions - keep them visible in chat panel
     
     // In Topic Explorer mode, automatically submit the question
     if (chatMode === 'topic-explorer') {
@@ -802,11 +802,6 @@ Sample JSON output:
       return <MarkdownRenderer content={message.content} chatMode={chatMode} />
     }
     return <div className="message-text">{message.content}</div>
-  }
-
-  const isLastAssistantMessage = (message: Message) => {
-    const assistantMessages = messages.filter(msg => msg.role === 'assistant')
-    return assistantMessages.length > 0 && assistantMessages[assistantMessages.length - 1].id === message.id
   }
 
   return (
@@ -1136,6 +1131,17 @@ Sample JSON output:
             </div>
           )}
           
+          {/* Show Topic Explorer suggested questions when available - always visible */}
+          {chatMode === 'topic-explorer' && lastSuggestedQuestions.length > 0 && (
+            <div className="topic-explorer-suggested-questions">
+              <SuggestedQuestions
+                questions={lastSuggestedQuestions}
+                onQuestionClick={handleSuggestedQuestionClick}
+                isVisible={true}
+              />
+            </div>
+          )}
+          
           {messages.length === 0 ? (
             <div className="empty-state">
               {/*uploadedDocuments.length > 0 && showPdfBanner && (
@@ -1175,17 +1181,6 @@ Sample JSON output:
                   <div className="message-timestamp">
                     {message.timestamp.toLocaleTimeString()}
                   </div>
-                  {/* Show suggested questions after the last assistant message in topic-explorer mode */}
-                  {message.role === 'assistant' && 
-                   isLastAssistantMessage(message) && 
-                   chatMode === 'topic-explorer' && 
-                   lastSuggestedQuestions.length > 0 && (
-                    <SuggestedQuestions
-                      questions={lastSuggestedQuestions}
-                      onQuestionClick={handleSuggestedQuestionClick}
-                      isVisible={true}
-                    />
-                  )}
                   
                 </div>
               </div>
