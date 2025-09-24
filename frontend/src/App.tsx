@@ -83,10 +83,12 @@ function App() {
       setOpenaiApiKey(newApiKey)
     }
     const effectiveKey = newApiKey.trim()
-    // Only create a session if we don't have one yet. Keep existing session to preserve conversations.
-    if (!sessionId && effectiveKey) {
+    
+    if (effectiveKey) {
+      // Always create a new session when API key is provided (even if updating existing key)
       await createSession(effectiveKey, selectedProvider)
-    } else if (!effectiveKey) {
+    } else {
+      // Clear session if API key is empty
       setSessionId('')
     }
   }
