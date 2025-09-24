@@ -875,7 +875,7 @@ Sample JSON output:
                     type="password"
                     value={apiKey}
                     onChange={(e) => setApiKey(e.target.value)}
-                    placeholder={`Enter your ${selectedProvider === 'together' ? 'Together.ai' : 'OpenAI'} API key`}
+                    placeholder={`${selectedProvider === 'together' ? 'Together.ai key: tgp_' : 'OpenAI key: sk-'} ...`}
                     className="api-key-input"
                   />
                   {apiKey.trim() && showApiKeyInfo && (
@@ -1123,9 +1123,6 @@ Sample JSON output:
         >
           {messages.length === 0 ? (
             <div className="empty-state">
-              <Bot size={48} />
-              <h3>Start a conversation</h3>
-              <p>Enter your message below to begin chatting with the AI assistant.</p>
               {/*uploadedDocuments.length > 0 && showPdfBanner && (
                 <div className="pdf-info-banner">
                   <FileText size={16} />
@@ -1158,7 +1155,6 @@ Sample JSON output:
                   <h3>📄 Document Summary</h3>
                   <p className="document-summary-text">{documentSummary}</p>
                   <div className="document-suggested-questions">
-                    <h4>💭 Suggested Questions:</h4>
                     <SuggestedQuestions
                       questions={documentSuggestedQuestions}
                       onQuestionClick={handleDocumentSuggestedQuestionClick}

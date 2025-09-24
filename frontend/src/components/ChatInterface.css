@@ -497,6 +497,7 @@
   font-size: 0.875rem;
   line-height: 1.5;
   color: var(--text-secondary);
+  text-align: left;
 }
 
 .document-suggested-questions h4 {
