@@ -117,16 +117,12 @@ app.add_middleware(
 )
 
 # In-memory storage for conversations (in production, use a proper database)
-# Structure: {hashed_api_key: {conversation_id: conversation_data}}
+# Structure: {session_id: {conversation_id: conversation_data}}
 conversations: Dict[str, Dict[str, Dict[str, Any]]] = {}
 
 # Session management
 # Structure: {session_id: {"api_key": hashed_api_key, "last_access": datetime}}
 sessions: Dict[str, Dict[str, Any]] = {}
-
-# Track last access time for cleanup mechanism
-# Structure: {hashed_api_key: last_access_time}
-api_key_last_access: Dict[str, datetime] = {}
 
 def hash_api_key(api_key: str) -> str:
     """Hash the API key using SHA-256 for secure storage key generation"""
@@ -134,69 +130,42 @@ def hash_api_key(api_key: str) -> str:
 
 def create_session(api_key: str) -> str:
     """Create a new session for the given API key"""
-    session_id = str(uuid.uuid4())
-    hashed_api_key = hash_api_key(api_key)
-    
+    session_id = str(uuid.uuid4())    
     sessions[session_id] = {
-        "api_key": hashed_api_key,
         "last_access": datetime.now(timezone.utc)
     }
     
-    # Update API key access time
-    update_api_key_access(hashed_api_key)
-    
     return session_id
 
-def get_session_api_key(session_id: str) -> Optional[str]:
+def get_session(session_id: str) -> Optional[str]:
     """Get the hashed API key for a session, return None if session doesn't exist"""
     if session_id not in sessions:
         return None
     
     # Update session access time
     sessions[session_id]["last_access"] = datetime.now(timezone.utc)
-    hashed_api_key = sessions[session_id]["api_key"]
-    update_api_key_access(hashed_api_key)
-    
-    return hashed_api_key
+    return sessions[session_id]
 
-def get_user_conversations(hashed_api_key: str) -> Dict[str, Dict[str, Any]]:
-    """Get conversations for a specific user (hashed API key)"""
-    if hashed_api_key not in conversations:
-        conversations[hashed_api_key] = {}
-    return conversations[hashed_api_key]
-
-def update_api_key_access(hashed_api_key: str):
-    """Update the last access time for an API key"""
-    api_key_last_access[hashed_api_key] = datetime.now(timezone.utc)
+def get_session_conversations(session_id: str) -> Dict[str, Dict[str, Any]]:
+    """Get conversations scoped to a specific session."""
+    if session_id not in conversations:
+        conversations[session_id] = {}
+    return conversations[session_id]
 
 def cleanup_inactive_conversations():
-    """Clean up conversations and sessions for API keys that haven't been used in the last 10 minutes"""
+    """Clean up conversations and sessions that haven't been used in the last 10 minutes"""
     current_time = datetime.now(timezone.utc)
-    inactive_keys = []
     inactive_sessions = []
-    
-    # Clean up inactive API keys
-    for hashed_key, last_access in api_key_last_access.items():
-        if current_time - last_access > timedelta(minutes=10):
-            inactive_keys.append(hashed_key)
-    
-    # Clean up inactive sessions
+    # Identify inactive sessions
     for session_id, session_data in sessions.items():
         if current_time - session_data["last_access"] > timedelta(minutes=10):
             inactive_sessions.append(session_id)
-    
-    # Remove inactive conversations and API key access records
-    for hashed_key in inactive_keys:
-        if hashed_key in conversations:
-            del conversations[hashed_key]
-        if hashed_key in api_key_last_access:
-            del api_key_last_access[hashed_key]
-        print(f"Cleaned up conversations for inactive API key: {hashed_key[:8]}...")
-    
-    # Remove inactive sessions
+    # Remove conversations and sessions for inactive session_ids
     for session_id in inactive_sessions:
+        if session_id in conversations:
+            del conversations[session_id]
         del sessions[session_id]
-        print(f"Cleaned up inactive session: {session_id[:8]}...")
+        print(f"Cleaned up inactive session and its conversations: {session_id[:8]}...")
 
 def start_cleanup_scheduler():
     """Start the background cleanup scheduler"""
@@ -517,13 +486,12 @@ async def chat(
         # Use session ID from header parameter
         session_id = x_session_id
         
-        # Get hashed API key from session
-        hashed_api_key = get_session_api_key(session_id)
-        if not hashed_api_key:
+        # Validate session
+        if not get_session(session_id):
             raise HTTPException(status_code=401, detail="Invalid or expired session")
         
         # Debug logging
-        print(f"Received chat request: session_id={session_id[:8]}..., hashed_api_key={hashed_api_key[:8]}..., model={chat_request.model}, user_message_length={len(chat_request.user_message)}")
+        print(f"Received chat request: session_id={session_id[:8]}..., model={chat_request.model}, user_message_length={len(chat_request.user_message)}")
         
         # Initialize OpenAI client with the provided API key and provider
         client_kwargs = {"api_key": chat_request.api_key}
@@ -531,8 +499,8 @@ async def chat(
             client_kwargs["base_url"] = "https://api.together.xyz/v1"
         client = OpenAI(**client_kwargs)
         
-        # Get user-specific conversations
-        user_conversations = get_user_conversations(hashed_api_key)
+        # Get session-specific conversations
+        user_conversations = get_session_conversations(session_id)
         
         # Generate or retrieve conversation ID
         conversation_id = chat_request.conversation_id or str(uuid.uuid4())
@@ -657,13 +625,12 @@ async def get_conversation(
     # Use session ID from header parameter
     session_id = x_session_id
     
-    # Get hashed API key from session
-    hashed_api_key = get_session_api_key(session_id)
-    if not hashed_api_key:
+    # Validate session
+    if not get_session(session_id):
         raise HTTPException(status_code=401, detail="Invalid or expired session")
     
-    # Get user-specific conversations
-    user_conversations = get_user_conversations(hashed_api_key)
+    # Get session-specific conversations
+    user_conversations = get_session_conversations(session_id)
     
     if conversation_id not in user_conversations:
         raise HTTPException(status_code=404, detail="Conversation not found")
@@ -698,13 +665,12 @@ async def list_conversations(
     # Use session ID from header parameter
     session_id = x_session_id
     
-    # Get hashed API key from session
-    hashed_api_key = get_session_api_key(session_id)
-    if not hashed_api_key:
+    # Validate session
+    if not get_session(session_id):
         raise HTTPException(status_code=401, detail="Invalid or expired session")
     
-    # Get user-specific conversations
-    user_conversations = get_user_conversations(hashed_api_key)
+    # Get session-specific conversations
+    user_conversations = get_session_conversations(session_id)
     
     conversation_list = []
     for conv_id, conv_data in user_conversations.items():
@@ -744,13 +710,12 @@ async def delete_conversation(
     # Use session ID from header parameter
     session_id = x_session_id
     
-    # Get hashed API key from session
-    hashed_api_key = get_session_api_key(session_id)
-    if not hashed_api_key:
+    # Validate session
+    if not get_session(session_id):
         raise HTTPException(status_code=401, detail="Invalid or expired session")
     
-    # Get user-specific conversations
-    user_conversations = get_user_conversations(hashed_api_key)
+    # Get session-specific conversations
+    user_conversations = get_session_conversations(session_id)
     
     if conversation_id not in user_conversations:
         raise HTTPException(status_code=404, detail="Conversation not found")
@@ -778,13 +743,12 @@ async def clear_all_conversations(
     # Use session ID from header parameter
     session_id = x_session_id
     
-    # Get hashed API key from session
-    hashed_api_key = get_session_api_key(session_id)
-    if not hashed_api_key:
+    # Validate session
+    if not get_session(session_id):
         raise HTTPException(status_code=401, detail="Invalid or expired session")
     
-    # Get user-specific conversations and clear them
-    user_conversations = get_user_conversations(hashed_api_key)
+    # Get session-specific conversations and clear them
+    user_conversations = get_session_conversations(session_id)
     user_conversations.clear()
     
     return {"message": "All conversations cleared successfully"}
@@ -824,8 +788,7 @@ async def upload_document(
             raise HTTPException(status_code=400, detail="Invalid provider. Must be 'openai' or 'together'")
         
         # Get hashed API key from session
-        hashed_api_key = get_session_api_key(session_id)
-        if not hashed_api_key:
+        if not get_session(session_id):
             raise HTTPException(status_code=401, detail="Invalid or expired session")
         
         # Validate file type
@@ -916,9 +879,8 @@ async def rag_query(
         session_id = x_session_id
         api_key = x_api_key
         
-        # Get hashed API key from session
-        hashed_api_key = get_session_api_key(session_id)
-        if not hashed_api_key:
+        # Validate session
+        if not get_session(session_id):
             raise HTTPException(status_code=401, detail="Invalid or expired session")
         
         # Get RAG system for this session with the specified model and provider
@@ -934,8 +896,8 @@ async def rag_query(
         relevant_chunks = rag_system.search_relevant_chunks(query_request.question, k=query_request.k)
         relevant_chunks_count = len(relevant_chunks)
         
-        # Store the RAG conversation in conversation history
-        user_conversations = get_user_conversations(hashed_api_key)
+        # Store the RAG conversation in session-scoped conversation history
+        user_conversations = get_session_conversations(session_id)
         
         # Generate or retrieve conversation ID from header parameter
         conversation_id = x_conversation_id or str(uuid.uuid4())
@@ -1024,9 +986,8 @@ async def get_documents(
         if provider not in ["openai", "together"]:
             raise HTTPException(status_code=400, detail="Invalid provider. Must be 'openai' or 'together'")
         
-        # Get hashed API key from session
-        hashed_api_key = get_session_api_key(session_id)
-        if not hashed_api_key:
+        # Validate session
+        if not get_session(session_id):
             raise HTTPException(status_code=401, detail="Invalid or expired session")
         
         # Get RAG system for this session with the specified provider
