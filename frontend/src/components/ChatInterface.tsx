@@ -59,6 +59,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const [showApiKeyInfo, setShowApiKeyInfo] = useState(true)
   const [chatMode, setChatMode] = useState<'regular' | 'rag' | 'topic-explorer'>('regular')
   const [lastSuggestedQuestions, setLastSuggestedQuestions] = useState<string[]>([])
+  const [hasConversationStarted, setHasConversationStarted] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const dragStartXRef = useRef<number | null>(null)
@@ -356,6 +357,8 @@ Sample JSON output:
         } else {
           setLastSuggestedQuestions([])
         }
+        
+        setHasConversationStarted(true) // Mark conversation as started when loading existing conversation
       } else {
         console.error('Failed to load conversation:', response.statusText)
       }
@@ -406,6 +409,11 @@ Sample JSON output:
     const currentMessage = messageToSubmit
     setInputMessage('')
     setIsLoading(true)
+    
+    // Mark that conversation has started after first user message
+    if (!hasConversationStarted) {
+      setHasConversationStarted(true)
+    }
 
     try {
       // Determine which endpoint to use based on chat mode
@@ -602,6 +610,7 @@ Sample JSON output:
     setShowConversationInfoBanner(false)
     setChatMode('regular')
     setLastSuggestedQuestions([])
+    setHasConversationStarted(false)
   }
 
   const startNewConversation = () => {
@@ -1010,46 +1019,55 @@ Sample JSON output:
             <h2>Chat with AI</h2>
             <div className="mode-badges">
               <button
-                className={`mode-badge ${chatMode === 'regular' ? 'active regular-mode' : ''}`}
+                className={`mode-badge ${chatMode === 'regular' ? 'active regular-mode' : ''} ${hasConversationStarted ? 'disabled' : ''}`}
                 onClick={() => {
-                  setChatMode('regular')
-                  setDeveloperMessage(getDefaultDeveloperMessage('regular'))
-                  setLastSuggestedQuestions([])
+                  if (!hasConversationStarted) {
+                    setChatMode('regular')
+                    setDeveloperMessage(getDefaultDeveloperMessage('regular'))
+                    setLastSuggestedQuestions([])
+                  }
                 }}
-                title="AI Chat Mode - General conversation"
+                title={hasConversationStarted ? "Cannot switch mode after conversation starts. Start a new chat to change mode." : "AI Chat Mode - General conversation"}
                 data-mode="regular"
+                disabled={hasConversationStarted}
               >
                 <MessageCircle size={14} />
                 <span>AI Chat</span>
               </button>
               <button
-                className={`mode-badge ${chatMode === 'rag' ? 'active rag-mode' : ''}`}
+                className={`mode-badge ${chatMode === 'rag' ? 'active rag-mode' : ''} ${hasConversationStarted ? 'disabled' : ''}`}
                 onClick={() => {
-                  setChatMode('rag')
-                  setDeveloperMessage(getDefaultDeveloperMessage('rag'))
-                  setLastSuggestedQuestions([])
+                  if (!hasConversationStarted) {
+                    setChatMode('rag')
+                    setDeveloperMessage(getDefaultDeveloperMessage('rag'))
+                    setLastSuggestedQuestions([])
+                  }
                 }}
-                title="RAG Mode - Query uploaded documents"
+                title={hasConversationStarted ? "Cannot switch mode after conversation starts. Start a new chat to change mode." : "RAG Mode - Query uploaded documents"}
                 data-mode="rag"
+                disabled={hasConversationStarted}
               >
                 <Database size={14} />
                 <span>RAG</span>
               </button>
               <button
-                className={`mode-badge ${chatMode === 'topic-explorer' ? 'active topic-explorer-mode' : ''}`}
+                className={`mode-badge ${chatMode === 'topic-explorer' ? 'active topic-explorer-mode' : ''} ${hasConversationStarted ? 'disabled' : ''}`}
                 onClick={() => {
-                  setChatMode('topic-explorer')
-                  setDeveloperMessage(getDefaultDeveloperMessage('topic-explorer'))
-                  setLastSuggestedQuestions([])
-                  // Set appropriate default model for Topic Explorer mode based on provider
-                  if (selectedProvider === 'together') {
-                    setSelectedModel('deepseek-ai/DeepSeek-V3')
-                  } else {
-                    setSelectedModel('gpt-4.1')
+                  if (!hasConversationStarted) {
+                    setChatMode('topic-explorer')
+                    setDeveloperMessage(getDefaultDeveloperMessage('topic-explorer'))
+                    setLastSuggestedQuestions([])
+                    // Set appropriate default model for Topic Explorer mode based on provider
+                    if (selectedProvider === 'together') {
+                      setSelectedModel('deepseek-ai/DeepSeek-V3')
+                    } else {
+                      setSelectedModel('gpt-4.1')
+                    }
                   }
                 }}
-                title="Topic Explorer - Guided learning with structured responses"
+                title={hasConversationStarted ? "Cannot switch mode after conversation starts. Start a new chat to change mode." : "Topic Explorer - Guided learning with structured responses"}
                 data-mode="topic-explorer"
+                disabled={hasConversationStarted}
               >
                 <BookOpen size={14} />
                 <span>Topic Explorer</span>

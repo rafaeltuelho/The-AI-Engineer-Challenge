@@ -463,6 +463,18 @@
   flex-shrink: 0;
 }
 
+.mode-badge.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.mode-badge.disabled:hover {
+  background: transparent;
+  border-color: var(--border-color);
+  color: var(--text-secondary);
+}
+
 .new-chat-btn {
   padding: 0.5rem 0.75rem;
   background: var(--gradient-primary);
