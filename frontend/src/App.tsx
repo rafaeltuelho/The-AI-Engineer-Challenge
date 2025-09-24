@@ -4,7 +4,8 @@ import Header from './components/Header'
 import './App.css'
 
 function App() {
-  const [apiKey, setApiKey] = useState<string>('')
+  const [openaiApiKey, setOpenaiApiKey] = useState<string>('')
+  const [togetherApiKey, setTogetherApiKey] = useState<string>('')
   const [sessionId, setSessionId] = useState<string>('')
   const [theme, setTheme] = useState<'light' | 'dark'>('light')
   const [selectedModel, setSelectedModel] = useState<string>('gpt-5-nano')
@@ -76,9 +77,14 @@ function App() {
 
   // Handle API key changes
   const handleApiKeyChange = async (newApiKey: string) => {
-    setApiKey(newApiKey)
-    if (newApiKey.trim()) {
-      await createSession(newApiKey, selectedProvider)
+    if (selectedProvider === 'together') {
+      setTogetherApiKey(newApiKey)
+    } else {
+      setOpenaiApiKey(newApiKey)
+    }
+    const effectiveKey = newApiKey.trim()
+    if (effectiveKey) {
+      await createSession(effectiveKey, selectedProvider)
     } else {
       setSessionId('')
     }
@@ -94,9 +100,12 @@ function App() {
       setSelectedModel('gpt-5-nano')
     }
     
-    // Recreate session if API key is present
-    if (apiKey.trim()) {
-      await createSession(apiKey, newProvider)
+    // Recreate session using the API key for the newly selected provider (if present)
+    const keyForProvider = newProvider === 'together' ? togetherApiKey : openaiApiKey
+    if (keyForProvider?.trim()) {
+      await createSession(keyForProvider, newProvider)
+    } else {
+      setSessionId('')
     }
   }
 
@@ -114,7 +123,7 @@ function App() {
       />
       <main className="main-content">
         <ChatInterface 
-          apiKey={apiKey} 
+          apiKey={selectedProvider === 'together' ? togetherApiKey : openaiApiKey} 
           setApiKey={handleApiKeyChange} 
           sessionId={sessionId}
           selectedModel={selectedModel}
