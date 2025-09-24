@@ -60,6 +60,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const [chatMode, setChatMode] = useState<'regular' | 'rag' | 'topic-explorer'>('regular')
   const [lastSuggestedQuestions, setLastSuggestedQuestions] = useState<string[]>([])
   const [hasConversationStarted, setHasConversationStarted] = useState(false)
+  const [documentSuggestedQuestions, setDocumentSuggestedQuestions] = useState<string[]>([])
+  const [documentSummary, setDocumentSummary] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const dragStartXRef = useRef<number | null>(null)
@@ -611,6 +613,8 @@ Sample JSON output:
     setChatMode('regular')
     setLastSuggestedQuestions([])
     setHasConversationStarted(false)
+    setDocumentSuggestedQuestions([])
+    setDocumentSummary(null)
   }
 
   const startNewConversation = () => {
@@ -657,6 +661,16 @@ Sample JSON output:
       if (textareaRef.current) {
         textareaRef.current.focus()
       }
+    }
+  }
+
+  const handleDocumentSuggestedQuestionClick = (question: string) => {
+    setDocumentSuggestedQuestions([]) // Clear document suggested questions when one is clicked
+    
+    // Set the message and focus the textarea for manual submission
+    setInputMessage(question)
+    if (textareaRef.current) {
+      textareaRef.current.focus()
     }
   }
 
@@ -749,6 +763,14 @@ Sample JSON output:
       const data = await response.json()
       
       setPdfUploadSuccess(`${data.file_type.toUpperCase()} document "${data.file_name}" uploaded and processed successfully! ${data.chunk_count} chunks created.`)
+      
+      // Store document suggested questions and summary
+      if (data.suggested_questions && data.suggested_questions.length > 0) {
+        setDocumentSuggestedQuestions(data.suggested_questions)
+      }
+      if (data.summary) {
+        setDocumentSummary(data.summary)
+      }
       
       // Only switch to RAG mode if currently in regular mode
       // Preserve RAG or Topic Explorer mode if already selected
@@ -1129,6 +1151,22 @@ Sample JSON output:
                   Open the Conversations section in the left panel to view them.
                 </p>
               ) */}
+              
+              {/* Show document summary and suggested questions when available */}
+              {documentSummary && documentSuggestedQuestions.length > 0 && (
+                <div className="document-summary-section">
+                  <h3>📄 Document Summary</h3>
+                  <p className="document-summary-text">{documentSummary}</p>
+                  <div className="document-suggested-questions">
+                    <h4>💭 Suggested Questions:</h4>
+                    <SuggestedQuestions
+                      questions={documentSuggestedQuestions}
+                      onQuestionClick={handleDocumentSuggestedQuestionClick}
+                      isVisible={true}
+                    />
+                  </div>
+                </div>
+              )}
             </div>
           ) : (
             messages.map((message) => (
@@ -1149,6 +1187,18 @@ Sample JSON output:
                     <SuggestedQuestions
                       questions={lastSuggestedQuestions}
                       onQuestionClick={handleSuggestedQuestionClick}
+                      isVisible={true}
+                    />
+                  )}
+                  
+                  {/* Show document suggested questions after the last assistant message in RAG mode */}
+                  {message.role === 'assistant' && 
+                   isLastAssistantMessage(message) && 
+                   chatMode === 'rag' && 
+                   documentSuggestedQuestions.length > 0 && (
+                    <SuggestedQuestions
+                      questions={documentSuggestedQuestions}
+                      onQuestionClick={handleDocumentSuggestedQuestionClick}
                       isVisible={true}
                     />
                   )}

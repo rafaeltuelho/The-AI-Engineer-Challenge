@@ -475,6 +475,37 @@
   color: var(--text-secondary);
 }
 
+/* Document Summary Section */
+.document-summary-section {
+  margin-top: 1.5rem;
+  padding: 1rem;
+  background: var(--bg-glass);
+  border-radius: 0.5rem;
+  border: 1px solid var(--border-primary);
+  backdrop-filter: blur(10px);
+}
+
+.document-summary-section h3 {
+  margin: 0 0 0.5rem 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.document-summary-text {
+  margin: 0 0 1rem 0;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.document-suggested-questions h4 {
+  margin: 0 0 0.5rem 0;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
 .new-chat-btn {
   padding: 0.5rem 0.75rem;
   background: var(--gradient-primary);

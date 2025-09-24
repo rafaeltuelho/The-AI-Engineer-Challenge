@@ -5,7 +5,7 @@ import './PDFUpload.css'
 interface DocumentUploadProps {
   sessionId: string
   apiKey: string
-  onDocumentUploaded: (documentInfo: any) => void
+  onDocumentUploaded: (documentInfo: any, suggestedQuestions?: string[], summary?: string) => void
 }
 
 interface UploadedDocument {
@@ -120,8 +120,8 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ sessionId, apiKey, onDo
       setUploadedDocuments(prev => [newDocument, ...prev])
       setUploadSuccess(`${data.file_type.toUpperCase()} document "${data.file_name}" uploaded and processed successfully! ${data.chunk_count} chunks created.`)
       
-      // Notify parent component
-      onDocumentUploaded(newDocument)
+      // Notify parent component with suggested questions and summary
+      onDocumentUploaded(newDocument, data.suggested_questions, data.summary)
 
       // Clear success message after 5 seconds
       setTimeout(() => setUploadSuccess(null), 5000)
