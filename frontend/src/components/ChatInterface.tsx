@@ -665,7 +665,7 @@ Sample JSON output:
   }
 
   const handleDocumentSuggestedQuestionClick = (question: string) => {
-    setDocumentSuggestedQuestions([]) // Clear document suggested questions when one is clicked
+    // Don't clear document suggested questions - keep them visible in chat panel
     
     // Set the message and focus the textarea for manual submission
     setInputMessage(question)
@@ -1121,6 +1121,21 @@ Sample JSON output:
           ref={messagesContainerRef}
           onScroll={handleScroll}
         >
+          {/* Show document summary and suggested questions when available - always visible */}
+          {documentSummary && documentSuggestedQuestions.length > 0 && (
+            <div className="document-summary-section">
+              <h3>📄 Document Summary</h3>
+              <p className="document-summary-text">{documentSummary}</p>
+              <div className="document-suggested-questions">
+                <SuggestedQuestions
+                  questions={documentSuggestedQuestions}
+                  onQuestionClick={handleDocumentSuggestedQuestionClick}
+                  isVisible={true}
+                />
+              </div>
+            </div>
+          )}
+          
           {messages.length === 0 ? (
             <div className="empty-state">
               {/*uploadedDocuments.length > 0 && showPdfBanner && (
@@ -1148,21 +1163,6 @@ Sample JSON output:
                   Open the Conversations section in the left panel to view them.
                 </p>
               ) */}
-              
-              {/* Show document summary and suggested questions when available */}
-              {documentSummary && documentSuggestedQuestions.length > 0 && (
-                <div className="document-summary-section">
-                  <h3>📄 Document Summary</h3>
-                  <p className="document-summary-text">{documentSummary}</p>
-                  <div className="document-suggested-questions">
-                    <SuggestedQuestions
-                      questions={documentSuggestedQuestions}
-                      onQuestionClick={handleDocumentSuggestedQuestionClick}
-                      isVisible={true}
-                    />
-                  </div>
-                </div>
-              )}
             </div>
           ) : (
             messages.map((message) => (
@@ -1187,17 +1187,6 @@ Sample JSON output:
                     />
                   )}
                   
-                  {/* Show document suggested questions after the last assistant message in RAG mode */}
-                  {message.role === 'assistant' && 
-                   isLastAssistantMessage(message) && 
-                   chatMode === 'rag' && 
-                   documentSuggestedQuestions.length > 0 && (
-                    <SuggestedQuestions
-                      questions={documentSuggestedQuestions}
-                      onQuestionClick={handleDocumentSuggestedQuestionClick}
-                      isVisible={true}
-                    />
-                  )}
                 </div>
               </div>
             ))
