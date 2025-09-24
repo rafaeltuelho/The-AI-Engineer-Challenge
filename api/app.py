@@ -595,10 +595,20 @@ async def chat(
                 
                 # Yield each chunk of the response as it becomes available
                 for chunk in stream:
-                    if chunk.choices[0].delta.content is not None:
-                        content = chunk.choices[0].delta.content
-                        full_response += content
-                        yield content
+                    # Some providers may send chunks without choices or content (e.g., role updates or keep-alives)
+                    try:
+                        choices = getattr(chunk, "choices", None)
+                        if not choices or len(choices) == 0:
+                            continue
+                        choice0 = choices[0]
+                        delta = getattr(choice0, "delta", None)
+                        content = getattr(delta, "content", None) if delta is not None else None
+                        if content:
+                            full_response += content
+                            yield content
+                    except Exception:
+                        # Be tolerant to provider-specific streaming variations
+                        continue
                 
                 # Store the assistant's response in conversation history
                 assistant_message = Message(
