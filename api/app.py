@@ -160,7 +160,7 @@ def cleanup_inactive_conversations():
     inactive_sessions = []
     # Identify inactive sessions
     for session_id, session_data in sessions.items():
-        if current_time - session_data["last_access"] > timedelta(minutes=10):
+        if current_time - session_data["last_access"] > timedelta(minutes=60):
             inactive_sessions.append(session_id)
     # Remove conversations and sessions for inactive session_ids
     for session_id in inactive_sessions:
