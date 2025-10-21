@@ -267,7 +267,7 @@ class ChatRequest(BaseModel):
         together_models = [
             "deepseek-ai/DeepSeek-R1", "deepseek-ai/DeepSeek-V3.1", "deepseek-ai/DeepSeek-V3",
             "meta-llama/Llama-3.3-70B-Instruct-Turbo", 
-            "openai/gpt-oss-20b", "openai/gpt-oss-120b"
+            "openai/gpt-oss-20b", "openai/gpt-oss-120b", "moonshotai/Kimi-K2-Instruct-0905"
         ]
         
         all_models = openai_models + together_models

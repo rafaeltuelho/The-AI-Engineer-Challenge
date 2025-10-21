@@ -30,7 +30,8 @@ function App() {
     'deepseek-ai/DeepSeek-V3.1': 'DeepSeek V3.1 (default Together.ai)',
     'meta-llama/Llama-3.3-70B-Instruct-Turbo': 'Llama 3.3 70B Turbo',
     'openai/gpt-oss-20b': 'OpenAI GPT OSS 20B',
-    'openai/gpt-oss-120b': 'OpenAI GPT OSS 120B'
+    'openai/gpt-oss-120b': 'OpenAI GPT OSS 120B',
+    'moonshotai/Kimi-K2-Instruct-0905': 'Moonshot.ai Kimi K2 Instruct 0905'
   }
 
   // Load theme preference from localStorage on component mount
