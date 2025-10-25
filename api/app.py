@@ -32,6 +32,8 @@ if current_dir not in sys.path:
 from rag_lightweight import DocumentProcessor, get_or_create_rag_system
 # Import ChatOpenAI for document summarization
 from aimakerspace.openai_utils.chatmodel import ChatOpenAI
+# Import Ollama for model fetching
+import ollama
 
 # Initialize FastAPI application with comprehensive OpenAPI configuration
 app = FastAPI(
@@ -216,11 +218,11 @@ class ChatRequest(BaseModel):
         """Validate provider selection"""
         if not v:
             return "openai"  # Default provider
-        
-        allowed_providers = ["openai", "together"]
+
+        allowed_providers = ["openai", "together", "ollama"]
         if v.lower() not in allowed_providers:
             raise ValueError(f'Invalid provider: {v}. Allowed providers: {", ".join(allowed_providers)}')
-        
+
         return v.lower()
     
     @field_validator('user_message')
@@ -266,15 +268,19 @@ class ChatRequest(BaseModel):
         # List of allowed models for Together.ai
         together_models = [
             "deepseek-ai/DeepSeek-R1", "deepseek-ai/DeepSeek-V3.1", "deepseek-ai/DeepSeek-V3",
-            "meta-llama/Llama-3.3-70B-Instruct-Turbo", 
+            "meta-llama/Llama-3.3-70B-Instruct-Turbo",
             "openai/gpt-oss-20b", "openai/gpt-oss-120b", "moonshotai/Kimi-K2-Instruct-0905"
         ]
-        
+
+        # For Ollama, allow any model name since they are dynamically fetched
+        # We'll validate them at runtime when making the API call
         all_models = openai_models + together_models
-        
-        if v not in all_models:
-            raise ValueError(f'Invalid model: {v}. Allowed models: {", ".join(all_models)}')
-        
+
+        # Skip validation for Ollama models (they are dynamic)
+        if not any(v.startswith(prefix) for prefix in ["llama", "mistral", "codellama", "phi", "gemma", "qwen", "nomic"]):
+            if v not in all_models:
+                raise ValueError(f'Invalid model: {v}. Allowed models: {", ".join(all_models)}')
+
         return v
     
     @field_validator('conversation_id')
@@ -328,11 +334,11 @@ class SessionRequest(BaseModel):
         """Validate provider selection"""
         if not v:
             return "openai"  # Default provider
-        
-        allowed_providers = ["openai", "together"]
+
+        allowed_providers = ["openai", "together", "ollama"]
         if v.lower() not in allowed_providers:
             raise ValueError(f'Invalid provider: {v}. Allowed providers: {", ".join(allowed_providers)}')
-        
+
         return v.lower()
 
 class SessionResponse(BaseModel):
@@ -417,12 +423,15 @@ class RAGQueryRequest(BaseModel):
             "meta-llama/Llama-3.3-70B-Instruct-Turbo",
             "openai/gpt-oss-20b", "openai/gpt-oss-120b"
         ]
-        
+
+        # For Ollama, allow any model name since they are dynamically fetched
         all_models = openai_models + together_models
-        
-        if v not in all_models:
-            raise ValueError(f'Invalid model: {v}. Allowed models: {", ".join(all_models)}')
-        
+
+        # Skip validation for Ollama models (they are dynamic)
+        if not any(v.startswith(prefix) for prefix in ["llama", "mistral", "codellama", "phi", "gemma", "qwen", "nomic"]):
+            if v not in all_models:
+                raise ValueError(f'Invalid model: {v}. Allowed models: {", ".join(all_models)}')
+
         return v
     
     @field_validator('provider')
@@ -431,17 +440,40 @@ class RAGQueryRequest(BaseModel):
         """Validate provider selection"""
         if not v:
             return "openai"  # Default provider
-        
-        allowed_providers = ["openai", "together"]
+
+        allowed_providers = ["openai", "together", "ollama"]
         if v.lower() not in allowed_providers:
             raise ValueError(f'Invalid provider: {v}. Allowed providers: {", ".join(allowed_providers)}')
-        
+
         return v.lower()
 
 class RAGQueryResponse(BaseModel):
     answer: str
     relevant_chunks_count: int
     document_info: Dict[str, Any]
+
+class OllamaModelsRequest(BaseModel):
+    base_url: str
+
+    @field_validator('base_url')
+    @classmethod
+    def validate_base_url(cls, v):
+        """Validate base URL format"""
+        if not v or not isinstance(v, str):
+            raise ValueError('Base URL is required')
+
+        if len(v.strip()) == 0:
+            raise ValueError('Base URL cannot be empty')
+
+        # Ensure URL has proper format
+        if not v.startswith(('http://', 'https://')):
+            v = f'http://{v}'
+
+        return v.rstrip('/')
+
+class OllamaModelsResponse(BaseModel):
+    models: List[Dict[str, Any]]
+    message: str
 
 # Endpoint to create a new session
 @app.post(
@@ -466,6 +498,36 @@ async def create_session_endpoint(request: Request, session_request: SessionRequ
     except Exception as e:
         print(f"Error creating session: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
+# Ollama models endpoint
+@app.post(
+    "/api/ollama-models",
+    response_model=OllamaModelsResponse,
+    tags=["Ollama"],
+    summary="Get available Ollama models",
+    description="Fetch the list of available models from an Ollama server.",
+    responses={
+        200: {"description": "Models fetched successfully"},
+        400: {"description": "Invalid Ollama server URL"},
+        500: {"description": "Error connecting to Ollama server"}
+    }
+)
+@limiter.limit("10/minute")  # Limit to 10 requests per minute per IP
+async def get_ollama_models(request: Request, models_request: OllamaModelsRequest):
+    try:
+        # Create Ollama client with the provided base URL
+        client = ollama.Client(host=models_request.base_url)
+
+        # Fetch available models
+        models_response = client.list()
+
+        return OllamaModelsResponse(
+            models=models_response.get('models', []),
+            message="Models fetched successfully"
+        )
+    except Exception as e:
+        print(f"Error fetching Ollama models: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error connecting to Ollama server: {str(e)}")
 
 # Define the main chat endpoint that handles POST requests
 @app.post(
@@ -497,11 +559,18 @@ async def chat(
         # Debug logging
         print(f"Received chat request: session_id={session_id[:8]}..., provider={chat_request.provider}, model={chat_request.model}, user_message_length={len(chat_request.user_message)}")
         
-        # Initialize OpenAI client with the provided API key and provider
-        client_kwargs = {"api_key": chat_request.api_key}
-        if chat_request.provider == "together":
-            client_kwargs["base_url"] = "https://api.together.xyz/v1"
-        client = OpenAI(**client_kwargs)
+        # Initialize client based on provider
+        if chat_request.provider == "ollama":
+            # For Ollama, we need the base_url from the request
+            # We'll extract it from the api_key field for now (frontend will send base_url as api_key)
+            base_url = chat_request.api_key  # Frontend sends base_url as api_key for Ollama
+            client = ollama.Client(host=base_url)
+        else:
+            # Initialize OpenAI client with the provided API key and provider
+            client_kwargs = {"api_key": chat_request.api_key}
+            if chat_request.provider == "together":
+                client_kwargs["base_url"] = "https://api.together.xyz/v1"
+            client = OpenAI(**client_kwargs)
         
         # Get session-specific conversations
         user_conversations = get_session_conversations(session_id)
@@ -555,32 +624,54 @@ async def chat(
         # Create an async generator function for streaming responses
         async def generate():
             try:
-                # Create a streaming chat completion request
-                stream = client.chat.completions.create(
-                    model=chat_request.model,
-                    messages=messages_for_openai,
-                    stream=True  # Enable streaming response
-                )
-                
-                # Collect the full response for storage
-                full_response = ""
-                
-                # Yield each chunk of the response as it becomes available
-                for chunk in stream:
-                    # Some providers may send chunks without choices or content (e.g., role updates or keep-alives)
-                    try:
-                        choices = getattr(chunk, "choices", None)
-                        if not choices or len(choices) == 0:
+                if chat_request.provider == "ollama":
+                    # Use Ollama streaming API
+                    stream = client.chat(
+                        model=chat_request.model,
+                        messages=messages_for_openai,
+                        stream=True
+                    )
+
+                    # Collect the full response for storage
+                    full_response = ""
+
+                    # Yield each chunk of the response as it becomes available
+                    for chunk in stream:
+                        try:
+                            content = chunk.get('message', {}).get('content', '')
+                            if content:
+                                full_response += content
+                                yield content
+                        except Exception:
+                            # Be tolerant to provider-specific streaming variations
                             continue
-                        choice0 = choices[0]
-                        delta = getattr(choice0, "delta", None)
-                        content = getattr(delta, "content", None) if delta is not None else None
-                        if content:
-                            full_response += content
-                            yield content
-                    except Exception:
-                        # Be tolerant to provider-specific streaming variations
-                        continue
+                else:
+                    # Create a streaming chat completion request for OpenAI/Together
+                    stream = client.chat.completions.create(
+                        model=chat_request.model,
+                        messages=messages_for_openai,
+                        stream=True  # Enable streaming response
+                    )
+
+                    # Collect the full response for storage
+                    full_response = ""
+
+                    # Yield each chunk of the response as it becomes available
+                    for chunk in stream:
+                        # Some providers may send chunks without choices or content (e.g., role updates or keep-alives)
+                        try:
+                            choices = getattr(chunk, "choices", None)
+                            if not choices or len(choices) == 0:
+                                continue
+                            choice0 = choices[0]
+                            delta = getattr(choice0, "delta", None)
+                            content = getattr(delta, "content", None) if delta is not None else None
+                            if content:
+                                full_response += content
+                                yield content
+                        except Exception:
+                            # Be tolerant to provider-specific streaming variations
+                            continue
                 
                 # Store the assistant's response in conversation history
                 assistant_message = Message(
@@ -777,8 +868,10 @@ async def upload_document(
     request: Request,
     file: UploadFile = File(..., description="Document file to upload (PDF, DOCX, PPTX - max 20MB)"),
     x_session_id: str = Header(..., alias="X-Session-ID", description="Session ID for authentication"),
-    x_api_key: str = Header(..., alias="X-API-Key", description="API key for document processing"),
-    x_provider: str = Header("openai", alias="X-Provider", description="Provider for document processing (openai or together)")
+    x_api_key: str = Header(..., alias="X-API-Key", description="API key for document processing (or base URL for Ollama)"),
+    x_provider: str = Header("openai", alias="X-Provider", description="Provider for document processing (openai, together, or ollama)"),
+    x_base_url: Optional[str] = Header(None, alias="X-Base-URL", description="Base URL for Ollama provider"),
+    x_embedding_model: Optional[str] = Header(None, alias="X-Embedding-Model", description="Embedding model for Ollama provider")
 ):
     """Upload and process a document file for RAG functionality."""
     try:
@@ -786,10 +879,18 @@ async def upload_document(
         session_id = x_session_id
         api_key = x_api_key
         provider = x_provider.lower()
-        
+        base_url = x_base_url
+        embedding_model = x_embedding_model
+
         # Validate provider
-        if provider not in ["openai", "together"]:
-            raise HTTPException(status_code=400, detail="Invalid provider. Must be 'openai' or 'together'")
+        if provider not in ["openai", "together", "ollama"]:
+            raise HTTPException(status_code=400, detail="Invalid provider. Must be 'openai', 'together', or 'ollama'")
+
+        # For Ollama, use base_url as api_key if provided
+        if provider == "ollama":
+            if base_url:
+                api_key = base_url
+            # No API key validation needed for Ollama
         
         # Get hashed API key from session
         if not get_session(session_id):
@@ -830,7 +931,7 @@ async def upload_document(
             document_id = file.filename
             
             # Get or create RAG system for this session with the specified provider
-            rag_system = get_or_create_rag_system(session_id, api_key, provider)
+            rag_system = get_or_create_rag_system(session_id, api_key, provider, base_url, embedding_model)
             
             # Index the document
             await rag_system.index_document(
@@ -864,10 +965,18 @@ async def upload_document(
                 # Generate summary and suggested questions
                 # Initialize ChatOpenAI with the provided API key and provider
                 kwargs = {}
-                kwargs["response_format"] = {"type": "json_object"}
-                chat_model = ChatOpenAI(api_key=api_key, provider=provider)
+                if provider != "ollama":  # Ollama doesn't support response_format
+                    kwargs["response_format"] = {"type": "json_object"}
+
+                if provider == "ollama":
+                    chat_model = ChatOpenAI(api_key=api_key, provider=provider, base_url=base_url)
+                    model_name = "llama3.2:latest"  # Default Ollama model
+                else:
+                    chat_model = ChatOpenAI(api_key=api_key, provider=provider)
+                    model_name = "gpt-4.1-mini" if provider == "openai" else "deepseek-ai/DeepSeek-V3.1"
+
                 response = chat_model.run(
-                    model_name="gpt-4.1-mini" if provider == "openai" else "deepseek-ai/DeepSeek-V3.1",
+                    model_name=model_name,
                     messages=[
                         {"role": "system", "content": system_message},
                         {"role": "user", "content": user_message}
@@ -955,17 +1064,26 @@ async def upload_document(
 )
 @limiter.limit("20/minute")  # Limit to 20 RAG queries per minute per IP
 async def rag_query(
-    request: Request, 
+    request: Request,
     query_request: RAGQueryRequest,
     x_session_id: str = Header(..., alias="X-Session-ID", description="Session ID for authentication"),
-    x_api_key: str = Header(..., alias="X-API-Key", description="OpenAI API key for RAG processing"),
-    x_conversation_id: Optional[str] = Header(None, alias="X-Conversation-ID", description="Conversation ID for tracking RAG queries")
+    x_api_key: str = Header(..., alias="X-API-Key", description="API key for RAG processing (or base URL for Ollama)"),
+    x_conversation_id: Optional[str] = Header(None, alias="X-Conversation-ID", description="Conversation ID for tracking RAG queries"),
+    x_base_url: Optional[str] = Header(None, alias="X-Base-URL", description="Base URL for Ollama provider"),
+    x_embedding_model: Optional[str] = Header(None, alias="X-Embedding-Model", description="Embedding model for Ollama provider")
 ):
     """Query the RAG system with a question."""
     try:
         # Use session ID and API key from header parameters
         session_id = x_session_id
         api_key = x_api_key
+        base_url = x_base_url
+        embedding_model = x_embedding_model
+
+        # For Ollama, use base_url as api_key if provided
+        if query_request.provider == "ollama":
+            if base_url:
+                api_key = base_url
 
         # Debug logging
         print(f"Received RAG query request: session_id={session_id[:8]}..., provider={query_request.provider}, model={query_request.model}, question_length={len(query_request.question)}")
@@ -975,7 +1093,7 @@ async def rag_query(
             raise HTTPException(status_code=401, detail="Invalid or expired session")
         
         # Get RAG system for this session with the specified model and provider
-        rag_system = get_or_create_rag_system(session_id, api_key, query_request.provider)
+        rag_system = get_or_create_rag_system(session_id, api_key, query_request.provider, base_url, embedding_model)
         
         # Query the RAG system with the specified mode and developer message
         answer = rag_system.query(query_request.question, k=query_request.k, mode=query_request.mode, model_name=query_request.model, system_message=query_request.developer_message)
@@ -1063,8 +1181,10 @@ async def rag_query(
 async def get_documents(
     request: Request,
     x_session_id: str = Header(..., alias="X-Session-ID", description="Session ID for authentication"),
-    x_api_key: str = Header(..., alias="X-API-Key", description="API key for document processing"),
-    x_provider: str = Header("openai", alias="X-Provider", description="Provider for document processing (openai or together)")
+    x_api_key: str = Header(..., alias="X-API-Key", description="API key for document processing (or base URL for Ollama)"),
+    x_provider: str = Header("openai", alias="X-Provider", description="Provider for document processing (openai, together, or ollama)"),
+    x_base_url: Optional[str] = Header(None, alias="X-Base-URL", description="Base URL for Ollama provider"),
+    x_embedding_model: Optional[str] = Header(None, alias="X-Embedding-Model", description="Embedding model for Ollama provider")
 ):
     """Get information about uploaded documents for the session."""
     try:
@@ -1072,17 +1192,24 @@ async def get_documents(
         session_id = x_session_id
         api_key = x_api_key
         provider = x_provider.lower()
-        
+        base_url = x_base_url
+        embedding_model = x_embedding_model
+
         # Validate provider
-        if provider not in ["openai", "together"]:
-            raise HTTPException(status_code=400, detail="Invalid provider. Must be 'openai' or 'together'")
+        if provider not in ["openai", "together", "ollama"]:
+            raise HTTPException(status_code=400, detail="Invalid provider. Must be 'openai', 'together', or 'ollama'")
+
+        # For Ollama, use base_url as api_key if provided
+        if provider == "ollama":
+            if base_url:
+                api_key = base_url
         
         # Validate session
         if not get_session(session_id):
             raise HTTPException(status_code=401, detail="Invalid or expired session")
         
         # Get RAG system for this session with the specified provider
-        rag_system = get_or_create_rag_system(session_id, api_key, provider)
+        rag_system = get_or_create_rag_system(session_id, api_key, provider, base_url, embedding_model)
         
         # Get document info
         doc_info = rag_system.get_document_info()

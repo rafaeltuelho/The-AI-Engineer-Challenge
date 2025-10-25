@@ -72,6 +72,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     return isNaN(parsed) ? 280 : parsed
   })
   const [isResizing, setIsResizing] = useState<boolean>(false)
+  const [ollamaModels, setOllamaModels] = useState<string[]>(['llama3.2:latest', 'mistral:latest', 'codellama:latest'])
+  const [isLoadingOllamaModels, setIsLoadingOllamaModels] = useState(false)
+  const [ollamaServerUrl, setOllamaServerUrl] = useState<string>('http://localhost:11434')
 
   // Default developer messages for each chat mode
   const getDefaultDeveloperMessage = (mode: 'regular' | 'rag' | 'topic-explorer'): string => {
@@ -123,21 +126,58 @@ Sample JSON output:
     }
   }
 
+  // Fetch available Ollama models
+  const fetchOllamaModels = async (serverUrl: string) => {
+    if (!serverUrl.trim()) return
+
+    setIsLoadingOllamaModels(true)
+    try {
+      const response = await fetch('/api/ollama-models', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          base_url: serverUrl
+        })
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch Ollama models')
+      }
+
+      const data = await response.json()
+      const modelNames = data.models.map((model: any) => model.name)
+      setOllamaModels(modelNames.length > 0 ? modelNames : ['llama3.2:latest'])
+
+      // Set the first available model as selected if current model is not in the list
+      if (modelNames.length > 0 && !modelNames.includes(selectedModel)) {
+        setSelectedModel(modelNames[0])
+      }
+    } catch (error) {
+      console.error('Error fetching Ollama models:', error)
+      setOllamaModels(['llama3.2:latest', 'mistral:latest', 'codellama:latest'])
+    } finally {
+      setIsLoadingOllamaModels(false)
+    }
+  }
+
   // Filter available models based on chat mode and provider
   const getAvailableModels = () => {
     const openaiModels = [
       'gpt-4', 'gpt-4-mini', 'gpt-4-turbo', 'gpt-4o', 'gpt-4o-mini',
       'gpt-4.1', 'gpt-4.1-mini', 'gpt-4.1-nano', 'gpt-5', 'gpt-5-mini', 'gpt-5-nano'
     ]
-    
+
     const togetherModels = [
       'deepseek-ai/DeepSeek-R1', 'deepseek-ai/DeepSeek-V3.1', 'deepseek-ai/DeepSeek-V3',
       'meta-llama/Llama-3.3-70B-Instruct-Turbo',
       'openai/gpt-oss-20b', 'openai/gpt-oss-120b', 'moonshotai/Kimi-K2-Instruct-0905'
     ]
-    
+
     // Filter by provider first
-    let availableModels = selectedProvider === 'together' ? togetherModels : openaiModels
+    let availableModels = selectedProvider === 'together' ? togetherModels :
+                         selectedProvider === 'ollama' ? ollamaModels : openaiModels
     
     if (chatMode === 'topic-explorer') {
       // Only allow specific models for Topic Explorer mode
@@ -244,6 +284,13 @@ Sample JSON output:
       setShowApiKeySuccess(true)
     }
   }, [apiKey, showApiKeySuccess])
+
+  // Fetch Ollama models when provider changes to Ollama and server URL is available
+  useEffect(() => {
+    if (selectedProvider === 'ollama' && apiKey.trim()) {
+      fetchOllamaModels(apiKey)
+    }
+  }, [selectedProvider, apiKey])
 
   const loadConversations = async () => {
     try {
@@ -422,14 +469,22 @@ Sample JSON output:
       const isRagMode = chatMode === 'rag' || chatMode === 'topic-explorer'
       const endpoint = isRagMode ? '/api/rag-query' : '/api/chat'
       
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'X-Session-ID': sessionId,
+        'X-API-Key': apiKey,
+        ...(isRagMode && conversationId ? { 'X-Conversation-ID': conversationId } : {})
+      }
+
+      // Add Ollama-specific headers for RAG queries
+      if (isRagMode && selectedProvider === 'ollama') {
+        headers['X-Base-URL'] = apiKey
+        headers['X-Embedding-Model'] = 'nomic-embed-text:latest'
+      }
+
       const response = await fetch(endpoint, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Session-ID': sessionId,
-          'X-API-Key': apiKey,
-          ...(isRagMode && conversationId ? { 'X-Conversation-ID': conversationId } : {})
-        },
+        headers,
         body: JSON.stringify(isRagMode ? {
           question: currentMessage,
           developer_message: developerMessage,
@@ -743,13 +798,21 @@ Sample JSON output:
       const formData = new FormData()
       formData.append('file', file)
 
+      const headers: Record<string, string> = {
+        'X-Session-ID': sessionId,
+        'X-API-Key': apiKey,
+        'X-Provider': selectedProvider
+      }
+
+      // Add Ollama-specific headers if needed
+      if (selectedProvider === 'ollama') {
+        headers['X-Base-URL'] = apiKey
+        headers['X-Embedding-Model'] = 'nomic-embed-text:latest'
+      }
+
       const response = await fetch('/api/upload-document', {
         method: 'POST',
-        headers: {
-          'X-Session-ID': sessionId,
-          'X-API-Key': apiKey,
-          'X-Provider': selectedProvider
-        },
+        headers,
         body: formData
       })
 
@@ -838,12 +901,15 @@ Sample JSON output:
                   >
                     <option value="openai">OpenAI</option>
                     <option value="together">Together.ai</option>
+                    <option value="ollama">Ollama (Local)</option>
                   </select>
                   <div className="provider-info">
                     {selectedProvider === 'openai' ? (
                       <span>Using OpenAI's GPT models</span>
-                    ) : (
+                    ) : selectedProvider === 'together' ? (
                       <span>Using Together.ai's open-source models</span>
+                    ) : (
+                      <span>Using local Ollama models</span>
                     )}
                   </div>
                 </div>
@@ -857,34 +923,74 @@ Sample JSON output:
               >
                 <div className="section-title">
                   <Key size={14} />
-                  <span>API Key</span>
+                  <span>{selectedProvider === 'ollama' ? 'Server URL' : 'API Key'}</span>
                 </div>
                 {expandedSections.apiKey ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
               </div>
               {expandedSections.apiKey && (
                 <div className="section-content">
-                  <input
-                    id="api-key"
-                    type="password"
-                    value={apiKey}
-                    onChange={(e) => setApiKey(e.target.value)}
-                    placeholder={`${selectedProvider === 'together' ? 'Together.ai key: tgp_' : 'OpenAI key: sk-'} ...`}
-                    className="api-key-input"
-                  />
-                  {apiKey.trim() && showApiKeyInfo && (
-                    <div className="api-key-info">
-                      <div className="info-icon">ℹ️</div>
-                      <div className="info-text">
-                        Your API key is only used for this session and is not stored or persisted anywhere!
-                      </div>
-                      <button 
-                        className="dismiss-info-btn"
-                        onClick={dismissApiKeyInfo}
-                        title="Dismiss"
+                  {selectedProvider === 'ollama' ? (
+                    <>
+                      <input
+                        id="ollama-url"
+                        type="text"
+                        value={apiKey}
+                        onChange={(e) => {
+                          setApiKey(e.target.value)
+                          setOllamaServerUrl(e.target.value)
+                        }}
+                        placeholder="http://localhost:11434"
+                        className="api-key-input"
+                      />
+                      <button
+                        onClick={() => fetchOllamaModels(apiKey)}
+                        disabled={isLoadingOllamaModels || !apiKey.trim()}
+                        className="fetch-models-btn"
                       >
-                        <X size={12} />
+                        {isLoadingOllamaModels ? 'Loading...' : 'Fetch Models'}
                       </button>
-                    </div>
+                      {apiKey.trim() && showApiKeyInfo && (
+                        <div className="api-key-info">
+                          <div className="info-icon">ℹ️</div>
+                          <div className="info-text">
+                            Enter your Ollama server URL. No API key required for local Ollama!
+                          </div>
+                          <button
+                            className="dismiss-info-btn"
+                            onClick={dismissApiKeyInfo}
+                            title="Dismiss"
+                          >
+                            <X size={12} />
+                          </button>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      <input
+                        id="api-key"
+                        type="password"
+                        value={apiKey}
+                        onChange={(e) => setApiKey(e.target.value)}
+                        placeholder={`${selectedProvider === 'together' ? 'Together.ai key: tgp_' : 'OpenAI key: sk-'} ...`}
+                        className="api-key-input"
+                      />
+                      {apiKey.trim() && showApiKeyInfo && (
+                        <div className="api-key-info">
+                          <div className="info-icon">ℹ️</div>
+                          <div className="info-text">
+                            Your API key is only used for this session and is not stored or persisted anywhere!
+                          </div>
+                          <button
+                            className="dismiss-info-btn"
+                            onClick={dismissApiKeyInfo}
+                            title="Dismiss"
+                          >
+                            <X size={12} />
+                          </button>
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
               )}
@@ -1103,7 +1209,7 @@ Sample JSON output:
         {!apiKey.trim() && (
           <div className="api-key-warning">
             <Key size={16} />
-            Please enter your {selectedProvider === 'together' ? 'Together.ai' : 'OpenAI'} API key in settings to start chatting
+            Please enter your {selectedProvider === 'together' ? 'Together.ai API key' : selectedProvider === 'ollama' ? 'Ollama server URL' : 'OpenAI API key'} in settings to start chatting
           </div>
         )}
 

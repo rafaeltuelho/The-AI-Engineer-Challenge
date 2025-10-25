@@ -353,12 +353,25 @@ class DocumentProcessor:
 class RAGSystem:
     """RAG (Retrieval-Augmented Generation) system using aimakerspace library."""
     
-    def __init__(self, api_key: str, provider: str = "openai"):
+    def __init__(self, api_key: str, provider: str = "openai", base_url: str = None, embedding_model: str = None):
         self.api_key = api_key
         self.provider = provider
-        self.embedding_model = EmbeddingModel(api_key=api_key, provider=provider)
+        self.base_url = base_url
+
+        # Initialize embedding model with provider-specific settings
+        if provider == "ollama":
+            self.embedding_model = EmbeddingModel(
+                api_key=api_key,
+                provider=provider,
+                base_url=base_url,
+                embedding_model=embedding_model or "nomic-embed-text:latest"
+            )
+            self.chat_model = ChatOpenAI(api_key=api_key, provider=provider, base_url=base_url)
+        else:
+            self.embedding_model = EmbeddingModel(api_key=api_key, provider=provider)
+            self.chat_model = ChatOpenAI(api_key=api_key, provider=provider)
+
         self.vector_db = VectorDatabase(embedding_model=self.embedding_model, api_key=api_key)
-        self.chat_model = ChatOpenAI(api_key=api_key, provider=provider)
         self.documents = {}  # Store document metadata
         self.topic_explorer_system_message = """
         You are an educational study companion for middle school students learning Math, Science, or US History. 
@@ -650,8 +663,13 @@ class RAGSystem:
 # Global RAG systems storage
 rag_systems = {}
 
-def get_or_create_rag_system(session_id: str, api_key: str, provider: str = "openai") -> RAGSystem:
+def get_or_create_rag_system(session_id: str, api_key: str, provider: str = "openai", base_url: str = None, embedding_model: str = None) -> RAGSystem:
     """Get existing or create new RAG system for session."""
     if session_id not in rag_systems:
-        rag_systems[session_id] = RAGSystem(api_key=api_key, provider=provider)
+        rag_systems[session_id] = RAGSystem(
+            api_key=api_key,
+            provider=provider,
+            base_url=base_url,
+            embedding_model=embedding_model
+        )
     return rag_systems[session_id]

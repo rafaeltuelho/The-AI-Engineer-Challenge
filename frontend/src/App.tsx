@@ -6,6 +6,7 @@ import './App.css'
 function App() {
   const [openaiApiKey, setOpenaiApiKey] = useState<string>('')
   const [togetherApiKey, setTogetherApiKey] = useState<string>('')
+  const [ollamaServerUrl, setOllamaServerUrl] = useState<string>('http://localhost:11434')
   const [sessionId, setSessionId] = useState<string>('')
   const [theme, setTheme] = useState<'light' | 'dark'>('light')
   const [selectedModel, setSelectedModel] = useState<string>('gpt-5-nano')
@@ -80,11 +81,13 @@ function App() {
   const handleApiKeyChange = async (newApiKey: string) => {
     if (selectedProvider === 'together') {
       setTogetherApiKey(newApiKey)
+    } else if (selectedProvider === 'ollama') {
+      setOllamaServerUrl(newApiKey)
     } else {
       setOpenaiApiKey(newApiKey)
     }
     const effectiveKey = newApiKey.trim()
-    
+
     if (effectiveKey) {
       // Always create a new session when API key is provided (even if updating existing key)
       await createSession(effectiveKey, selectedProvider)
@@ -100,6 +103,8 @@ function App() {
     // Set default model based on provider
     if (newProvider === 'together') {
       setSelectedModel('deepseek-ai/DeepSeek-V3.1')
+    } else if (newProvider === 'ollama') {
+      setSelectedModel('llama3.2:latest')
     } else {
       setSelectedModel('gpt-5-nano')
     }
@@ -121,9 +126,9 @@ function App() {
         modelDescription={modelDescriptions[selectedModel as keyof typeof modelDescriptions]}
       />
       <main className="main-content">
-        <ChatInterface 
-          apiKey={selectedProvider === 'together' ? togetherApiKey : openaiApiKey} 
-          setApiKey={handleApiKeyChange} 
+        <ChatInterface
+          apiKey={selectedProvider === 'together' ? togetherApiKey : selectedProvider === 'ollama' ? ollamaServerUrl : openaiApiKey}
+          setApiKey={handleApiKeyChange}
           sessionId={sessionId}
           selectedModel={selectedModel}
           setSelectedModel={setSelectedModel}
