@@ -6,6 +6,8 @@ interface RAGQueryProps {
   sessionId: string
   apiKey: string
   onQueryResult: (result: any) => void
+  provider?: string
+  ollamaBaseUrl?: string
 }
 
 interface QueryResult {
@@ -17,7 +19,13 @@ interface QueryResult {
   }
 }
 
-const RAGQuery: React.FC<RAGQueryProps> = ({ sessionId, apiKey, onQueryResult }) => {
+const RAGQuery: React.FC<RAGQueryProps> = ({
+  sessionId,
+  apiKey,
+  onQueryResult,
+  provider = 'openai',
+  ollamaBaseUrl = ''
+}) => {
   const [query, setQuery] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -31,16 +39,25 @@ const RAGQuery: React.FC<RAGQueryProps> = ({ sessionId, apiKey, onQueryResult })
     setError(null)
 
     try {
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'X-Session-ID': sessionId,
+        'X-API-Key': apiKey
+      }
+
+      // Add Ollama base URL header if using Ollama provider
+      if (provider === 'ollama' && ollamaBaseUrl) {
+        headers['X-Ollama-Base-URL'] = ollamaBaseUrl
+      }
+
       const response = await fetch('/api/rag-query', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Session-ID': sessionId,
-          'X-API-Key': apiKey
-        },
+        headers,
         body: JSON.stringify({
           question: query.trim(),
-          k: 5
+          k: 5,
+          provider,
+          ...(provider === 'ollama' && ollamaBaseUrl ? { ollama_base_url: ollamaBaseUrl } : {})
         })
       })
 

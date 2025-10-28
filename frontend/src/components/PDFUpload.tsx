@@ -6,6 +6,8 @@ interface DocumentUploadProps {
   sessionId: string
   apiKey: string
   onDocumentUploaded: (documentInfo: any, suggestedQuestions?: string[], summary?: string) => void
+  provider?: string
+  ollamaBaseUrl?: string
 }
 
 interface UploadedDocument {
@@ -15,7 +17,13 @@ interface UploadedDocument {
   upload_time: Date
 }
 
-const DocumentUpload: React.FC<DocumentUploadProps> = ({ sessionId, apiKey, onDocumentUploaded }) => {
+const DocumentUpload: React.FC<DocumentUploadProps> = ({
+  sessionId,
+  apiKey,
+  onDocumentUploaded,
+  provider = 'openai',
+  ollamaBaseUrl = ''
+}) => {
   const [isDragOver, setIsDragOver] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
   const [uploadedDocuments, setUploadedDocuments] = useState<UploadedDocument[]>([])
@@ -94,12 +102,20 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ sessionId, apiKey, onDo
       const formData = new FormData()
       formData.append('file', file)
 
+      const headers: Record<string, string> = {
+        'X-Session-ID': sessionId,
+        'X-API-Key': apiKey,
+        'X-Provider': provider
+      }
+
+      // Add Ollama base URL header if using Ollama provider
+      if (provider === 'ollama' && ollamaBaseUrl) {
+        headers['X-Ollama-Base-URL'] = ollamaBaseUrl
+      }
+
       const response = await fetch('/api/upload-document', {
         method: 'POST',
-        headers: {
-          'X-Session-ID': sessionId,
-          'X-API-Key': apiKey
-        },
+        headers,
         body: formData
       })
 

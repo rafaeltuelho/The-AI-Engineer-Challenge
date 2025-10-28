@@ -6,6 +6,8 @@ import './App.css'
 function App() {
   const [openaiApiKey, setOpenaiApiKey] = useState<string>('')
   const [togetherApiKey, setTogetherApiKey] = useState<string>('')
+  const [ollamaBaseUrl, setOllamaBaseUrl] = useState<string>('')
+  const [ollamaModels, setOllamaModels] = useState<string[]>([])
   const [sessionId, setSessionId] = useState<string>('')
   const [theme, setTheme] = useState<'light' | 'dark'>('light')
   const [selectedModel, setSelectedModel] = useState<string>('gpt-5-nano')
@@ -31,7 +33,12 @@ function App() {
     'meta-llama/Llama-3.3-70B-Instruct-Turbo': 'Llama 3.3 70B Turbo',
     'openai/gpt-oss-20b': 'OpenAI GPT OSS 20B',
     'openai/gpt-oss-120b': 'OpenAI GPT OSS 120B',
-    'moonshotai/Kimi-K2-Instruct-0905': 'Moonshot.ai Kimi K2 Instruct 0905'
+    'moonshotai/Kimi-K2-Instruct-0905': 'Moonshot.ai Kimi K2 Instruct 0905',
+    // Ollama models (populated dynamically)
+    'mistral': 'Mistral 7B model',
+    'neural-chat': 'Neural Chat model',
+    'dolphin-mixtral': 'Dolphin Mixtral model',
+    'llama2': 'Llama 2 model'
   }
 
   // Load theme preference from localStorage on component mount
@@ -94,12 +101,36 @@ function App() {
     }
   }
 
+  // Fetch available models from Ollama server
+  const fetchOllamaModels = async (baseUrl: string) => {
+    try {
+      const response = await fetch(`/api/ollama/models?ollama_base_url=${encodeURIComponent(baseUrl)}`)
+      if (response.ok) {
+        const data = await response.json()
+        setOllamaModels(data.models || [])
+        // Set first model as default if available
+        if (data.models && data.models.length > 0) {
+          setSelectedModel(data.models[0])
+        }
+      } else {
+        console.error('Failed to fetch Ollama models:', response.statusText)
+        setOllamaModels([])
+      }
+    } catch (error) {
+      console.error('Error fetching Ollama models:', error)
+      setOllamaModels([])
+    }
+  }
+
   // Handle provider changes
   const handleProviderChange = async (newProvider: string) => {
     setSelectedProvider(newProvider)
     // Set default model based on provider
     if (newProvider === 'together') {
       setSelectedModel('deepseek-ai/DeepSeek-V3.1')
+    } else if (newProvider === 'ollama') {
+      // For Ollama, we'll set model after fetching available models
+      setSelectedModel('mistral')
     } else {
       setSelectedModel('gpt-5-nano')
     }
@@ -121,15 +152,25 @@ function App() {
         modelDescription={modelDescriptions[selectedModel as keyof typeof modelDescriptions]}
       />
       <main className="main-content">
-        <ChatInterface 
-          apiKey={selectedProvider === 'together' ? togetherApiKey : openaiApiKey} 
-          setApiKey={handleApiKeyChange} 
+        <ChatInterface
+          apiKey={
+            selectedProvider === 'together'
+              ? togetherApiKey
+              : selectedProvider === 'ollama'
+              ? 'ollama'
+              : openaiApiKey
+          }
+          setApiKey={handleApiKeyChange}
           sessionId={sessionId}
           selectedModel={selectedModel}
           setSelectedModel={setSelectedModel}
           selectedProvider={selectedProvider}
           setSelectedProvider={handleProviderChange}
           modelDescriptions={modelDescriptions}
+          ollamaBaseUrl={ollamaBaseUrl}
+          ollamaModels={ollamaModels}
+          onOllamaBaseUrlChange={setOllamaBaseUrl}
+          onFetchOllamaModels={fetchOllamaModels}
         />
       </main>
     </div>
