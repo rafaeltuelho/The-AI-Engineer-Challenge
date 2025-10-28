@@ -479,16 +479,6 @@ class RAGSystem:
             raise Exception(f"Error searching chunks: {str(e)}")
     
     async def query_documents(self, query: str, k: int = 3, mode: str = "rag", model_name: str = "gpt-4o-mini") -> str:
-        """
-        Query documents using RAG approach.
-        
-        Args:
-            query: User query
-            k: Number of chunks to retrieve
-        
-        Returns:
-            Generated response based on retrieved chunks
-        """
         try:
             # Search for relevant chunks
             relevant_chunks = self.search_relevant_chunks(query, k=k)

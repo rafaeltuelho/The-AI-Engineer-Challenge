@@ -8,14 +8,6 @@ load_dotenv()
 
 class ChatOpenAI:
     def __init__(self, api_key: str = None, provider: str = "openai", ollama_base_url: str = None):
-        """
-        Initialize ChatOpenAI with support for multiple providers.
-
-        Args:
-            api_key: API key for the provider (not required for Ollama)
-            provider: Provider name ("openai", "together", or "ollama")
-            ollama_base_url: Base URL for Ollama server (required if provider is "ollama")
-        """
         self.provider = provider.lower()
         self.api_key = api_key  # or os.getenv("OPENAI_API_KEY")
         self.ollama_base_url = ollama_base_url

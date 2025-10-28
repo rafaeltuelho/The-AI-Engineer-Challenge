@@ -457,15 +457,7 @@ class RAGQueryResponse(BaseModel):
 
 # Endpoint to create a new session
 @app.post(
-    "/api/session",
-    response_model=SessionResponse,
-    tags=["Authentication"],
-    summary="Create a new session",
-    description="Create a new authenticated session using your OpenAI API key. Returns a session ID that you'll use for subsequent requests.",
-    responses={
-        200: {"description": "Session created successfully"},
-        500: {"description": "Internal server error"}
-    }
+    "/api/session"
 )
 @limiter.limit("5/minute")  # Limit to 5 session creations per minute per IP
 async def create_session_endpoint(request: Request, session_request: SessionRequest):
