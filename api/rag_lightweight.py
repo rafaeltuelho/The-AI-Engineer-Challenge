@@ -353,12 +353,28 @@ class DocumentProcessor:
 class RAGSystem:
     """RAG (Retrieval-Augmented Generation) system using aimakerspace library."""
     
-    def __init__(self, api_key: str, provider: str = "openai"):
+    def __init__(
+        self, api_key: str, provider: str = "openai", ollama_base_url: str = None
+    ):
         self.api_key = api_key
         self.provider = provider
-        self.embedding_model = EmbeddingModel(api_key=api_key, provider=provider)
-        self.vector_db = VectorDatabase(embedding_model=self.embedding_model, api_key=api_key)
-        self.chat_model = ChatOpenAI(api_key=api_key, provider=provider)
+        self.ollama_base_url = ollama_base_url
+
+        # Initialize embedding model with Ollama support
+        embedding_kwargs = {"api_key": api_key, "provider": provider}
+        if provider == "ollama":
+            embedding_kwargs["ollama_base_url"] = ollama_base_url
+        self.embedding_model = EmbeddingModel(**embedding_kwargs)
+
+        self.vector_db = VectorDatabase(
+            embedding_model=self.embedding_model, api_key=api_key
+        )
+
+        # Initialize chat model with Ollama support
+        chat_kwargs = {"api_key": api_key, "provider": provider}
+        if provider == "ollama":
+            chat_kwargs["ollama_base_url"] = ollama_base_url
+        self.chat_model = ChatOpenAI(**chat_kwargs)
         self.documents = {}  # Store document metadata
         self.topic_explorer_system_message = """
         You are an educational study companion for middle school students learning Math, Science, or US History. 
@@ -650,8 +666,17 @@ class RAGSystem:
 # Global RAG systems storage
 rag_systems = {}
 
-def get_or_create_rag_system(session_id: str, api_key: str, provider: str = "openai") -> RAGSystem:
+def get_or_create_rag_system(
+    session_id: str,
+    api_key: str,
+    provider: str = "openai",
+    ollama_base_url: str = None
+) -> RAGSystem:
     """Get existing or create new RAG system for session."""
     if session_id not in rag_systems:
-        rag_systems[session_id] = RAGSystem(api_key=api_key, provider=provider)
+        rag_systems[session_id] = RAGSystem(
+            api_key=api_key,
+            provider=provider,
+            ollama_base_url=ollama_base_url
+        )
     return rag_systems[session_id]
