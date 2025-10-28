@@ -30,4 +30,4 @@ jobs:
             - Ensure all new API endpoints have proper input validation
             - Ensure that all API endpoints are properly documented in the OpenAPI schema
             - Verify that new components follow our design system
-            - Suggest minimal diffs the author can copy/paste to address issues
+            - Always generate minimal diffs for portions that deserve attention, so the author can copy/paste to address issues
