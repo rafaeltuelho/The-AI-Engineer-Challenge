@@ -1,0 +1,33 @@
+# Basic PR Review Generation
+# Automatically generates AI-powered reviews for new pull requests
+
+name: Auto-review PRs
+on:
+  pull_request:
+    types: [opened]
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Generate PR Review
+        uses: augmentcode/review-pr@v0
+        with:
+          augment_session_auth: ${{ secrets.AUGMENT_SESSION_AUTH }}
+          github_token: ${{ secrets.GIT_PAT_TOKEN }}
+          pull_number: ${{ github.event.pull_request.number }}
+          repo_name: ${{ github.repository }}
+          custom_guidelines: |
+            - Focus on Python type safety and avoid using `any`
+            - Ensure all new functions have proper Python docstrings
+            - Check for proper error handling in async functions
+            - Verify that all new dependencies are properly added to `pyproject.toml` and `requirements.txt`
+            - Check proper logging is in place and avoid proliferation of `print` statements
+            - Ensure all UI changes are responsive and accessible
+            - Ensure all new API endpoints have proper input validation
+            - Ensure that all API endpoints are properly documented in the OpenAPI schema
+            - Verify that new components follow our design system
+            - Suggest minimal diffs the author can copy/paste to address issues
