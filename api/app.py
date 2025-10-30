@@ -198,32 +198,32 @@ class ChatRequest(BaseModel):
     user_message: str      # Message from the user
     model: Optional[str] = "gpt-4.1-mini"  # Optional model selection with default
     api_key: str          # API key for authentication
-    provider: Optional[str] = "openai"  # Provider selection: "openai" or "together"
-    
+    provider: Optional[str] = "openai"  # Provider selection: "openai", "together", or "anthropic"
+
     @field_validator('api_key')
     @classmethod
     def validate_api_key(cls, v):
         """Validate API key format"""
         if not v or not isinstance(v, str):
             raise ValueError('API key is required')
-        
+
         # Just check that it's not empty and is a string
         if len(v.strip()) == 0:
             raise ValueError('API key cannot be empty')
-        
+
         return v
-    
+
     @field_validator('provider')
     @classmethod
     def validate_provider(cls, v):
         """Validate provider selection"""
         if not v:
             return "openai"  # Default provider
-        
-        allowed_providers = ["openai", "together"]
+
+        allowed_providers = ["openai", "together", "anthropic"]
         if v.lower() not in allowed_providers:
             raise ValueError(f'Invalid provider: {v}. Allowed providers: {", ".join(allowed_providers)}')
-        
+
         return v.lower()
     
     @field_validator('user_message')
@@ -259,26 +259,32 @@ class ChatRequest(BaseModel):
         """Validate model selection"""
         if not v:
             return "gpt-4.1-mini"  # Default model
-        
+
         # List of allowed models for OpenAI
         openai_models = [
             "gpt-4", "gpt-4-mini", "gpt-4-turbo", "gpt-4o", "gpt-4o-mini",
             "gpt-4.1", "gpt-4.1-mini", "gpt-4.1-nano", "gpt-5", "gpt-5-mini", "gpt-5-nano"
         ]
-        
+
         # List of allowed models for Together.ai
         together_models = [
             "deepseek-ai/DeepSeek-R1", "deepseek-ai/DeepSeek-V3.1", "deepseek-ai/DeepSeek-V3",
-            "meta-llama/Llama-3.3-70B-Instruct-Turbo", 
+            "meta-llama/Llama-3.3-70B-Instruct-Turbo",
             "openai/gpt-oss-20b", "openai/gpt-oss-120b", "moonshotai/Kimi-K2-Instruct-0905",
             "Qwen/Qwen3-Next-80B-A3B-Thinking"
         ]
-        
-        all_models = openai_models + together_models
-        
+
+        # List of allowed models for Anthropic (Claude 4 and 4.5 families)
+        anthropic_models = [
+            "claude-sonnet-4-5", "claude-haiku-4-5", "claude-opus-4-1",
+            "claude-sonnet-4", "claude-opus-4", "claude-haiku-3-5"
+        ]
+
+        all_models = openai_models + together_models + anthropic_models
+
         if v not in all_models:
             raise ValueError(f'Invalid model: {v}. Allowed models: {", ".join(all_models)}')
-        
+
         return v
     
     @field_validator('conversation_id')
@@ -358,7 +364,7 @@ class RAGQueryRequest(BaseModel):
     k: Optional[int] = 5  # Number of relevant chunks to retrieve
     model: Optional[str] = "gpt-4.1"  # Model selection for RAG queries
     mode: Optional[str] = "rag"  # RAG mode: "rag" or "topic-explorer"
-    provider: Optional[str] = "openai"  # Provider selection: "openai" or "together"
+    provider: Optional[str] = "openai"  # Provider selection: "openai", "together", or "anthropic"
     
     @field_validator('question')
     @classmethod
@@ -408,13 +414,13 @@ class RAGQueryRequest(BaseModel):
         """Validate model selection"""
         if not v:
             return "gpt-4.1-mini"  # Default model
-        
+
         # List of allowed models for OpenAI
         openai_models = [
             "gpt-4", "gpt-4-mini", "gpt-4-turbo", "gpt-4o", "gpt-4o-mini",
             "gpt-4.1", "gpt-4.1-mini", "gpt-4.1-nano", "gpt-5", "gpt-5-mini", "gpt-5-nano"
         ]
-        
+
         # List of allowed models for Together.ai
         together_models = [
             "deepseek-ai/DeepSeek-R1", "deepseek-ai/DeepSeek-V3.1", "deepseek-ai/DeepSeek-V3",
@@ -422,25 +428,31 @@ class RAGQueryRequest(BaseModel):
             "openai/gpt-oss-20b", "openai/gpt-oss-120b", "moonshotai/Kimi-K2-Instruct-0905",
             "Qwen/Qwen3-Next-80B-A3B-Thinking"
         ]
-        
-        all_models = openai_models + together_models
-        
+
+        # List of allowed models for Anthropic (Claude 4 and 4.5 families)
+        anthropic_models = [
+            "claude-sonnet-4-5", "claude-haiku-4-5", "claude-opus-4-1",
+            "claude-sonnet-4", "claude-opus-4", "claude-haiku-3-5"
+        ]
+
+        all_models = openai_models + together_models + anthropic_models
+
         if v not in all_models:
             raise ValueError(f'Invalid model: {v}. Allowed models: {", ".join(all_models)}')
-        
+
         return v
-    
+
     @field_validator('provider')
     @classmethod
     def validate_provider(cls, v):
         """Validate provider selection"""
         if not v:
             return "openai"  # Default provider
-        
-        allowed_providers = ["openai", "together"]
+
+        allowed_providers = ["openai", "together", "anthropic"]
         if v.lower() not in allowed_providers:
             raise ValueError(f'Invalid provider: {v}. Allowed providers: {", ".join(allowed_providers)}')
-        
+
         return v.lower()
 
 class RAGQueryResponse(BaseModel):
@@ -506,6 +518,8 @@ async def chat(
         client_kwargs = {"api_key": chat_request.api_key}
         if chat_request.provider == "together":
             client_kwargs["base_url"] = "https://api.together.xyz/v1"
+        elif chat_request.provider == "anthropic":
+            client_kwargs["base_url"] = "https://api.anthropic.com/v1"
         client = OpenAI(**client_kwargs)
         
         # Get session-specific conversations
@@ -1120,6 +1134,26 @@ if __name__ == "__main__":
 
 # Entry point for running the application directly
 if __name__ == "__main__":
+    import uvicorn
+
+    # Start the server on all network interfaces (0.0.0.0) on port 8000
+    uvicorn.run(app, host="0.0.0.0", port=8000)
+    import uvicorn
+
+    # Start the server on all network interfaces (0.0.0.0) on port 8000
+    uvicorn.run(app, host="0.0.0.0", port=8000)
+    import uvicorn
+
+    # Start the server on all network interfaces (0.0.0.0) on port 8000
+    uvicorn.run(app, host="0.0.0.0", port=8000)
+    import uvicorn
+
+    # Start the server on all network interfaces (0.0.0.0) on port 8000
+    uvicorn.run(app, host="0.0.0.0", port=8000)
+    import uvicorn
+
+    # Start the server on all network interfaces (0.0.0.0) on port 8000
+    uvicorn.run(app, host="0.0.0.0", port=8000)
     import uvicorn
     # Start the server on all network interfaces (0.0.0.0) on port 8000
     uvicorn.run(app, host="0.0.0.0", port=8000)

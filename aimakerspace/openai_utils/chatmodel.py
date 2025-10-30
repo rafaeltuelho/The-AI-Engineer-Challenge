@@ -1,7 +1,8 @@
-from openai import OpenAI
-from dotenv import load_dotenv
 import os
 from typing import Optional
+
+from dotenv import load_dotenv
+from openai import OpenAI
 
 load_dotenv()
 
@@ -10,20 +11,22 @@ class ChatOpenAI:
     def __init__(self, api_key: str = None, provider: str = "openai"):
         """
         Initialize ChatOpenAI with support for multiple providers.
-        
+
         Args:
             api_key: API key for the provider
-            provider: Provider name ("openai" or "together")
+            provider: Provider name ("openai", "together", or "anthropic")
         """
         self.provider = provider.lower()
         self.api_key = api_key #or os.getenv("OPENAI_API_KEY")
-        
+
         if self.api_key is None:
             raise ValueError(f"{self.provider.title()} API key must be provided either as parameter or environment variable")
-        
+
         # Set base URL based on provider
         if self.provider == "together":
             self.base_url = "https://api.together.xyz/v1"
+        elif self.provider == "anthropic":
+            self.base_url = "https://api.anthropic.com/v1"
         else:
             self.base_url = None  # Use default OpenAI base URL
 
