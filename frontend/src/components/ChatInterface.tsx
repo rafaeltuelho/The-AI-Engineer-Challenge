@@ -133,7 +133,8 @@ Sample JSON output:
     const togetherModels = [
       'deepseek-ai/DeepSeek-R1', 'deepseek-ai/DeepSeek-V3.1', 'deepseek-ai/DeepSeek-V3',
       'meta-llama/Llama-3.3-70B-Instruct-Turbo',
-      'openai/gpt-oss-20b', 'openai/gpt-oss-120b', 'moonshotai/Kimi-K2-Instruct-0905'
+      'openai/gpt-oss-20b', 'openai/gpt-oss-120b', 'moonshotai/Kimi-K2-Instruct-0905',
+      'Qwen/Qwen3-Next-80B-A3B-Thinking'
     ]
     
     // Filter by provider first

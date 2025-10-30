@@ -1,35 +1,38 @@
 # Import required FastAPI components for building the API
-from fastapi import FastAPI, HTTPException, Request, UploadFile, File, Form, Header
-from fastapi.responses import StreamingResponse
-from fastapi.middleware.cors import CORSMiddleware
-# Import Pydantic for data validation and settings management
-from pydantic import BaseModel, field_validator
-# Import OpenAI client for interacting with OpenAI's API
-from openai import OpenAI
-# Import slowapi for rate limiting
-from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_remote_address
-from slowapi.errors import RateLimitExceeded
-import os
-from typing import Optional, List, Dict, Any
-from datetime import datetime, timedelta, timezone
-import uuid
-import re
-import hashlib
 import asyncio
-import threading
-import time
-import tempfile
-from pathlib import Path
-
+import hashlib
+import os
+import re
 # Add current directory to Python path for Vercel deployment
 import sys
+import tempfile
+import threading
+import time
+import uuid
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+from fastapi import (FastAPI, File, Form, Header, HTTPException, Request,
+                     UploadFile)
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
+# Import OpenAI client for interacting with OpenAI's API
+from openai import OpenAI
+# Import Pydantic for data validation and settings management
+from pydantic import BaseModel, field_validator
+# Import slowapi for rate limiting
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
+
 current_dir = os.path.dirname(os.path.abspath(__file__))
 if current_dir not in sys.path:
     sys.path.insert(0, current_dir)
 
 # Import our lightweight PDF RAG functionality
 from rag_lightweight import DocumentProcessor, get_or_create_rag_system
+
 # Import ChatOpenAI for document summarization
 from aimakerspace.openai_utils.chatmodel import ChatOpenAI
 
@@ -267,7 +270,8 @@ class ChatRequest(BaseModel):
         together_models = [
             "deepseek-ai/DeepSeek-R1", "deepseek-ai/DeepSeek-V3.1", "deepseek-ai/DeepSeek-V3",
             "meta-llama/Llama-3.3-70B-Instruct-Turbo", 
-            "openai/gpt-oss-20b", "openai/gpt-oss-120b", "moonshotai/Kimi-K2-Instruct-0905"
+            "openai/gpt-oss-20b", "openai/gpt-oss-120b", "moonshotai/Kimi-K2-Instruct-0905",
+            "Qwen/Qwen3-Next-80B-A3B-Thinking"
         ]
         
         all_models = openai_models + together_models
@@ -415,7 +419,8 @@ class RAGQueryRequest(BaseModel):
         together_models = [
             "deepseek-ai/DeepSeek-R1", "deepseek-ai/DeepSeek-V3.1", "deepseek-ai/DeepSeek-V3",
             "meta-llama/Llama-3.3-70B-Instruct-Turbo",
-            "openai/gpt-oss-20b", "openai/gpt-oss-120b"
+            "openai/gpt-oss-20b", "openai/gpt-oss-120b", "moonshotai/Kimi-K2-Instruct-0905",
+            "Qwen/Qwen3-Next-80B-A3B-Thinking"
         ]
         
         all_models = openai_models + together_models
@@ -1105,6 +1110,13 @@ async def get_documents(
 )
 async def health_check():
     return {"status": "ok"}
+
+# Entry point for running the application directly
+if __name__ == "__main__":
+    import uvicorn
+
+    # Start the server on all network interfaces (0.0.0.0) on port 8000
+    uvicorn.run(app, host="0.0.0.0", port=8000)
 
 # Entry point for running the application directly
 if __name__ == "__main__":

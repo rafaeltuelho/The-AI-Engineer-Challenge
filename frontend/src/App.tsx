@@ -31,7 +31,8 @@ function App() {
     'meta-llama/Llama-3.3-70B-Instruct-Turbo': 'Llama 3.3 70B Turbo',
     'openai/gpt-oss-20b': 'OpenAI GPT OSS 20B',
     'openai/gpt-oss-120b': 'OpenAI GPT OSS 120B',
-    'moonshotai/Kimi-K2-Instruct-0905': 'Moonshot.ai Kimi K2 Instruct 0905'
+    'moonshotai/Kimi-K2-Instruct-0905': 'Moonshot.ai Kimi K2 Instruct 0905',
+    'Qwen/Qwen3-Next-80B-A3B-Thinking': 'Qwen 3 Next 80B A3B Thinking'
   }
 
   // Load theme preference from localStorage on component mount
