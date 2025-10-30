@@ -6,6 +6,7 @@ import './App.css'
 function App() {
   const [openaiApiKey, setOpenaiApiKey] = useState<string>('')
   const [togetherApiKey, setTogetherApiKey] = useState<string>('')
+  const [anthropicApiKey, setAnthropicApiKey] = useState<string>('')
   const [sessionId, setSessionId] = useState<string>('')
   const [theme, setTheme] = useState<'light' | 'dark'>('light')
   const [selectedModel, setSelectedModel] = useState<string>('gpt-5-nano')
@@ -31,7 +32,17 @@ function App() {
     'meta-llama/Llama-3.3-70B-Instruct-Turbo': 'Llama 3.3 70B Turbo',
     'openai/gpt-oss-20b': 'OpenAI GPT OSS 20B',
     'openai/gpt-oss-120b': 'OpenAI GPT OSS 120B',
-    'moonshotai/Kimi-K2-Instruct-0905': 'Moonshot.ai Kimi K2 Instruct 0905'
+    'moonshotai/Kimi-K2-Instruct-0905': 'Moonshot.ai Kimi K2 Instruct 0905',
+    'Qwen/Qwen3-Next-80B-A3B-Thinking': 'Qwen 3 Next 80B A3B Thinking',
+    // Anthropic models (Claude)
+    'claude-sonnet-4-5-20250929': 'Claude Sonnet 4.5 - Best for complex agents and coding',
+    'claude-haiku-4-5-20251001': 'Claude Haiku 4.5 - Fastest with near-frontier intelligence',
+    'claude-opus-4-1-20250805': 'Claude Opus 4.1 - Exceptional for specialized reasoning',
+    'claude-sonnet-4-20250514': 'Claude Sonnet 4 (Legacy)',
+    'claude-3-7-sonnet-20250219': 'Claude Sonnet 3.7 (Legacy)',
+    'claude-opus-4-20250514': 'Claude Opus 4 (Legacy)',
+    'claude-3-5-haiku-20241022': 'Claude Haiku 3.5 (Legacy)',
+    'claude-3-haiku-20240307': 'Claude Haiku 3 (Legacy)'
   }
 
   // Load theme preference from localStorage on component mount
@@ -80,11 +91,13 @@ function App() {
   const handleApiKeyChange = async (newApiKey: string) => {
     if (selectedProvider === 'together') {
       setTogetherApiKey(newApiKey)
+    } else if (selectedProvider === 'anthropic') {
+      setAnthropicApiKey(newApiKey)
     } else {
       setOpenaiApiKey(newApiKey)
     }
     const effectiveKey = newApiKey.trim()
-    
+
     if (effectiveKey) {
       // Always create a new session when API key is provided (even if updating existing key)
       await createSession(effectiveKey, selectedProvider)
@@ -100,6 +113,8 @@ function App() {
     // Set default model based on provider
     if (newProvider === 'together') {
       setSelectedModel('deepseek-ai/DeepSeek-V3.1')
+    } else if (newProvider === 'anthropic') {
+      setSelectedModel('claude-sonnet-4-5-20250929')
     } else {
       setSelectedModel('gpt-5-nano')
     }
@@ -121,9 +136,9 @@ function App() {
         modelDescription={modelDescriptions[selectedModel as keyof typeof modelDescriptions]}
       />
       <main className="main-content">
-        <ChatInterface 
-          apiKey={selectedProvider === 'together' ? togetherApiKey : openaiApiKey} 
-          setApiKey={handleApiKeyChange} 
+        <ChatInterface
+          apiKey={selectedProvider === 'together' ? togetherApiKey : selectedProvider === 'anthropic' ? anthropicApiKey : openaiApiKey}
+          setApiKey={handleApiKeyChange}
           sessionId={sessionId}
           selectedModel={selectedModel}
           setSelectedModel={setSelectedModel}

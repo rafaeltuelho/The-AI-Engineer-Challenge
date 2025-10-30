@@ -1,35 +1,38 @@
 # Import required FastAPI components for building the API
-from fastapi import FastAPI, HTTPException, Request, UploadFile, File, Form, Header
-from fastapi.responses import StreamingResponse
-from fastapi.middleware.cors import CORSMiddleware
-# Import Pydantic for data validation and settings management
-from pydantic import BaseModel, field_validator
-# Import OpenAI client for interacting with OpenAI's API
-from openai import OpenAI
-# Import slowapi for rate limiting
-from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_remote_address
-from slowapi.errors import RateLimitExceeded
-import os
-from typing import Optional, List, Dict, Any
-from datetime import datetime, timedelta, timezone
-import uuid
-import re
-import hashlib
 import asyncio
-import threading
-import time
-import tempfile
-from pathlib import Path
-
+import hashlib
+import os
+import re
 # Add current directory to Python path for Vercel deployment
 import sys
+import tempfile
+import threading
+import time
+import uuid
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+from fastapi import (FastAPI, File, Form, Header, HTTPException, Request,
+                     UploadFile)
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
+# Import OpenAI client for interacting with OpenAI's API
+from openai import OpenAI
+# Import Pydantic for data validation and settings management
+from pydantic import BaseModel, field_validator
+# Import slowapi for rate limiting
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
+
 current_dir = os.path.dirname(os.path.abspath(__file__))
 if current_dir not in sys.path:
     sys.path.insert(0, current_dir)
 
 # Import our lightweight PDF RAG functionality
 from rag_lightweight import DocumentProcessor, get_or_create_rag_system
+
 # Import ChatOpenAI for document summarization
 from aimakerspace.openai_utils.chatmodel import ChatOpenAI
 
@@ -216,11 +219,11 @@ class ChatRequest(BaseModel):
         """Validate provider selection"""
         if not v:
             return "openai"  # Default provider
-        
-        allowed_providers = ["openai", "together"]
+
+        allowed_providers = ["openai", "together", "anthropic"]
         if v.lower() not in allowed_providers:
             raise ValueError(f'Invalid provider: {v}. Allowed providers: {", ".join(allowed_providers)}')
-        
+
         return v.lower()
     
     @field_validator('user_message')
@@ -256,25 +259,35 @@ class ChatRequest(BaseModel):
         """Validate model selection"""
         if not v:
             return "gpt-4.1-mini"  # Default model
-        
+
         # List of allowed models for OpenAI
         openai_models = [
             "gpt-4", "gpt-4-mini", "gpt-4-turbo", "gpt-4o", "gpt-4o-mini",
             "gpt-4.1", "gpt-4.1-mini", "gpt-4.1-nano", "gpt-5", "gpt-5-mini", "gpt-5-nano"
         ]
-        
+
         # List of allowed models for Together.ai
         together_models = [
             "deepseek-ai/DeepSeek-R1", "deepseek-ai/DeepSeek-V3.1", "deepseek-ai/DeepSeek-V3",
-            "meta-llama/Llama-3.3-70B-Instruct-Turbo", 
-            "openai/gpt-oss-20b", "openai/gpt-oss-120b", "moonshotai/Kimi-K2-Instruct-0905"
+            "meta-llama/Llama-3.3-70B-Instruct-Turbo",
+            "openai/gpt-oss-20b", "openai/gpt-oss-120b", "moonshotai/Kimi-K2-Instruct-0905",
+            "Qwen/Qwen3-Next-80B-A3B-Thinking"
         ]
-        
-        all_models = openai_models + together_models
-        
+
+        # List of allowed models for Anthropic (Claude)
+        anthropic_models = [
+            # Latest models
+            "claude-sonnet-4-5-20250929", "claude-haiku-4-5-20251001", "claude-opus-4-1-20250805",
+            # Legacy models
+            "claude-sonnet-4-20250514", "claude-3-7-sonnet-20250219", "claude-opus-4-20250514",
+            "claude-3-5-haiku-20241022", "claude-3-haiku-20240307"
+        ]
+
+        all_models = openai_models + together_models + anthropic_models
+
         if v not in all_models:
             raise ValueError(f'Invalid model: {v}. Allowed models: {", ".join(all_models)}')
-        
+
         return v
     
     @field_validator('conversation_id')
@@ -328,11 +341,11 @@ class SessionRequest(BaseModel):
         """Validate provider selection"""
         if not v:
             return "openai"  # Default provider
-        
-        allowed_providers = ["openai", "together"]
+
+        allowed_providers = ["openai", "together", "anthropic"]
         if v.lower() not in allowed_providers:
             raise ValueError(f'Invalid provider: {v}. Allowed providers: {", ".join(allowed_providers)}')
-        
+
         return v.lower()
 
 class SessionResponse(BaseModel):
@@ -404,21 +417,31 @@ class RAGQueryRequest(BaseModel):
         """Validate model selection"""
         if not v:
             return "gpt-4.1-mini"  # Default model
-        
+
         # List of allowed models for OpenAI
         openai_models = [
             "gpt-4", "gpt-4-mini", "gpt-4-turbo", "gpt-4o", "gpt-4o-mini",
             "gpt-4.1", "gpt-4.1-mini", "gpt-4.1-nano", "gpt-5", "gpt-5-mini", "gpt-5-nano"
         ]
-        
+
         # List of allowed models for Together.ai
         together_models = [
             "deepseek-ai/DeepSeek-R1", "deepseek-ai/DeepSeek-V3.1", "deepseek-ai/DeepSeek-V3",
             "meta-llama/Llama-3.3-70B-Instruct-Turbo",
-            "openai/gpt-oss-20b", "openai/gpt-oss-120b"
+            "openai/gpt-oss-20b", "openai/gpt-oss-120b", "moonshotai/Kimi-K2-Instruct-0905",
+            "Qwen/Qwen3-Next-80B-A3B-Thinking"
         ]
-        
-        all_models = openai_models + together_models
+
+        # List of allowed models for Anthropic (Claude)
+        anthropic_models = [
+            # Latest models
+            "claude-sonnet-4-5-20250929", "claude-haiku-4-5-20251001", "claude-opus-4-1-20250805",
+            # Legacy models
+            "claude-sonnet-4-20250514", "claude-3-7-sonnet-20250219", "claude-opus-4-20250514",
+            "claude-3-5-haiku-20241022", "claude-3-haiku-20240307"
+        ]
+
+        all_models = openai_models + together_models + anthropic_models
         
         if v not in all_models:
             raise ValueError(f'Invalid model: {v}. Allowed models: {", ".join(all_models)}')
@@ -431,11 +454,11 @@ class RAGQueryRequest(BaseModel):
         """Validate provider selection"""
         if not v:
             return "openai"  # Default provider
-        
-        allowed_providers = ["openai", "together"]
+
+        allowed_providers = ["openai", "together", "anthropic"]
         if v.lower() not in allowed_providers:
             raise ValueError(f'Invalid provider: {v}. Allowed providers: {", ".join(allowed_providers)}')
-        
+
         return v.lower()
 
 class RAGQueryResponse(BaseModel):
@@ -501,6 +524,8 @@ async def chat(
         client_kwargs = {"api_key": chat_request.api_key}
         if chat_request.provider == "together":
             client_kwargs["base_url"] = "https://api.together.xyz/v1"
+        elif chat_request.provider == "anthropic":
+            client_kwargs["base_url"] = "https://api.anthropic.com/v1"
         client = OpenAI(**client_kwargs)
         
         # Get session-specific conversations
@@ -1108,6 +1133,33 @@ async def health_check():
 
 # Entry point for running the application directly
 if __name__ == "__main__":
+    import uvicorn
+
+    # Start the server on all network interfaces (0.0.0.0) on port 8000
+    uvicorn.run(app, host="0.0.0.0", port=8000)
+
+# Entry point for running the application directly
+if __name__ == "__main__":
+    import uvicorn
+
+    # Start the server on all network interfaces (0.0.0.0) on port 8000
+    uvicorn.run(app, host="0.0.0.0", port=8000)
+    import uvicorn
+
+    # Start the server on all network interfaces (0.0.0.0) on port 8000
+    uvicorn.run(app, host="0.0.0.0", port=8000)
+    import uvicorn
+
+    # Start the server on all network interfaces (0.0.0.0) on port 8000
+    uvicorn.run(app, host="0.0.0.0", port=8000)
+    import uvicorn
+
+    # Start the server on all network interfaces (0.0.0.0) on port 8000
+    uvicorn.run(app, host="0.0.0.0", port=8000)
+    import uvicorn
+
+    # Start the server on all network interfaces (0.0.0.0) on port 8000
+    uvicorn.run(app, host="0.0.0.0", port=8000)
     import uvicorn
     # Start the server on all network interfaces (0.0.0.0) on port 8000
     uvicorn.run(app, host="0.0.0.0", port=8000)

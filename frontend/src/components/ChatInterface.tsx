@@ -129,25 +129,35 @@ Sample JSON output:
       'gpt-4', 'gpt-4-mini', 'gpt-4-turbo', 'gpt-4o', 'gpt-4o-mini',
       'gpt-4.1', 'gpt-4.1-mini', 'gpt-4.1-nano', 'gpt-5', 'gpt-5-mini', 'gpt-5-nano'
     ]
-    
+
     const togetherModels = [
       'deepseek-ai/DeepSeek-R1', 'deepseek-ai/DeepSeek-V3.1', 'deepseek-ai/DeepSeek-V3',
       'meta-llama/Llama-3.3-70B-Instruct-Turbo',
-      'openai/gpt-oss-20b', 'openai/gpt-oss-120b', 'moonshotai/Kimi-K2-Instruct-0905'
+      'openai/gpt-oss-20b', 'openai/gpt-oss-120b', 'moonshotai/Kimi-K2-Instruct-0905',
+      'Qwen/Qwen3-Next-80B-A3B-Thinking'
     ]
-    
+
+    const anthropicModels = [
+      'claude-sonnet-4-5-20250929', 'claude-haiku-4-5-20251001', 'claude-opus-4-1-20250805',
+      'claude-sonnet-4-20250514', 'claude-3-7-sonnet-20250219', 'claude-opus-4-20250514',
+      'claude-3-5-haiku-20241022', 'claude-3-haiku-20240307'
+    ]
+
     // Filter by provider first
-    let availableModels = selectedProvider === 'together' ? togetherModels : openaiModels
-    
+    let availableModels = selectedProvider === 'together' ? togetherModels : selectedProvider === 'anthropic' ? anthropicModels : openaiModels
+
     if (chatMode === 'topic-explorer') {
       // Only allow specific models for Topic Explorer mode
       if (selectedProvider === 'together') {
         return ['deepseek-ai/DeepSeek-V3', 'deepseek-ai/DeepSeek-R1','meta-llama/Llama-3.3-70B-Instruct-Turbo']
+      } else if (selectedProvider === 'anthropic') {
+        // Topic Explorer not supported for Anthropic
+        return []
       } else {
         return ['gpt-4.1', 'gpt-4o', 'gpt-5']
       }
     }
-    
+
     return availableModels
   }
   
@@ -186,6 +196,15 @@ Sample JSON output:
       })
     }
   }, [messages, shouldAutoScroll])
+
+  // Reset chat mode to 'regular' when Anthropic provider is selected and mode is RAG or Topic Explorer
+  useEffect(() => {
+    if (selectedProvider === 'anthropic' && (chatMode === 'rag' || chatMode === 'topic-explorer')) {
+      setChatMode('regular')
+      setDeveloperMessage(getDefaultDeveloperMessage('regular'))
+      setLastSuggestedQuestions([])
+    }
+  }, [selectedProvider])
 
   // Persist sidebar width
   useEffect(() => {
@@ -838,10 +857,13 @@ Sample JSON output:
                   >
                     <option value="openai">OpenAI</option>
                     <option value="together">Together.ai</option>
+                    <option value="anthropic">Anthropic</option>
                   </select>
                   <div className="provider-info">
                     {selectedProvider === 'openai' ? (
                       <span>Using OpenAI's GPT models</span>
+                    ) : selectedProvider === 'anthropic' ? (
+                      <span>Using Anthropic's Claude models</span>
                     ) : (
                       <span>Using Together.ai's open-source models</span>
                     )}
@@ -868,7 +890,7 @@ Sample JSON output:
                     type="password"
                     value={apiKey}
                     onChange={(e) => setApiKey(e.target.value)}
-                    placeholder={`${selectedProvider === 'together' ? 'Together.ai key: tgp_' : 'OpenAI key: sk-'} ...`}
+                    placeholder={`${selectedProvider === 'together' ? 'Together.ai key: tgp_' : selectedProvider === 'anthropic' ? 'Anthropic key: sk-ant-' : 'OpenAI key: sk-'} ...`}
                     className="api-key-input"
                   />
                   {apiKey.trim() && showApiKeyInfo && (
@@ -1050,25 +1072,25 @@ Sample JSON output:
                 <span>AI Chat</span>
               </button>
               <button
-                className={`mode-badge ${chatMode === 'rag' ? 'active rag-mode' : ''} ${hasConversationStarted ? 'disabled' : ''}`}
+                className={`mode-badge ${chatMode === 'rag' ? 'active rag-mode' : ''} ${hasConversationStarted || selectedProvider === 'anthropic' ? 'disabled' : ''}`}
                 onClick={() => {
-                  if (!hasConversationStarted) {
+                  if (!hasConversationStarted && selectedProvider !== 'anthropic') {
                     setChatMode('rag')
                     setDeveloperMessage(getDefaultDeveloperMessage('rag'))
                     setLastSuggestedQuestions([])
                   }
                 }}
-                title={hasConversationStarted ? "Cannot switch mode after conversation starts. Start a new chat to change mode." : "RAG Mode - Query uploaded documents"}
+                title={selectedProvider === 'anthropic' ? "RAG mode is not available for Anthropic provider" : hasConversationStarted ? "Cannot switch mode after conversation starts. Start a new chat to change mode." : "RAG Mode - Query uploaded documents"}
                 data-mode="rag"
-                disabled={hasConversationStarted}
+                disabled={hasConversationStarted || selectedProvider === 'anthropic'}
               >
                 <Database size={14} />
                 <span>RAG</span>
               </button>
               <button
-                className={`mode-badge ${chatMode === 'topic-explorer' ? 'active topic-explorer-mode' : ''} ${hasConversationStarted ? 'disabled' : ''}`}
+                className={`mode-badge ${chatMode === 'topic-explorer' ? 'active topic-explorer-mode' : ''} ${hasConversationStarted || selectedProvider === 'anthropic' ? 'disabled' : ''}`}
                 onClick={() => {
-                  if (!hasConversationStarted) {
+                  if (!hasConversationStarted && selectedProvider !== 'anthropic') {
                     setChatMode('topic-explorer')
                     setDeveloperMessage(getDefaultDeveloperMessage('topic-explorer'))
                     setLastSuggestedQuestions([])
@@ -1080,9 +1102,9 @@ Sample JSON output:
                     }
                   }
                 }}
-                title={hasConversationStarted ? "Cannot switch mode after conversation starts. Start a new chat to change mode." : "Topic Explorer - Guided learning with structured responses"}
+                title={selectedProvider === 'anthropic' ? "Topic Explorer mode is not available for Anthropic provider" : hasConversationStarted ? "Cannot switch mode after conversation starts. Start a new chat to change mode." : "Topic Explorer - Guided learning with structured responses"}
                 data-mode="topic-explorer"
-                disabled={hasConversationStarted}
+                disabled={hasConversationStarted || selectedProvider === 'anthropic'}
               >
                 <BookOpen size={14} />
                 <span>Topic Explorer</span>
