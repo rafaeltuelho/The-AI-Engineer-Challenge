@@ -9,6 +9,7 @@ python-multipart==0.0.20
 slowapi==0.1.9
 starlette==0.48.0
 numpy==2.3.3
+qdrant-client==1.13.3
 
 # Lightweight document processing dependencies
 PyPDF2==3.0.1
