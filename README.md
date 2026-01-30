@@ -164,6 +164,21 @@ Want to make it your own? The frontend is built with:
 
 > 💡 **Pro Tip**: The frontend automatically proxies API calls to your FastAPI backend, so everything works seamlessly together!
 
+### ⚙️ Environment Variables
+
+The backend supports configurable timeouts via environment variables:
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `SESSION_TIMEOUT_MINUTES` | How long before inactive sessions are cleaned up (minutes) | `60` |
+| `CLEANUP_INTERVAL_SECONDS` | How often the cleanup scheduler runs (seconds) | `60` |
+
+Copy `.env.example` to `.env` and customize as needed:
+
+```bash
+cp .env.example .env
+```
+
 </details>
 
 <details>
