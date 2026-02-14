@@ -11,6 +11,7 @@ interface Message {
   content: string
   timestamp: Date
   extractedContent?: ExtractedContent
+  suggestedQuestions?: string[]  // Store suggested questions per message for Topic Explorer
 }
 
 interface ChatInterfaceProps {
@@ -327,33 +328,31 @@ Sample JSON output:
             content: msg.content,
             timestamp: new Date(msg.timestamp)
           }
-          
-          // Process Topic Explorer assistant messages
+
+          // Process Topic Explorer assistant messages - include suggested questions per message
           if (conversationMode === 'topic-explorer' && msg.role === 'assistant') {
             const processed = processTopicExplorerMessage(msg.content)
             return {
               ...baseMessage,
-              content: processed.content
+              content: processed.content,
+              suggestedQuestions: processed.suggestedQuestions
             }
           }
-          
+
           return baseMessage
         })
-        
+
         setMessages(processedMessages)
         setConversationId(convId)
         setDeveloperMessage(data.system_message)
-        
-        // Set suggested questions for Topic Explorer mode from the last assistant message
+
+        // Set lastSuggestedQuestions for backwards compatibility (from the last assistant message)
         if (conversationMode === 'topic-explorer') {
           const lastAssistantMessage = processedMessages
             .filter((msg: any) => msg.role === 'assistant')
             .pop()
-          if (lastAssistantMessage) {
-            const processed = processTopicExplorerMessage(data.messages
-              .filter((msg: any) => msg.role === 'assistant')
-              .pop()?.content || '')
-            setLastSuggestedQuestions(processed.suggestedQuestions)
+          if (lastAssistantMessage?.suggestedQuestions) {
+            setLastSuggestedQuestions(lastAssistantMessage.suggestedQuestions)
           } else {
             setLastSuggestedQuestions([])
           }
@@ -477,6 +476,8 @@ Sample JSON output:
         
         // Topic Explorer: parse JSON structure and render sections
         let extractedContent: ExtractedContent | undefined
+        let messageSuggestedQuestions: string[] = []
+
         if (chatMode === 'topic-explorer') {
           try {
             // Ensure we have a string to parse
@@ -489,7 +490,6 @@ Sample JSON output:
                 // If it's not valid JSON, replace with user-friendly message
                 console.warn('Response is not valid JSON, replacing with error message:', parseError)
                 assistantMessage = 'I apologize, but I encountered an issue formatting my response. Please try asking your question again.'
-                setLastSuggestedQuestions([])
                 parsed = null
               }
             } else {
@@ -521,9 +521,7 @@ Sample JSON output:
 
               assistantMessage = formattedMarkdown || assistantMessage
               if (Array.isArray(suggested)) {
-                setLastSuggestedQuestions(suggested.filter((s: unknown) => typeof s === 'string') as string[])
-              } else {
-                setLastSuggestedQuestions([])
+                messageSuggestedQuestions = suggested.filter((s: unknown) => typeof s === 'string') as string[]
               }
             } else {
               // If parsed is null or not an object, ensure we don't have raw JSON
@@ -531,23 +529,23 @@ Sample JSON output:
               if (trimmedContent.startsWith('{') && trimmedContent.endsWith('}')) {
                 console.warn('Detected raw JSON content in Topic Explorer, replacing with error message')
                 assistantMessage = 'I apologize, but I encountered an issue formatting my response. Please try asking your question again.'
-                setLastSuggestedQuestions([])
               }
             }
           } catch (e) {
             // Fallback: if all parsing fails, show a user-friendly message instead of raw JSON
             console.warn('Failed to parse Topic Explorer response:', e)
             assistantMessage = 'I apologize, but I encountered an issue formatting my response. Please try asking your question again.'
-            setLastSuggestedQuestions([])
           }
-        } else {
-          setLastSuggestedQuestions([])
         }
-        
-        setMessages(prev => 
-          prev.map(msg => 
-            msg.id === assistantMessageId 
-              ? { ...msg, content: assistantMessage, extractedContent }
+
+        // Update lastSuggestedQuestions state (for backwards compatibility)
+        setLastSuggestedQuestions(messageSuggestedQuestions)
+
+        // Store suggested questions in the message object for per-message display
+        setMessages(prev =>
+          prev.map(msg =>
+            msg.id === assistantMessageId
+              ? { ...msg, content: assistantMessage, extractedContent, suggestedQuestions: messageSuggestedQuestions }
               : msg
           )
         )
@@ -1171,12 +1169,12 @@ Sample JSON output:
                   </div>
                   
                   {/* Show Topic Explorer suggested questions after assistant messages */}
-                  {message.role === 'assistant' && 
-                   chatMode === 'topic-explorer' && 
-                   lastSuggestedQuestions.length > 0 && (
+                  {message.role === 'assistant' &&
+                   chatMode === 'topic-explorer' &&
+                   message.suggestedQuestions && message.suggestedQuestions.length > 0 && (
                     <div className="topic-explorer-suggested-questions">
                       <SuggestedQuestions
-                        questions={lastSuggestedQuestions}
+                        questions={message.suggestedQuestions}
                         onQuestionClick={handleSuggestedQuestionClick}
                         isVisible={true}
                       />
