@@ -23,7 +23,11 @@ class EmbeddingModel:
         if self.provider == "together":
             self.async_client = None  # Together.ai doesn't have async client in this version
             # https://docs.together.ai/docs/serverless-models#embedding-models
-            self.embeddings_model_name = "togethercomputer/m2-bert-80M-32k-retrieval"
+            # Available serverless embedding models:
+            # - BAAI/bge-base-en-v1.5 (768 dim, 512 context)
+            # - Alibaba-NLP/gte-modernbert-base (768 dim, 8192 context)
+            # - intfloat/multilingual-e5-large-instruct (1024 dim, 514 context)
+            self.embeddings_model_name = "BAAI/bge-base-en-v1.5"
             self.client = Together(api_key=self.api_key)
         else:
             # Default to OpenAI
