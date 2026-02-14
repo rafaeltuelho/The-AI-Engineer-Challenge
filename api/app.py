@@ -474,7 +474,7 @@ class RAGQueryResponse(BaseModel):
         500: {"description": "Internal server error"}
     }
 )
-@limiter.limit("5/minute")  # Limit to 5 session creations per minute per IP
+@limiter.limit("30/minute")  # Limit to 30 session creations per minute per IP (increased for better UX during development)
 async def create_session_endpoint(request: Request, session_request: SessionRequest):
     try:
         session_id = create_session(session_request.api_key)

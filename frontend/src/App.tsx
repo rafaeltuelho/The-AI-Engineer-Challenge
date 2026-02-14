@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import ChatInterface from './components/ChatInterface'
 import Header from './components/Header'
 import './App.css'
@@ -10,6 +10,8 @@ function App() {
   const [theme, setTheme] = useState<'light' | 'dark'>('light')
   const [selectedModel, setSelectedModel] = useState<string>('gpt-5-nano')
   const [selectedProvider, setSelectedProvider] = useState<string>('openai')
+  const sessionCreationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const lastCreatedKeyRef = useRef<string>('')
 
   const modelDescriptions = {
     // OpenAI models
@@ -77,23 +79,54 @@ function App() {
     }
   }
 
-  // Handle API key changes
-  const handleApiKeyChange = async (newApiKey: string) => {
+  // Debounced session creation to avoid hitting rate limits on every keystroke
+  const debouncedCreateSession = useCallback((apiKey: string, provider: string) => {
+    // Clear any pending session creation
+    if (sessionCreationTimeoutRef.current) {
+      clearTimeout(sessionCreationTimeoutRef.current)
+    }
+
+    // Skip if we already created a session for this exact key
+    if (lastCreatedKeyRef.current === apiKey) {
+      return
+    }
+
+    // Debounce: wait 500ms after user stops typing before creating session
+    sessionCreationTimeoutRef.current = setTimeout(async () => {
+      if (apiKey.trim()) {
+        lastCreatedKeyRef.current = apiKey
+        await createSession(apiKey, provider)
+      }
+    }, 500)
+  }, [])
+
+  // Handle API key changes with debouncing
+  const handleApiKeyChange = (newApiKey: string) => {
     if (selectedProvider === 'together') {
       setTogetherApiKey(newApiKey)
     } else {
       setOpenaiApiKey(newApiKey)
     }
     const effectiveKey = newApiKey.trim()
-    
+
     if (effectiveKey) {
-      // Always create a new session when API key is provided (even if updating existing key)
-      await createSession(effectiveKey, selectedProvider)
+      // Use debounced session creation to avoid rate limiting
+      debouncedCreateSession(effectiveKey, selectedProvider)
     } else {
       // Clear session if API key is empty
       setSessionId('')
+      lastCreatedKeyRef.current = ''
     }
   }
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (sessionCreationTimeoutRef.current) {
+        clearTimeout(sessionCreationTimeoutRef.current)
+      }
+    }
+  }, [])
 
   // Handle provider changes
   const handleProviderChange = async (newProvider: string) => {
