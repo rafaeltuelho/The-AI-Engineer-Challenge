@@ -1,35 +1,46 @@
 # Import required FastAPI components for building the API
-from fastapi import FastAPI, HTTPException, Request, UploadFile, File, Form, Header
-from fastapi.responses import StreamingResponse
-from fastapi.middleware.cors import CORSMiddleware
-# Import Pydantic for data validation and settings management
-from pydantic import BaseModel, field_validator
-# Import OpenAI client for interacting with OpenAI's API
-from openai import OpenAI
-# Import slowapi for rate limiting
-from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_remote_address
-from slowapi.errors import RateLimitExceeded
-import os
-from typing import Optional, List, Dict, Any
-from datetime import datetime, timedelta, timezone
-import uuid
-import re
-import hashlib
 import asyncio
-import threading
-import time
-import tempfile
-from pathlib import Path
-
+import hashlib
+import os
+import re
 # Add current directory to Python path for Vercel deployment
 import sys
+import tempfile
+import threading
+import time
+import uuid
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+from fastapi import (FastAPI, File, Form, Header, HTTPException, Request,
+                     UploadFile)
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
+# Import OpenAI client for interacting with OpenAI's API
+from openai import OpenAI
+# Import Pydantic for data validation and settings management
+from pydantic import BaseModel, field_validator
+# Import slowapi for rate limiting
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
+
 current_dir = os.path.dirname(os.path.abspath(__file__))
 if current_dir not in sys.path:
     sys.path.insert(0, current_dir)
 
+# ============================================
+# Configurable Timeout Settings
+# ============================================
+# Session timeout: How long before an inactive session is cleaned up (in minutes)
+SESSION_TIMEOUT_MINUTES = int(os.getenv("SESSION_TIMEOUT_MINUTES", "60"))
+# Cleanup interval: How often the cleanup scheduler runs (in seconds)
+CLEANUP_INTERVAL_SECONDS = int(os.getenv("CLEANUP_INTERVAL_SECONDS", "60"))
+
 # Import our lightweight PDF RAG functionality
 from rag_lightweight import DocumentProcessor, get_or_create_rag_system
+
 # Import ChatOpenAI for document summarization
 from aimakerspace.openai_utils.chatmodel import ChatOpenAI
 
@@ -155,12 +166,15 @@ def get_session_conversations(session_id: str) -> Dict[str, Dict[str, Any]]:
     return conversations[session_id]
 
 def cleanup_inactive_conversations():
-    """Clean up conversations and sessions that haven't been used in the last 10 minutes"""
+    """Clean up conversations and sessions that have been inactive.
+
+    Timeout is configurable via SESSION_TIMEOUT_MINUTES env var (default: 60).
+    """
     current_time = datetime.now(timezone.utc)
     inactive_sessions = []
-    # Identify inactive sessions
+    # Identify inactive sessions based on configurable timeout
     for session_id, session_data in sessions.items():
-        if current_time - session_data["last_access"] > timedelta(minutes=60):
+        if current_time - session_data["last_access"] > timedelta(minutes=SESSION_TIMEOUT_MINUTES):
             inactive_sessions.append(session_id)
     # Remove conversations and sessions for inactive session_ids
     for session_id in inactive_sessions:
@@ -170,19 +184,22 @@ def cleanup_inactive_conversations():
         print(f"Cleaned up inactive session and its conversations: {session_id[:8]}...")
 
 def start_cleanup_scheduler():
-    """Start the background cleanup scheduler"""
+    """Start the background cleanup scheduler.
+
+    Interval is configurable via CLEANUP_INTERVAL_SECONDS env var (default: 60).
+    """
     def cleanup_loop():
         while True:
             try:
                 cleanup_inactive_conversations()
-                time.sleep(60)  # Run cleanup every minute
+                time.sleep(CLEANUP_INTERVAL_SECONDS)
             except Exception as e:
                 print(f"Error in cleanup scheduler: {e}")
-                time.sleep(60)
-    
+                time.sleep(CLEANUP_INTERVAL_SECONDS)
+
     cleanup_thread = threading.Thread(target=cleanup_loop, daemon=True)
     cleanup_thread.start()
-    print("Started conversation cleanup scheduler")
+    print(f"Started conversation cleanup scheduler (session timeout: {SESSION_TIMEOUT_MINUTES}min, interval: {CLEANUP_INTERVAL_SECONDS}s)")
 
 # Start the cleanup scheduler when the module loads
 start_cleanup_scheduler()
@@ -267,7 +284,8 @@ class ChatRequest(BaseModel):
         together_models = [
             "deepseek-ai/DeepSeek-R1", "deepseek-ai/DeepSeek-V3.1", "deepseek-ai/DeepSeek-V3",
             "meta-llama/Llama-3.3-70B-Instruct-Turbo", 
-            "openai/gpt-oss-20b", "openai/gpt-oss-120b", "moonshotai/Kimi-K2-Instruct-0905"
+            "openai/gpt-oss-20b", "openai/gpt-oss-120b", "moonshotai/Kimi-K2-Instruct-0905",
+            "Qwen/Qwen3-Next-80B-A3B-Thinking"
         ]
         
         all_models = openai_models + together_models
@@ -415,7 +433,8 @@ class RAGQueryRequest(BaseModel):
         together_models = [
             "deepseek-ai/DeepSeek-R1", "deepseek-ai/DeepSeek-V3.1", "deepseek-ai/DeepSeek-V3",
             "meta-llama/Llama-3.3-70B-Instruct-Turbo",
-            "openai/gpt-oss-20b", "openai/gpt-oss-120b"
+            "openai/gpt-oss-20b", "openai/gpt-oss-120b", "moonshotai/Kimi-K2-Instruct-0905",
+            "Qwen/Qwen3-Next-80B-A3B-Thinking"
         ]
         
         all_models = openai_models + together_models
@@ -455,7 +474,7 @@ class RAGQueryResponse(BaseModel):
         500: {"description": "Internal server error"}
     }
 )
-@limiter.limit("5/minute")  # Limit to 5 session creations per minute per IP
+@limiter.limit("30/minute")  # Limit to 30 session creations per minute per IP (increased for better UX during development)
 async def create_session_endpoint(request: Request, session_request: SessionRequest):
     try:
         session_id = create_session(session_request.api_key)
@@ -1105,6 +1124,13 @@ async def get_documents(
 )
 async def health_check():
     return {"status": "ok"}
+
+# Entry point for running the application directly
+if __name__ == "__main__":
+    import uvicorn
+
+    # Start the server on all network interfaces (0.0.0.0) on port 8000
+    uvicorn.run(app, host="0.0.0.0", port=8000)
 
 # Entry point for running the application directly
 if __name__ == "__main__":

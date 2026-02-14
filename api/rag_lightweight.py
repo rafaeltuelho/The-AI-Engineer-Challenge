@@ -462,45 +462,58 @@ class RAGSystem:
         except Exception as e:
             raise Exception(f"Error searching chunks: {str(e)}")
     
-    async def query_documents(self, query: str, k: int = 3, mode: str = "rag", model_name: str = "gpt-4o-mini") -> str:
+    async def query_documents(self, query: str, k: int = 3, mode: str = "rag", model_name: str = "gpt-4o-mini", system_message: Optional[str] = None) -> str:
         """
         Query documents using RAG approach.
-        
+
         Args:
             query: User query
             k: Number of chunks to retrieve
-        
+            mode: Query mode ("rag" or "topic-explorer")
+            model_name: Model name to use
+            system_message: Custom system message to use instead of default
+
         Returns:
             Generated response based on retrieved chunks
         """
         try:
             # Search for relevant chunks
             relevant_chunks = self.search_relevant_chunks(query, k=k)
-            
-            if not relevant_chunks:
-                return "I couldn't find any relevant information in the uploaded documents to answer your question."
-            
-            # Prepare context from chunks
+
+            # Prepare context from chunks (may be empty if no documents uploaded)
             context_parts = []
             for chunk_data in relevant_chunks:
                 chunk_text = chunk_data.get('chunk_text', '')
                 if chunk_text:
                     context_parts.append(chunk_text)
-            
-            context = "\n\n".join(context_parts)
-            
+
+            context = "\n\n".join(context_parts) if context_parts else ""
+
             # Create prompt based on mode
             if mode == "topic-explorer":
-                # Topic Explorer mode with structured 3-part response
-                rag_prompt = f"""
+                # Topic Explorer mode - works with or without documents
+                if context:
+                    rag_prompt = f"""
                 Student Question:
                 {query}
 
-                Context:
+                Context from uploaded documents:
                 {context}
 
-                Answer:"""
-                system_message = self.topic_explorer_system_message
+                Please answer the student's question using the context above when relevant."""
+                else:
+                    # No documents - answer directly without RAG context
+                    rag_prompt = f"""
+                Student Question:
+                {query}
+
+                Please answer the student's question."""
+                # Use custom system message if provided, otherwise use default topic explorer message
+                if system_message is None:
+                    system_message = self.topic_explorer_system_message
+            elif not relevant_chunks:
+                # RAG mode requires documents - return error message
+                return "I couldn't find any relevant information in the uploaded documents to answer your question."
             else:
                 # Regular RAG mode
                 rag_prompt = f"""
@@ -512,30 +525,34 @@ class RAGSystem:
                 Question: {query}
 
                 Answer:"""
-                system_message = self.rag_system_message
-            
+                # Use custom system message if provided, otherwise use default RAG message
+                if system_message is None:
+                    system_message = self.rag_system_message
+
             # Format messages for OpenAI API
             messages = [
                 {"role": "system", "content": system_message},
                 {"role": "user", "content": rag_prompt}
             ]
-            
+
             # Generate response
             # Add response_format for Topic Explorer mode to ensure JSON output
             kwargs = {}
             if mode == "topic-explorer":
                 # Support JSON mode for OpenAI models and Together.ai models
-                openai_json_models = ['gpt-4.1', 'gpt-4o', 'gpt-5']
+                openai_json_models = ['gpt-4.1', 'gpt-4o', 'gpt-4o-mini', 'gpt-5', 'gpt-5-mini', 'gpt-5-nano']
                 together_json_models = [
-                    'deepseek-ai/DeepSeek-R1', 'deepseek-ai/DeepSeek-V3', 
-                    'meta-llama/Llama-3.3-70B-Instruct-Turbo'
+                    'deepseek-ai/DeepSeek-R1', 'deepseek-ai/DeepSeek-V3', 'deepseek-ai/DeepSeek-V3.1',
+                    'meta-llama/Llama-3.3-70B-Instruct-Turbo',
+                    'openai/gpt-oss-20b', 'openai/gpt-oss-120b',
+                    'moonshotai/Kimi-K2-Instruct-0905', 'Qwen/Qwen3-Next-80B-A3B-Thinking'
                 ]
                 if model_name in openai_json_models or model_name in together_json_models:
                     kwargs["response_format"] = {"type": "json_object"}
-            
+
             response = await self.chat_model.arun(messages, model_name=model_name, **kwargs)
             return response
-            
+
         except Exception as e:
             raise Exception(f"Error querying documents: {str(e)}")
     
@@ -556,33 +573,41 @@ class RAGSystem:
         try:
             # Search for relevant chunks
             relevant_chunks = self.search_relevant_chunks(query, k=k)
-            
-            if not relevant_chunks:
-                return "I couldn't find any relevant information in the uploaded documents to answer your question."
-            
-            # Prepare context from chunks
+
+            # Prepare context from chunks (may be empty if no documents uploaded)
             context_parts = []
             for chunk_data in relevant_chunks:
                 chunk_text = chunk_data.get('chunk_text', '')
                 if chunk_text:
                     context_parts.append(chunk_text)
-            
-            context = "\n\n".join(context_parts)
-            
+
+            context = "\n\n".join(context_parts) if context_parts else ""
+
             # Create prompt based on mode
             if mode == "topic-explorer":
-                # Topic Explorer mode with structured 3-part response
-                rag_prompt = f"""
+                # Topic Explorer mode - works with or without documents
+                if context:
+                    rag_prompt = f"""
                 Student Question:
                 {query}
 
-                Context:
+                Context from uploaded documents:
                 {context}
 
-                Answer:"""
+                Please answer the student's question using the context above when relevant."""
+                else:
+                    # No documents - answer directly without RAG context
+                    rag_prompt = f"""
+                Student Question:
+                {query}
+
+                Please answer the student's question."""
                 # Use custom system message if provided, otherwise use default topic explorer message
                 if system_message is None:
                     system_message = self.topic_explorer_system_message
+            elif not relevant_chunks:
+                # RAG mode requires documents - return error message
+                return "I couldn't find any relevant information in the uploaded documents to answer your question."
             else:
                 # Regular RAG mode
                 rag_prompt = f"""
@@ -609,10 +634,12 @@ class RAGSystem:
             kwargs = {}
             if mode == "topic-explorer":
                 # Support JSON mode for OpenAI models and Together.ai models
-                openai_json_models = ['gpt-4.1', 'gpt-4o', 'gpt-5']
+                openai_json_models = ['gpt-4.1', 'gpt-4o', 'gpt-4o-mini', 'gpt-5', 'gpt-5-mini', 'gpt-5-nano']
                 together_json_models = [
-                    'deepseek-ai/DeepSeek-R1', 'deepseek-ai/DeepSeek-V3', 
-                    'meta-llama/Llama-3.3-70B-Instruct-Turbo'
+                    'deepseek-ai/DeepSeek-R1', 'deepseek-ai/DeepSeek-V3', 'deepseek-ai/DeepSeek-V3.1',
+                    'meta-llama/Llama-3.3-70B-Instruct-Turbo',
+                    'openai/gpt-oss-20b', 'openai/gpt-oss-120b',
+                    'moonshotai/Kimi-K2-Instruct-0905', 'Qwen/Qwen3-Next-80B-A3B-Thinking'
                 ]
                 if model_name in openai_json_models or model_name in together_json_models:
                     kwargs["response_format"] = {"type": "json_object"}
