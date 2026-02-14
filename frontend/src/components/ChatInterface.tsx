@@ -753,8 +753,17 @@ Sample JSON output:
       })
 
       if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.detail || 'Upload failed')
+        // Try to parse error as JSON, fall back to text if not valid JSON
+        let errorMessage = 'Upload failed'
+        try {
+          const errorData = await response.json()
+          errorMessage = errorData.detail || 'Upload failed'
+        } catch {
+          // Response is not JSON (e.g., plain "Internal Server Error")
+          const errorText = await response.text().catch(() => '')
+          errorMessage = errorText || `HTTP error ${response.status}`
+        }
+        throw new Error(errorMessage)
       }
 
       const data = await response.json()
