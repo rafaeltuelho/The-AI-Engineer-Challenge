@@ -1,6 +1,6 @@
 .rag-query-container {
   background: var(--card-bg);
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-primary);
   border-radius: 8px;
   padding: 16px;
   margin-bottom: 16px;
@@ -33,7 +33,7 @@
 .query-input {
   flex: 1;
   padding: 12px;
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-primary);
   border-radius: 6px;
   background: var(--bg-primary);
   color: var(--text-primary);
@@ -110,7 +110,7 @@
 
 .query-result {
   background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-primary);
   border-radius: 6px;
   padding: 16px;
   margin-bottom: 16px;

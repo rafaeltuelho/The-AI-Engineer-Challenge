@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react'
-import { Send, Key, MessageSquare, User, Bot, Trash2, Settings, ArrowDown, X, FileText, Upload, Database, MessageCircle, BookOpen } from 'lucide-react'
+import { Send, MessageSquare, User, Bot, Trash2, Settings, ArrowDown, X, FileText, Upload, Database, MessageCircle, BookOpen } from 'lucide-react'
 import MarkdownRenderer from './MarkdownRenderer'
 import SuggestedQuestions from './SuggestedQuestions'
 import SettingsModal from './SettingsModal'
@@ -948,16 +948,7 @@ Sample JSON output:
           </div>
         </div>
 
-        {!apiKey.trim() && (
-          <div className="api-key-warning">
-            <Key size={16} />
-            Please enter your {selectedProvider === 'together' ? 'Together.ai' : 'OpenAI'} API key in settings to start chatting
-          </div>
-        )}
-
-
-
-        <div 
+        <div
           className="messages-container"
           ref={messagesContainerRef}
           onScroll={handleScroll}
@@ -1081,17 +1072,17 @@ Sample JSON output:
               value={inputMessage}
               onChange={(e) => setInputMessage(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Type your message here... (Cmd|Ctrl+Enter to send)"
+              placeholder={!apiKey.trim() ? "Enter your API key in Settings to start chatting" : "Type your message here... (Cmd|Ctrl+Enter to send)"}
               className="message-input"
               disabled={isLoading || !apiKey.trim()}
-              rows={2}
+              rows={1}
             />
             <button
               type="submit"
               className="send-button"
               disabled={isLoading || !inputMessage.trim() || !apiKey.trim()}
             >
-              <Send size={20} />
+              <Send size={16} />
             </button>
             <input
               ref={fileInputRef}
@@ -1102,12 +1093,10 @@ Sample JSON output:
               disabled={isPdfUploading}
             />
           </div>
-          {conversationId && (
-            <div className="conversation-info">
-              <span>💬 Continuing conversation: {conversationId.substring(0, 8)}...</span>
-            </div>
-          )}
-          
+          <div className="input-disclaimer">
+            AI can make mistakes. Consider checking important info.
+          </div>
+
           {pdfUploadError && (
             <div className="upload-message error">
               <X size={16} />
