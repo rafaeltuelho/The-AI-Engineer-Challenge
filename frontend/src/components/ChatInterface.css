@@ -1307,21 +1307,7 @@
   position: relative;
 }
 
-.chat-container.empty-state-layout {
-  justify-content: center;
-  align-items: center;
-}
 
-.chat-container.empty-state-layout .messages-container {
-  display: none;
-}
-
-.chat-container.empty-state-layout .input-form {
-  width: 100%;
-  max-width: 700px;
-  margin: 0 auto;
-  padding: 0;
-}
 
 /* Settings button in header */
 .chat-header-buttons {

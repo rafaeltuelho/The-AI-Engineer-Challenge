@@ -867,7 +867,7 @@ Sample JSON output:
         title="Drag to resize"
       />
 
-      <div className={`chat-container ${messages.length === 0 ? 'empty-state-layout' : ''}`}>
+      <div className="chat-container">
         <div className="chat-header">
           <div className="chat-header-left">
             <h2>Chat with AI</h2>
