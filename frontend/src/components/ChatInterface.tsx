@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react'
-import { Send, Key, MessageSquare, User, Bot, Trash2, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Settings, ArrowDown, X, FileText, Upload, Database, MessageCircle, BookOpen } from 'lucide-react'
+import { Send, Key, MessageSquare, User, Bot, Trash2, ChevronLeft, ChevronRight, Settings, ArrowDown, X, FileText, Upload, Database, MessageCircle, BookOpen } from 'lucide-react'
 import MarkdownRenderer from './MarkdownRenderer'
 import SuggestedQuestions from './SuggestedQuestions'
+import SettingsModal from './SettingsModal'
 import type { ExtractedContent } from '../utils/suggestedQuestionsExtractor'
 import './ChatInterface.css'
 
@@ -25,15 +26,14 @@ interface ChatInterfaceProps {
   modelDescriptions: Record<string, string>
 }
 
-const ChatInterface: React.FC<ChatInterfaceProps> = ({ 
-  apiKey, 
-  setApiKey, 
+const ChatInterface: React.FC<ChatInterfaceProps> = ({
+  apiKey,
+  setApiKey,
   sessionId,
-  selectedModel, 
-  setSelectedModel, 
+  selectedModel,
+  setSelectedModel,
   selectedProvider,
-  setSelectedProvider,
-  modelDescriptions 
+  setSelectedProvider
 }) => {
   const [messages, setMessages] = useState<Message[]>([])
   const [inputMessage, setInputMessage] = useState('')
@@ -46,18 +46,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     // Check if user has previously dismissed the banner
     return localStorage.getItem('conversationInfoBannerDismissed') !== 'true'
   })
-  const [expandedSections, setExpandedSections] = useState({
-    apiKey: true,
-    provider: false,
-    model: false,
-    systemMessage: false,
-    conversations: false
-  })
+
   const [pdfUploadError, setPdfUploadError] = useState<string | null>(null)
   const [pdfUploadSuccess, setPdfUploadSuccess] = useState<string | null>(null)
   const [isPdfUploading, setIsPdfUploading] = useState(false)
   const [showApiKeySuccess, setShowApiKeySuccess] = useState(false)
-  const [showApiKeyInfo, setShowApiKeyInfo] = useState(true)
   const [chatMode, setChatMode] = useState<'regular' | 'rag' | 'topic-explorer'>('regular')
   const [_lastSuggestedQuestions, setLastSuggestedQuestions] = useState<string[]>([])
   const [hasConversationStarted, setHasConversationStarted] = useState(false)
@@ -73,6 +66,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     return isNaN(parsed) ? 280 : parsed
   })
   const [isResizing, setIsResizing] = useState<boolean>(false)
+  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false)
 
   // Default developer messages for each chat mode
   const getDefaultDeveloperMessage = (mode: 'regular' | 'rag' | 'topic-explorer'): string => {
@@ -125,35 +119,35 @@ Sample JSON output:
   }
 
   // Filter available models based on chat mode and provider
-  const getAvailableModels = () => {
-    const openaiModels = [
-      'gpt-4', 'gpt-4-mini', 'gpt-4-turbo', 'gpt-4o', 'gpt-4o-mini',
-      'gpt-4.1', 'gpt-4.1-mini', 'gpt-4.1-nano', 'gpt-5', 'gpt-5-mini', 'gpt-5-nano'
-    ]
-    
-    const togetherModels = [
-      'deepseek-ai/DeepSeek-R1', 'deepseek-ai/DeepSeek-V3.1', 'deepseek-ai/DeepSeek-V3',
-      'meta-llama/Llama-3.3-70B-Instruct-Turbo',
-      'openai/gpt-oss-20b', 'openai/gpt-oss-120b', 'moonshotai/Kimi-K2-Instruct-0905',
-      'Qwen/Qwen3-Next-80B-A3B-Thinking'
-    ]
-    
-    // Filter by provider first
-    let availableModels = selectedProvider === 'together' ? togetherModels : openaiModels
-    
-    if (chatMode === 'topic-explorer') {
-      // Only allow specific models for Topic Explorer mode
-      if (selectedProvider === 'together') {
-        return ['deepseek-ai/DeepSeek-V3', 'deepseek-ai/DeepSeek-R1','meta-llama/Llama-3.3-70B-Instruct-Turbo']
-      } else {
-        return ['gpt-4.1', 'gpt-4o', 'gpt-5']
-      }
-    }
-    
-    return availableModels
-  }
+  // const getAvailableModels = () => {
+  //   const openaiModels = [
+  //     'gpt-4', 'gpt-4-mini', 'gpt-4-turbo', 'gpt-4o', 'gpt-4o-mini',
+  //     'gpt-4.1', 'gpt-4.1-mini', 'gpt-4.1-nano', 'gpt-5', 'gpt-5-mini', 'gpt-5-nano'
+  //   ]
+  //
+  //   const togetherModels = [
+  //     'deepseek-ai/DeepSeek-R1', 'deepseek-ai/DeepSeek-V3.1', 'deepseek-ai/DeepSeek-V3',
+  //     'meta-llama/Llama-3.3-70B-Instruct-Turbo',
+  //     'openai/gpt-oss-20b', 'openai/gpt-oss-120b', 'moonshotai/Kimi-K2-Instruct-0905',
+  //     'Qwen/Qwen3-Next-80B-A3B-Thinking'
+  //   ]
+  //
+  //   // Filter by provider first
+  //   let availableModels = selectedProvider === 'together' ? togetherModels : openaiModels
+  //
+  //   if (chatMode === 'topic-explorer') {
+  //     // Only allow specific models for Topic Explorer mode
+  //     if (selectedProvider === 'together') {
+  //       return ['deepseek-ai/DeepSeek-V3', 'deepseek-ai/DeepSeek-R1','meta-llama/Llama-3.3-70B-Instruct-Turbo']
+  //     } else {
+  //       return ['gpt-4.1', 'gpt-4o', 'gpt-5']
+  //     }
+  //   }
+  //
+  //   return availableModels
+  // }
   
-  const availableModels = getAvailableModels()
+  // const availableModels = getAvailableModels()
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
@@ -624,13 +618,6 @@ Sample JSON output:
     }, 100)
   }
 
-  const toggleSection = (section: keyof typeof expandedSections) => {
-    setExpandedSections(prev => ({
-      ...prev,
-      [section]: !prev[section]
-    }))
-  }
-
   const togglePanel = () => {
     setIsPanelCollapsed(!isPanelCollapsed)
   }
@@ -639,11 +626,6 @@ Sample JSON output:
     setShowConversationInfoBanner(false)
     // Store dismissal in localStorage so it doesn't show again
     localStorage.setItem('conversationInfoBannerDismissed', 'true')
-  }
-
-
-  const dismissApiKeyInfo = () => {
-    setShowApiKeyInfo(false)
   }
 
   const handleSuggestedQuestionClick = (question: string) => {
@@ -812,10 +794,25 @@ Sample JSON output:
 
   return (
     <div className="chat-interface" ref={containerRef}>
+      {/* Settings Modal */}
+      <SettingsModal
+        isOpen={isSettingsModalOpen}
+        onClose={() => setIsSettingsModalOpen(false)}
+        apiKey={apiKey}
+        setApiKey={setApiKey}
+        selectedProvider={selectedProvider}
+        setSelectedProvider={setSelectedProvider}
+        selectedModel={selectedModel}
+        setSelectedModel={setSelectedModel}
+        developerMessage={developerMessage}
+        setDeveloperMessage={setDeveloperMessage}
+      />
+
+      {/* Sidebar - Chat History Only */}
       <div className={`left-panel ${isPanelCollapsed ? 'collapsed' : ''}`} style={!isPanelCollapsed ? { width: `${sidebarWidth}px` } : undefined}>
         <div className="panel-header">
-          <h2>Chat settings</h2>
-          <button 
+          <h2>Chat History</h2>
+          <button
             className="panel-toggle-btn"
             onClick={togglePanel}
             title={isPanelCollapsed ? 'Expand panel' : 'Collapse panel'}
@@ -826,203 +823,61 @@ Sample JSON output:
         
         {!isPanelCollapsed && (
           <div className="panel-content">
-            <div className="setting-section">
-              <div 
-                className="section-header"
-                onClick={() => toggleSection('provider')}
-              >
-                <div className="section-title">
-                  <Settings size={14} />
-                  <span>Provider</span>
-                </div>
-                {expandedSections.provider ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-              </div>
-              {expandedSections.provider && (
-                <div className="section-content">
-                  <select
-                    value={selectedProvider}
-                    onChange={(e) => setSelectedProvider(e.target.value)}
-                    className="provider-select"
-                  >
-                    <option value="openai">OpenAI</option>
-                    <option value="together">Together.ai</option>
-                  </select>
-                  <div className="provider-info">
-                    {selectedProvider === 'openai' ? (
-                      <span>Using OpenAI's GPT models</span>
-                    ) : (
-                      <span>Using Together.ai's open-source models</span>
-                    )}
+            {showConversationInfoBanner && (
+              <div className="conversation-info-banner">
+                <div className="info-icon">ℹ️</div>
+                <div className="info-content">
+                  <div className="info-title">Session-based Conversations</div>
+                  <div className="info-text">
+                    Conversations are isolated by user-session, stored in-memory in the backend server-side and remain active for the duration of the current user-session interaction or up to 10min of inactivity.
                   </div>
                 </div>
-              )}
-            </div>
-
-            <div className="setting-section">
-              <div 
-                className="section-header"
-                onClick={() => toggleSection('apiKey')}
-              >
-                <div className="section-title">
-                  <Key size={14} />
-                  <span>API Key</span>
-                </div>
-                {expandedSections.apiKey ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                <button
+                  className="dismiss-banner-btn"
+                  onClick={dismissInfoBanner}
+                  title="Dismiss"
+                >
+                  <X size={12} />
+                </button>
               </div>
-              {expandedSections.apiKey && (
-                <div className="section-content">
-                  <input
-                    id="api-key"
-                    type="password"
-                    value={apiKey}
-                    onChange={(e) => setApiKey(e.target.value)}
-                    placeholder={`${selectedProvider === 'together' ? 'Together.ai key: tgp_' : 'OpenAI key: sk-'} ...`}
-                    className="api-key-input"
-                  />
-                  {apiKey.trim() && showApiKeyInfo && (
-                    <div className="api-key-info">
-                      <div className="info-icon">ℹ️</div>
-                      <div className="info-text">
-                        Your API key is only used for this session and is not stored or persisted anywhere!
+            )}
+            <div className="conversations-list">
+              {conversations.length === 0 ? (
+                <p className="no-conversations">No conversations yet</p>
+              ) : (
+                conversations.map((conv) => (
+                  <div key={conv.conversation_id} className={`conversation-item ${conv.mode === 'rag' ? 'rag-mode' : conv.mode === 'topic-explorer' ? 'topic-explorer-mode' : 'regular-mode'}`}>
+                    <div
+                      className="conversation-content"
+                      onClick={() => loadConversation(conv.conversation_id)}
+                    >
+                      <div className="conversation-preview">
+                        {conv.title || conv.system_message.substring(0, 30)}
                       </div>
-                      <button 
-                        className="dismiss-info-btn"
-                        onClick={dismissApiKeyInfo}
-                        title="Dismiss"
-                      >
-                        <X size={12} />
-                      </button>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-
-            <div className="setting-section">
-              <div 
-                className="section-header"
-                onClick={() => toggleSection('model')}
-              >
-                <div className="section-title">
-                  <Settings size={14} />
-                  <span>Model</span>
-                </div>
-                {expandedSections.model ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-              </div>
-              {expandedSections.model && (
-                <div className="section-content">
-                  <select
-                    value={selectedModel}
-                    onChange={(e) => setSelectedModel(e.target.value)}
-                    className="model-select"
-                  >
-                    {availableModels.map((model) => (
-                      <option key={model} value={model}>
-                        {model} - {modelDescriptions[model as keyof typeof modelDescriptions]}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-            </div>
-
-            <div className="setting-section">
-              <div 
-                className="section-header"
-                onClick={() => toggleSection('systemMessage')}
-              >
-                <div className="section-title">
-                  <MessageSquare size={14} />
-                  <span>System Message</span>
-                </div>
-                {expandedSections.systemMessage ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-              </div>
-              {expandedSections.systemMessage && (
-                <div className="section-content">
-                  <textarea
-                    id="developer-message"
-                    value={developerMessage}
-                    onChange={(e) => setDeveloperMessage(e.target.value)}
-                    placeholder="Define the AI's behavior and role"
-                    className="developer-message-input"
-                    rows={3}
-                  />
-                </div>
-              )}
-            </div>
-
-
-            <div className="setting-section">
-              <div 
-                className="section-header"
-                onClick={() => toggleSection('conversations')}
-              >
-                <div className="section-title">
-                  <MessageSquare size={14} />
-                  <span>Conversations</span>
-                </div>
-                {expandedSections.conversations ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-              </div>
-              {expandedSections.conversations && (
-                <div className="section-content">
-                  {showConversationInfoBanner && (
-                    <div className="conversation-info-banner">
-                      <div className="info-icon">ℹ️</div>
-                      <div className="info-content">
-                        <div className="info-title">Session-based Conversations</div>
-                        <div className="info-text">
-                          Conversations are isolated by user-session, stored in-memory in the backend server-side and remain active for the duration of the current user-session interaction or up to 10min of inactivity.
-                        </div>
+                      <div className="conversation-meta">
+                        <span>{conv.message_count} msgs</span>
+                        <span>{new Date(conv.last_updated).toLocaleDateString()}</span>
                       </div>
-                      <button 
-                        className="dismiss-banner-btn"
-                        onClick={dismissInfoBanner}
-                        title="Dismiss"
-                      >
-                        <X size={12} />
-                      </button>
                     </div>
-                  )}
-                  <div className="conversations-list">
-                    {conversations.length === 0 ? (
-                      <p className="no-conversations">No conversations yet</p>
-                    ) : (
-                      conversations.map((conv) => (
-                        <div key={conv.conversation_id} className={`conversation-item ${conv.mode === 'rag' ? 'rag-mode' : conv.mode === 'topic-explorer' ? 'topic-explorer-mode' : 'regular-mode'}`}>
-                          <div 
-                            className="conversation-content"
-                            onClick={() => loadConversation(conv.conversation_id)}
-                          >
-                            <div className="conversation-preview">
-                              {conv.title || conv.system_message.substring(0, 30)}
-                            </div>
-                            <div className="conversation-meta">
-                              <span>{conv.message_count} msgs</span>
-                              <span>{new Date(conv.last_updated).toLocaleDateString()}</span>
-                            </div>
-                          </div>
-                          <button 
-                            className="delete-conversation-btn"
-                            onClick={() => deleteConversation(conv.conversation_id)}
-                            title="Delete conversation"
-                          >
-                            <Trash2 size={12} />
-                          </button>
-                        </div>
-                      ))
-                    )}
+                    <button
+                      className="delete-conversation-btn"
+                      onClick={() => deleteConversation(conv.conversation_id)}
+                      title="Delete conversation"
+                    >
+                      <Trash2 size={12} />
+                    </button>
                   </div>
-                  {conversationId && (
-                    <div className="conversation-id-section">
-                      <div className="conversation-id-label">Current ID</div>
-                      <div className="conversation-id-display">
-                        {conversationId.substring(0, 12)}...
-                      </div>
-                    </div>
-                  )}
-                </div>
+                ))
               )}
             </div>
+            {conversationId && (
+              <div className="conversation-id-section">
+                <div className="conversation-id-label">Current ID</div>
+                <div className="conversation-id-display">
+                  {conversationId.substring(0, 12)}...
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -1036,7 +891,7 @@ Sample JSON output:
         title="Drag to resize"
       />
 
-      <div className="chat-container">
+      <div className={`chat-container ${messages.length === 0 ? 'empty-state-layout' : ''}`}>
         <div className="chat-header">
           <div className="chat-header-left">
             <h2>Chat with AI</h2>
@@ -1097,15 +952,24 @@ Sample JSON output:
               </button>
             </div>
           </div>
-          <button 
-            className="new-chat-btn"
-            onClick={startNewConversation}
-            disabled={!apiKey.trim()}
-            title={apiKey.trim() ? "New Chat" : "Enter API key to start chatting"}
-          >
-            <MessageSquare size={16} />
-            New Chat
-          </button>
+          <div className="chat-header-buttons">
+            <button
+              className="settings-btn"
+              onClick={() => setIsSettingsModalOpen(true)}
+              title="Open settings"
+            >
+              <Settings size={16} />
+            </button>
+            <button
+              className="new-chat-btn"
+              onClick={startNewConversation}
+              disabled={!apiKey.trim()}
+              title={apiKey.trim() ? "New Chat" : "Enter API key to start chatting"}
+            >
+              <MessageSquare size={16} />
+              New Chat
+            </button>
+          </div>
         </div>
 
         {!apiKey.trim() && (

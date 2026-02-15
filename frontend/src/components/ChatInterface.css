@@ -1683,3 +1683,63 @@
     font-size: 0.8rem;
   }
 }
+
+/* ChatGPT-style layout - Centered input when empty */
+.chat-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  position: relative;
+}
+
+.chat-container.empty-state-layout {
+  justify-content: center;
+  align-items: center;
+}
+
+.chat-container.empty-state-layout .messages-container {
+  display: none;
+}
+
+.chat-container.empty-state-layout .input-form {
+  width: 100%;
+  max-width: 700px;
+  margin: 0 auto;
+  padding: 0;
+}
+
+/* Settings button in header */
+.chat-header-buttons {
+  display: flex;
+  gap: var(--spacing-sm);
+  align-items: center;
+}
+
+.settings-btn {
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: transparent;
+  border: 1px solid var(--border-primary);
+  color: var(--text-secondary);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition-fast);
+  font-size: 0.9rem;
+}
+
+.settings-btn:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  border-color: var(--border-secondary);
+}
+
+.settings-btn:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+.settings-btn:active {
+  transform: scale(0.95);
+}
