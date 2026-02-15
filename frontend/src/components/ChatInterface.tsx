@@ -606,20 +606,8 @@ Sample JSON output:
   }
 
   const handleSuggestedQuestionClick = (question: string) => {
-    // Don't clear Topic Explorer suggested questions - keep them visible in chat panel
-    
-    // In Topic Explorer mode, automatically submit the question
-    if (chatMode === 'topic-explorer') {
-      // Set the input message and immediately submit with the question directly
-      setInputMessage(question)
-      handleSubmit({ preventDefault: () => {} } as React.FormEvent, question)
-    } else {
-      // In other modes, set the message and focus the textarea for manual submission
-      setInputMessage(question)
-      if (textareaRef.current) {
-        textareaRef.current.focus()
-      }
-    }
+    setInputMessage(question)
+    handleSubmit({ preventDefault: () => {} } as React.FormEvent, question)
   }
 
   const handleDocumentSuggestedQuestionClick = (question: string) => {
