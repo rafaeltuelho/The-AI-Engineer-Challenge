@@ -148,11 +148,12 @@ function App() {
 
   return (
     <div className="app">
-      <Header 
-        theme={theme} 
+      <Header
+        theme={theme}
         onThemeChange={handleThemeChange}
         selectedModel={selectedModel}
-        modelDescription={modelDescriptions[selectedModel as keyof typeof modelDescriptions]}
+        setSelectedModel={setSelectedModel}
+        modelDescriptions={modelDescriptions}
       />
       <main className="main-content">
         <ChatInterface 
