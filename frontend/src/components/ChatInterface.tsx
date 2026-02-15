@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react'
-import { Send, MessageSquare, User, Bot, Trash2, Settings, ArrowDown, X, FileText, Upload, Database, MessageCircle, BookOpen } from 'lucide-react'
+import { Send, MessageSquare, User, Bot, Trash2, Settings, ArrowDown, X, FileText, Upload, Database, MessageCircle, BookOpen, Compass } from 'lucide-react'
 import MarkdownRenderer from './MarkdownRenderer'
 import SuggestedQuestions from './SuggestedQuestions'
 import SettingsModal from './SettingsModal'
@@ -774,7 +774,7 @@ Sample JSON output:
     if (message.role === 'assistant') {
       return <MarkdownRenderer content={message.content} chatMode={chatMode} />
     }
-    return <div className="message-text">{message.content}</div>
+    return <>{message.content}</>
   }
 
   return (
@@ -871,62 +871,6 @@ Sample JSON output:
         <div className="chat-header">
           <div className="chat-header-left">
             <h2>Chat with AI</h2>
-            <div className="mode-badges">
-              <button
-                className={`mode-badge ${chatMode === 'regular' ? 'active regular-mode' : ''} ${hasConversationStarted ? 'disabled' : ''}`}
-                onClick={() => {
-                  if (!hasConversationStarted) {
-                    setChatMode('regular')
-                    setDeveloperMessage(getDefaultDeveloperMessage('regular'))
-                    setLastSuggestedQuestions([])
-                  }
-                }}
-                title={hasConversationStarted ? "Cannot switch mode after conversation starts. Start a new chat to change mode." : "AI Chat Mode - General conversation"}
-                data-mode="regular"
-                disabled={hasConversationStarted}
-              >
-                <MessageCircle size={14} />
-                <span>AI Chat</span>
-              </button>
-              <button
-                className={`mode-badge ${chatMode === 'rag' ? 'active rag-mode' : ''} ${hasConversationStarted ? 'disabled' : ''}`}
-                onClick={() => {
-                  if (!hasConversationStarted) {
-                    setChatMode('rag')
-                    setDeveloperMessage(getDefaultDeveloperMessage('rag'))
-                    setLastSuggestedQuestions([])
-                  }
-                }}
-                title={hasConversationStarted ? "Cannot switch mode after conversation starts. Start a new chat to change mode." : "RAG Mode - Query uploaded documents"}
-                data-mode="rag"
-                disabled={hasConversationStarted}
-              >
-                <Database size={14} />
-                <span>RAG</span>
-              </button>
-              <button
-                className={`mode-badge ${chatMode === 'topic-explorer' ? 'active topic-explorer-mode' : ''} ${hasConversationStarted ? 'disabled' : ''}`}
-                onClick={() => {
-                  if (!hasConversationStarted) {
-                    setChatMode('topic-explorer')
-                    setDeveloperMessage(getDefaultDeveloperMessage('topic-explorer'))
-                    setLastSuggestedQuestions([])
-                    // Set appropriate default model for Topic Explorer mode based on provider
-                    if (selectedProvider === 'together') {
-                      setSelectedModel('deepseek-ai/DeepSeek-V3')
-                    } else {
-                      setSelectedModel('gpt-4.1')
-                    }
-                  }
-                }}
-                title={hasConversationStarted ? "Cannot switch mode after conversation starts. Start a new chat to change mode." : "Topic Explorer - Guided learning with structured responses"}
-                data-mode="topic-explorer"
-                disabled={hasConversationStarted}
-              >
-                <BookOpen size={14} />
-                <span>Topic Explorer</span>
-              </button>
-            </div>
           </div>
           <div className="chat-header-buttons">
             <button
@@ -969,72 +913,104 @@ Sample JSON output:
           )}
           
           {messages.length === 0 ? (
-            <div className="empty-state">
-              {/*uploadedDocuments.length > 0 && showPdfBanner && (
-                <div className="pdf-info-banner">
-                  <FileText size={16} />
-                  <div className="pdf-info-content">
-                    <div className="pdf-info-title">PDF Documents Ready</div>
-                    <div className="pdf-info-text">
-                      You have {uploadedDocuments.length} PDF document{uploadedDocuments.length !== 1 ? 's' : ''} uploaded. 
-                      You can now ask questions about your documents directly in the chat - the AI will use information from your uploaded PDFs to answer your questions.
-                    </div>
-                  </div>
-                  <button 
-                    className="dismiss-pdf-banner-btn"
-                    onClick={dismissPdfBanner}
-                    title="Dismiss"
-                  >
-                    <X size={12} />
-                  </button>
-                </div>
-              )}
-              {conversations.length > 0 && (
-                <p className="conversation-hint">
-                  💡 You have {conversations.length} previous conversation{conversations.length !== 1 ? 's' : ''}. 
-                  Open the Conversations section in the left panel to view them.
-                </p>
-              ) */}
+            <div className="welcome-screen">
+              <h1 className="welcome-heading">What can I help with?</h1>
+
+              <div className="mode-cards">
+                <button
+                  className={`mode-card ${chatMode === 'regular' ? 'active' : ''} ${hasConversationStarted ? 'disabled' : ''}`}
+                  onClick={() => { if (!hasConversationStarted) { setChatMode('regular'); setDeveloperMessage(getDefaultDeveloperMessage('regular')); }}}
+                  disabled={hasConversationStarted}
+                >
+                  <MessageSquare size={24} />
+                  <div className="mode-card-title">AI Chat</div>
+                  <div className="mode-card-desc">General conversation</div>
+                </button>
+                <button
+                  className={`mode-card ${chatMode === 'rag' ? 'active' : ''} ${hasConversationStarted ? 'disabled' : ''}`}
+                  onClick={() => { if (!hasConversationStarted) { setChatMode('rag'); setDeveloperMessage(getDefaultDeveloperMessage('rag')); }}}
+                  disabled={hasConversationStarted}
+                >
+                  <FileText size={24} />
+                  <div className="mode-card-title">RAG Mode</div>
+                  <div className="mode-card-desc">Chat with documents</div>
+                </button>
+                <button
+                  className={`mode-card ${chatMode === 'topic-explorer' ? 'active' : ''} ${hasConversationStarted ? 'disabled' : ''}`}
+                  onClick={() => { if (!hasConversationStarted) { setChatMode('topic-explorer'); setDeveloperMessage(getDefaultDeveloperMessage('topic-explorer')); }}}
+                  disabled={hasConversationStarted}
+                >
+                  <Compass size={24} />
+                  <div className="mode-card-title">Topic Explorer</div>
+                  <div className="mode-card-desc">Deep dive into topics</div>
+                </button>
+              </div>
+
+              <div className="suggestion-chips">
+                <button className="suggestion-chip" onClick={() => handleSuggestedQuestionClick("Explain quantum computing in simple terms")}>
+                  Explain quantum computing
+                </button>
+                <button className="suggestion-chip" onClick={() => handleSuggestedQuestionClick("Write a creative short story about time travel")}>
+                  Write a short story
+                </button>
+                <button className="suggestion-chip" onClick={() => handleSuggestedQuestionClick("What are the best practices for REST API design?")}>
+                  REST API best practices
+                </button>
+                <button className="suggestion-chip" onClick={() => handleSuggestedQuestionClick("Help me debug a React useEffect issue")}>
+                  Debug React useEffect
+                </button>
+              </div>
             </div>
           ) : (
             messages.map((message) => (
-              <div key={message.id} className={`message ${message.role}`}>
-                <div className="message-avatar">
-                  {message.role === 'user' ? <User size={20} /> : <Bot size={20} />}
-                </div>
-                <div className="message-content">
-                  {renderMessageContent(message)}
-                  <div className="message-timestamp">
-                    {message.timestamp.toLocaleTimeString()}
+              <div key={message.id} className={`message-row ${message.role}`}>
+                <div className="message-row-inner">
+                  <div className="message-avatar">
+                    {message.role === 'user' ? <User size={20} /> : <Bot size={20} />}
                   </div>
-                  
-                  {/* Show Topic Explorer suggested questions after assistant messages */}
-                  {message.role === 'assistant' &&
-                   chatMode === 'topic-explorer' &&
-                   message.suggestedQuestions && message.suggestedQuestions.length > 0 && (
-                    <div className="topic-explorer-suggested-questions">
-                      <SuggestedQuestions
-                        questions={message.suggestedQuestions}
-                        onQuestionClick={handleSuggestedQuestionClick}
-                        isVisible={true}
-                      />
+                  <div className="message-body">
+                    <div className="message-role-label">
+                      {message.role === 'user' ? 'You' : 'Assistant'}
                     </div>
-                  )}
-                  
+                    <div className="message-content">
+                      {renderMessageContent(message)}
+                    </div>
+                    <div className="message-timestamp">
+                      {message.timestamp.toLocaleTimeString()}
+                    </div>
+
+                    {/* Show Topic Explorer suggested questions after assistant messages */}
+                    {message.role === 'assistant' &&
+                     chatMode === 'topic-explorer' &&
+                     message.suggestedQuestions && message.suggestedQuestions.length > 0 && (
+                      <div className="topic-explorer-suggested-questions">
+                        <SuggestedQuestions
+                          questions={message.suggestedQuestions}
+                          onQuestionClick={handleSuggestedQuestionClick}
+                          isVisible={true}
+                        />
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             ))
           )}
           {isLoading && (
-            <div className="message assistant">
-              <div className="message-avatar">
-                <Bot size={20} />
-              </div>
-              <div className="message-content">
-                <div className="typing-indicator">
-                  <span></span>
-                  <span></span>
-                  <span></span>
+            <div className="message-row assistant">
+              <div className="message-row-inner">
+                <div className="message-avatar">
+                  <Bot size={20} />
+                </div>
+                <div className="message-body">
+                  <div className="message-role-label">Assistant</div>
+                  <div className="message-content">
+                    <div className="typing-indicator">
+                      <span></span>
+                      <span></span>
+                      <span></span>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
