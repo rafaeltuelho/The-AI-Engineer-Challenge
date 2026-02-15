@@ -37,6 +37,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   setSelectedModel,
   selectedProvider,
   setSelectedProvider,
+  modelDescriptions,
   sidebarOpen,
   settingsModalOpen,
   setSettingsModalOpen
@@ -744,6 +745,7 @@ Sample JSON output:
         setSelectedModel={setSelectedModel}
         developerMessage={developerMessage}
         setDeveloperMessage={setDeveloperMessage}
+        modelDescriptions={modelDescriptions}
       />
 
       {/* Sidebar - Chat History Only */}

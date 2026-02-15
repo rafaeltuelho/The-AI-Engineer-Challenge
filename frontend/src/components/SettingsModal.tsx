@@ -13,6 +13,7 @@ interface SettingsModalProps {
   setSelectedModel: (model: string) => void
   developerMessage: string
   setDeveloperMessage: (message: string) => void
+  modelDescriptions: Record<string, string>
 }
 
 const SettingsModal: React.FC<SettingsModalProps> = ({
@@ -25,7 +26,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   selectedModel,
   setSelectedModel,
   developerMessage,
-  setDeveloperMessage
+  setDeveloperMessage,
+  modelDescriptions
 }) => {
   const [showApiKeySuccess, setShowApiKeySuccess] = useState(false)
 
@@ -115,9 +117,18 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
               onChange={(e) => setSelectedModel(e.target.value)}
               className="settings-select"
             >
-              <option value="gpt-4">GPT-4</option>
-              <option value="gpt-4.1">GPT-4.1</option>
-              <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
+              {Object.entries(modelDescriptions)
+                .filter(([key]) => {
+                  if (selectedProvider === 'together') {
+                    return key.includes('/')
+                  }
+                  return !key.includes('/')
+                })
+                .map(([key, description]) => (
+                  <option key={key} value={key}>
+                    {description}
+                  </option>
+                ))}
             </select>
           </div>
 
