@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react'
-import { Send, Key, MessageSquare, User, Bot, Trash2, ChevronLeft, ChevronRight, Settings, ArrowDown, X, FileText, Upload, Database, MessageCircle, BookOpen } from 'lucide-react'
+import { Send, Key, MessageSquare, User, Bot, Trash2, Settings, ArrowDown, X, FileText, Upload, Database, MessageCircle, BookOpen } from 'lucide-react'
 import MarkdownRenderer from './MarkdownRenderer'
 import SuggestedQuestions from './SuggestedQuestions'
 import SettingsModal from './SettingsModal'
@@ -42,10 +42,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const [conversationId, setConversationId] = useState<string | null>(null)
   const [conversations, setConversations] = useState<any[]>([])
   const [isPanelCollapsed, setIsPanelCollapsed] = useState(false)
-  const [showConversationInfoBanner, setShowConversationInfoBanner] = useState(() => {
-    // Check if user has previously dismissed the banner
-    return localStorage.getItem('conversationInfoBannerDismissed') !== 'true'
-  })
 
   const [pdfUploadError, setPdfUploadError] = useState<string | null>(null)
   const [pdfUploadSuccess, setPdfUploadSuccess] = useState<string | null>(null)
@@ -602,7 +598,6 @@ Sample JSON output:
     setMessages([])
     setConversationId(null)
     setDeveloperMessage(getDefaultDeveloperMessage('regular'))
-    setShowConversationInfoBanner(false)
     setChatMode('regular')
     setLastSuggestedQuestions([])
     setHasConversationStarted(false)
@@ -616,16 +611,6 @@ Sample JSON output:
     setTimeout(() => {
       loadConversations()
     }, 100)
-  }
-
-  const togglePanel = () => {
-    setIsPanelCollapsed(!isPanelCollapsed)
-  }
-
-  const dismissInfoBanner = () => {
-    setShowConversationInfoBanner(false)
-    // Store dismissal in localStorage so it doesn't show again
-    localStorage.setItem('conversationInfoBannerDismissed', 'true')
   }
 
   const handleSuggestedQuestionClick = (question: string) => {
@@ -810,75 +795,66 @@ Sample JSON output:
 
       {/* Sidebar - Chat History Only */}
       <div className={`left-panel ${isPanelCollapsed ? 'collapsed' : ''}`} style={!isPanelCollapsed ? { width: `${sidebarWidth}px` } : undefined}>
-        <div className="panel-header">
-          <h2>Chat History</h2>
-          <button
-            className="panel-toggle-btn"
-            onClick={togglePanel}
-            title={isPanelCollapsed ? 'Expand panel' : 'Collapse panel'}
-          >
-            {isPanelCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
-          </button>
-        </div>
-        
         {!isPanelCollapsed && (
-          <div className="panel-content">
-            {showConversationInfoBanner && (
-              <div className="conversation-info-banner">
-                <div className="info-icon">ℹ️</div>
-                <div className="info-content">
-                  <div className="info-title">Session-based Conversations</div>
-                  <div className="info-text">
-                    Conversations are isolated by user-session, stored in-memory in the backend server-side and remain active for the duration of the current user-session interaction or up to 10min of inactivity.
-                  </div>
-                </div>
-                <button
-                  className="dismiss-banner-btn"
-                  onClick={dismissInfoBanner}
-                  title="Dismiss"
-                >
-                  <X size={12} />
-                </button>
-              </div>
-            )}
+          <>
+            {/* New Chat Button */}
+            <button
+              className="new-chat-btn sidebar-new-chat"
+              onClick={startNewConversation}
+              disabled={!apiKey.trim()}
+              title={apiKey.trim() ? "Start a new conversation" : "Enter API key to start chatting"}
+            >
+              <MessageSquare size={16} />
+              New Chat
+            </button>
+
+            {/* Conversation History List */}
             <div className="conversations-list">
               {conversations.length === 0 ? (
                 <p className="no-conversations">No conversations yet</p>
               ) : (
-                conversations.map((conv) => (
-                  <div key={conv.conversation_id} className={`conversation-item ${conv.mode === 'rag' ? 'rag-mode' : conv.mode === 'topic-explorer' ? 'topic-explorer-mode' : 'regular-mode'}`}>
+                conversations.map((conv) => {
+                  const isActive = conversationId === conv.conversation_id
+                  const modeLabel = conv.mode === 'rag' ? '📄' : conv.mode === 'topic-explorer' ? '📚' : '💬'
+
+                  return (
                     <div
-                      className="conversation-content"
+                      key={conv.conversation_id}
+                      className={`conversation-item ${isActive ? 'active' : ''}`}
                       onClick={() => loadConversation(conv.conversation_id)}
                     >
-                      <div className="conversation-preview">
+                      <span className="conversation-mode-icon">{modeLabel}</span>
+                      <div className="conversation-title">
                         {conv.title || conv.system_message.substring(0, 30)}
                       </div>
-                      <div className="conversation-meta">
-                        <span>{conv.message_count} msgs</span>
-                        <span>{new Date(conv.last_updated).toLocaleDateString()}</span>
-                      </div>
+                      <button
+                        className="delete-conversation-btn"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          deleteConversation(conv.conversation_id)
+                        }}
+                        title="Delete conversation"
+                      >
+                        <Trash2 size={12} />
+                      </button>
                     </div>
-                    <button
-                      className="delete-conversation-btn"
-                      onClick={() => deleteConversation(conv.conversation_id)}
-                      title="Delete conversation"
-                    >
-                      <Trash2 size={12} />
-                    </button>
-                  </div>
-                ))
+                  )
+                })
               )}
             </div>
-            {conversationId && (
-              <div className="conversation-id-section">
-                <div className="conversation-id-label">Current ID</div>
-                <div className="conversation-id-display">
-                  {conversationId.substring(0, 12)}...
-                </div>
-              </div>
-            )}
-          </div>
+
+            {/* Settings Button at Bottom */}
+            <div className="sidebar-footer">
+              <button
+                className="sidebar-settings-btn"
+                onClick={() => setIsSettingsModalOpen(true)}
+                title="Open settings"
+              >
+                <Settings size={16} />
+                <span>Settings</span>
+              </button>
+            </div>
+          </>
         )}
       </div>
 

@@ -1,34 +1,9 @@
 .app {
-  min-height: 100vh;
+  height: 100vh;
   display: flex;
   flex-direction: column;
   background: var(--bg-primary);
-  background-image: var(--gradient-mesh);
   color: var(--text-primary);
-  transition: background var(--transition-slow), color var(--transition-base);
-  position: relative;
-  overflow-x: hidden;
-}
-
-/* Subtle background pattern overlay */
-.app::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-image:
-    radial-gradient(circle at 100% 0%, var(--accent-primary-light) 0%, transparent 25%),
-    radial-gradient(circle at 0% 100%, var(--accent-success-light) 0%, transparent 25%);
-  pointer-events: none;
-  opacity: 0.5;
-  z-index: 0;
-}
-
-.app > * {
-  position: relative;
-  z-index: 1;
 }
 
 .main-content {
