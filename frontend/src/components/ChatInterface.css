@@ -1180,11 +1180,6 @@
     font-size: 0.875rem;
   }
 
-  .mode-badge {
-    font-size: 0.65rem;
-    padding: var(--spacing-xs) var(--spacing-sm);
-  }
-
   .new-chat-btn {
     padding: var(--spacing-xs) var(--spacing-sm);
     font-size: 0.75rem;
@@ -1295,20 +1290,12 @@
     font-size: 0.8rem;
   }
 
-  .mode-badge span:not(.mode-badge-icon) {
-    display: none;
+  .welcome-heading {
+    font-size: 1.5rem;
   }
 
-  .empty-state {
-    padding: var(--spacing-md);
-  }
-
-  .empty-state h3 {
-    font-size: 1rem;
-  }
-
-  .empty-state p {
-    font-size: 0.8rem;
+  .mode-card {
+    min-width: 100%;
   }
 }
 

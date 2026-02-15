@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react'
-import { Send, MessageSquare, User, Bot, Trash2, Settings, ArrowDown, X, FileText, Upload, Database, MessageCircle, BookOpen, Compass } from 'lucide-react'
+import { Send, MessageSquare, User, Bot, Trash2, Settings, ArrowDown, X, FileText, Upload, Compass } from 'lucide-react'
 import MarkdownRenderer from './MarkdownRenderer'
 import SuggestedQuestions from './SuggestedQuestions'
 import SettingsModal from './SettingsModal'
