@@ -12,37 +12,55 @@
   transition: background var(--transition-base), border-color var(--transition-base);
 }
 
-.model-selector {
-  position: relative;
+.header-left {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 8px;
 }
 
-.model-dropdown {
+.sidebar-toggle {
   background: transparent;
   border: none;
+  color: var(--text-secondary);
+  padding: 8px;
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background var(--transition-base), color var(--transition-base);
+}
+
+.sidebar-toggle:hover {
+  background: var(--bg-tertiary);
   color: var(--text-primary);
+}
+
+.model-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 8px;
+  transition: background var(--transition-base);
+}
+
+.model-indicator:hover {
+  background: var(--bg-tertiary);
+}
+
+.model-name {
   font-size: 0.9375rem;
   font-weight: 600;
-  cursor: pointer;
-  padding: 8px 24px 8px 8px;
-  appearance: none;
-  -webkit-appearance: none;
-  -moz-appearance: none;
-  outline: none;
-  font-family: inherit;
+  color: var(--text-primary);
 }
 
-.model-dropdown:hover {
-  color: var(--text-secondary);
-}
-
-.dropdown-chevron {
-  position: absolute;
-  right: 4px;
-  pointer-events: none;
-  color: var(--text-secondary);
+.model-provider {
+  font-size: 0.8125rem;
+  color: var(--text-muted);
 }
 
 .theme-toggle {

@@ -10,6 +10,8 @@ function App() {
   const [theme, setTheme] = useState<'light' | 'dark'>('light')
   const [selectedModel, setSelectedModel] = useState<string>('gpt-5-nano')
   const [selectedProvider, setSelectedProvider] = useState<string>('openai')
+  const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [settingsModalOpen, setSettingsModalOpen] = useState(false)
   const sessionCreationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const lastCreatedKeyRef = useRef<string>('')
 
@@ -152,19 +154,24 @@ function App() {
         theme={theme}
         onThemeChange={handleThemeChange}
         selectedModel={selectedModel}
-        setSelectedModel={setSelectedModel}
-        modelDescriptions={modelDescriptions}
+        selectedProvider={selectedProvider}
+        onSettingsClick={() => setSettingsModalOpen(true)}
+        isSidebarOpen={sidebarOpen}
+        onToggleSidebar={() => setSidebarOpen(prev => !prev)}
       />
       <main className="main-content">
-        <ChatInterface 
-          apiKey={selectedProvider === 'together' ? togetherApiKey : openaiApiKey} 
-          setApiKey={handleApiKeyChange} 
+        <ChatInterface
+          apiKey={selectedProvider === 'together' ? togetherApiKey : openaiApiKey}
+          setApiKey={handleApiKeyChange}
           sessionId={sessionId}
           selectedModel={selectedModel}
           setSelectedModel={setSelectedModel}
           selectedProvider={selectedProvider}
           setSelectedProvider={handleProviderChange}
           modelDescriptions={modelDescriptions}
+          sidebarOpen={sidebarOpen}
+          settingsModalOpen={settingsModalOpen}
+          setSettingsModalOpen={setSettingsModalOpen}
         />
       </main>
     </div>

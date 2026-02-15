@@ -23,8 +23,10 @@
 }
 
 .left-panel.collapsed {
-  width: 64px;
-  min-width: 64px;
+  width: 0;
+  min-width: 0;
+  overflow: hidden;
+  border: none;
 }
 
 /* Sidebar New Chat Button */
@@ -129,47 +131,6 @@
 .chat-container:focus-within {
   border-color: var(--border-accent);
 }
-
-/* Resizer between side panel and chat container */
-.panel-resizer {
-  width: 12px;
-  cursor: col-resize;
-  margin: 0 var(--spacing-xs);
-  align-self: stretch;
-  background: transparent;
-  position: relative;
-  flex-shrink: 0;
-  touch-action: none;
-}
-
-.panel-resizer::before {
-  content: '';
-  position: absolute;
-  top: var(--spacing-xl);
-  bottom: var(--spacing-xl);
-  left: 50%;
-  transform: translateX(-50%);
-  width: 4px;
-  border-radius: var(--radius-full);
-  background: var(--border-primary);
-  opacity: 0.4;
-  transition: all var(--transition-fast);
-}
-
-.panel-resizer:hover::before {
-  background: var(--accent-primary);
-  opacity: 0.8;
-  width: 5px;
-}
-
-.panel-resizer.resizing::before {
-  background: var(--accent-primary);
-  opacity: 1;
-  width: 6px;
-  box-shadow: 0 0 8px var(--accent-primary-light);
-}
-
-/* Simplified resizer - no decorative dots */
 
 .chat-header {
   display: flex;

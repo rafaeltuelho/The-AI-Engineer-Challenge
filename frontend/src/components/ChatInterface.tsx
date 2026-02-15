@@ -24,6 +24,9 @@ interface ChatInterfaceProps {
   selectedProvider: string
   setSelectedProvider: (provider: string) => void
   modelDescriptions: Record<string, string>
+  sidebarOpen: boolean
+  settingsModalOpen: boolean
+  setSettingsModalOpen: (open: boolean) => void
 }
 
 const ChatInterface: React.FC<ChatInterfaceProps> = ({
@@ -33,7 +36,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   selectedModel,
   setSelectedModel,
   selectedProvider,
-  setSelectedProvider
+  setSelectedProvider,
+  sidebarOpen,
+  settingsModalOpen,
+  setSettingsModalOpen
 }) => {
   const [messages, setMessages] = useState<Message[]>([])
   const [inputMessage, setInputMessage] = useState('')
@@ -41,7 +47,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const [isLoading, setIsLoading] = useState(false)
   const [conversationId, setConversationId] = useState<string | null>(null)
   const [conversations, setConversations] = useState<any[]>([])
-  const [isPanelCollapsed, setIsPanelCollapsed] = useState(false)
 
   const [pdfUploadError, setPdfUploadError] = useState<string | null>(null)
   const [pdfUploadSuccess, setPdfUploadSuccess] = useState<string | null>(null)
@@ -54,15 +59,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const [documentSummary, setDocumentSummary] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
-  const dragStartXRef = useRef<number | null>(null)
-  const dragStartWidthRef = useRef<number | null>(null)
-  const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
-    const stored = localStorage.getItem('chat_sidebar_width')
-    const parsed = stored ? parseInt(stored, 10) : 280
-    return isNaN(parsed) ? 280 : parsed
-  })
-  const [isResizing, setIsResizing] = useState<boolean>(false)
-  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false)
 
   // Default developer messages for each chat mode
   const getDefaultDeveloperMessage = (mode: 'regular' | 'rag' | 'topic-explorer'): string => {
@@ -178,11 +174,6 @@ Sample JSON output:
       })
     }
   }, [messages, shouldAutoScroll])
-
-  // Persist sidebar width
-  useEffect(() => {
-    localStorage.setItem('chat_sidebar_width', String(sidebarWidth))
-  }, [sidebarWidth])
 
   // Auto-scroll when new messages are added during streaming
   useEffect(() => {
@@ -638,44 +629,6 @@ Sample JSON output:
     handleSubmit({ preventDefault: () => {} } as React.FormEvent, question)
   }
 
-  // Resizer Handlers
-  const MIN_WIDTH = 180
-  const MAX_WIDTH = 600
-
-  const handleMouseMove = (e: MouseEvent) => {
-    if (!isResizing) return
-    if (dragStartXRef.current === null || dragStartWidthRef.current === null) return
-
-    const delta = e.clientX - dragStartXRef.current
-    let newWidth = dragStartWidthRef.current + delta
-    if (newWidth < MIN_WIDTH) newWidth = MIN_WIDTH
-    if (newWidth > MAX_WIDTH) newWidth = MAX_WIDTH
-    if (isPanelCollapsed) {
-      setIsPanelCollapsed(false)
-    }
-    setSidebarWidth(newWidth)
-  }
-
-  const handleMouseUp = () => {
-    if (!isResizing) return
-    setIsResizing(false)
-    dragStartXRef.current = null
-    dragStartWidthRef.current = null
-    window.removeEventListener('mousemove', handleMouseMove as any)
-    window.removeEventListener('mouseup', handleMouseUp as any)
-  }
-
-  const handleResizerMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
-    e.preventDefault()
-    dragStartXRef.current = e.clientX
-    dragStartWidthRef.current = isPanelCollapsed ? 280 : sidebarWidth
-    setIsResizing(true)
-    window.addEventListener('mousemove', handleMouseMove as any)
-    window.addEventListener('mouseup', handleMouseUp as any)
-  }
-
-
-
   const handlePdfUpload = async (file: File) => {
     if (!sessionId || !apiKey) {
       setPdfUploadError('Session ID and API key are required')
@@ -781,8 +734,8 @@ Sample JSON output:
     <div className="chat-interface" ref={containerRef}>
       {/* Settings Modal */}
       <SettingsModal
-        isOpen={isSettingsModalOpen}
-        onClose={() => setIsSettingsModalOpen(false)}
+        isOpen={settingsModalOpen}
+        onClose={() => setSettingsModalOpen(false)}
         apiKey={apiKey}
         setApiKey={setApiKey}
         selectedProvider={selectedProvider}
@@ -794,8 +747,8 @@ Sample JSON output:
       />
 
       {/* Sidebar - Chat History Only */}
-      <div className={`left-panel ${isPanelCollapsed ? 'collapsed' : ''}`} style={!isPanelCollapsed ? { width: `${sidebarWidth}px` } : undefined}>
-        {!isPanelCollapsed && (
+      <div className={`left-panel ${!sidebarOpen ? 'collapsed' : ''}`}>
+        {sidebarOpen && (
           <>
             {/* New Chat Button */}
             <button
@@ -847,7 +800,7 @@ Sample JSON output:
             <div className="sidebar-footer">
               <button
                 className="sidebar-settings-btn"
-                onClick={() => setIsSettingsModalOpen(true)}
+                onClick={() => setSettingsModalOpen(true)}
                 title="Open settings"
               >
                 <Settings size={16} />
@@ -858,15 +811,6 @@ Sample JSON output:
         )}
       </div>
 
-      <div
-        className={`panel-resizer ${isResizing ? 'resizing' : ''}`}
-        onMouseDown={handleResizerMouseDown}
-        role="separator"
-        aria-orientation="vertical"
-        aria-label="Resize sidebar"
-        title="Drag to resize"
-      />
-
       <div className="chat-container">
         <div className="chat-header">
           <div className="chat-header-left">
@@ -875,7 +819,7 @@ Sample JSON output:
           <div className="chat-header-buttons">
             <button
               className="settings-btn"
-              onClick={() => setIsSettingsModalOpen(true)}
+              onClick={() => setSettingsModalOpen(true)}
               title="Open settings"
             >
               <Settings size={16} />
