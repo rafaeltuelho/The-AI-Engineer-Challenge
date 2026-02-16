@@ -652,8 +652,8 @@ Sample JSON output:
   }
 
   const handlePdfUpload = async (file: File) => {
-    if (!sessionId || !apiKey) {
-      setPdfUploadError('Session ID and API key are required')
+    if (!sessionId) {
+      setPdfUploadError('Session is required')
       return
     }
 
