@@ -164,20 +164,107 @@ Want to make it your own? The frontend is built with:
 
 > 💡 **Pro Tip**: The frontend automatically proxies API calls to your FastAPI backend, so everything works seamlessly together!
 
+</details>
+
+<details>
+  <summary>🔐 Authentication & Free Chat Turns</summary>
+
+### 🎭 Two Ways to Chat
+
+Your app now supports **two access modes** to make it flexible for everyone:
+
+1. **🎁 Guest Mode** - Jump right in! No sign-up needed, just start chatting with a limited number of free turns
+2. **🔑 Google Sign-In** - Sign in with your Google account for a personalized experience
+
+### 🎟️ How Free Chat Turns Work
+
+Everyone gets a taste of AI magic! Here's how it works:
+
+- **Guest users** get a limited number of free chat turns per session (default: 3 turns)
+- **Google users (non-whitelisted)** also get free turns with the same limits
+- **Google users (whitelisted)** get unlimited access with premium models! 🌟
+
+| User Type | Free Turns | Model Access | API Key Used |
+|-----------|------------|--------------|--------------|
+| 🎭 Guest | Limited (default: 3) | Free tier model only | Server-side (Together.ai) |
+| 🔑 Google (non-whitelisted) | Limited (default: 3) | Free tier model only | Server-side (Together.ai) |
+| ⭐ Google (whitelisted) | Unlimited | All models | Server-side (OpenAI/Together.ai) |
+
+> 💡 **Pro Tip**: Free turns reset when your session expires (default: 60 minutes of inactivity)
+
+### 🔧 Setting Up Google OAuth (Optional)
+
+Want to enable Google Sign-In? Here's how to get your Client ID:
+
+1. **Head to Google Cloud Console** 🌐
+   - Go to [Google Cloud Console](https://console.cloud.google.com/)
+   - Navigate to **APIs & Services** → **Credentials**
+
+2. **Create OAuth 2.0 Client ID** 🔑
+   - Click **Create Credentials** → **OAuth 2.0 Client ID**
+   - Choose **Web application** as the application type
+   - Give it a friendly name (e.g., "AI Chat App")
+
+3. **Configure Authorized Origins** 🌍
+   - Add `http://localhost:3000` for local development
+   - Add your production domain when deploying (e.g., `https://your-app.vercel.app`)
+
+4. **Copy Your Client ID** 📋
+   - Copy the generated Client ID
+   - Set it as `GOOGLE_CLIENT_ID` in your `.env` file
+
+> 🎨 **Note**: If you don't set `GOOGLE_CLIENT_ID`, the Google Sign-In button will be hidden and only Guest mode will be available!
+
 ### ⚙️ Environment Variables
 
-The backend supports configurable timeouts via environment variables:
+The backend supports comprehensive configuration via environment variables. Here's the complete list:
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `SESSION_TIMEOUT_MINUTES` | How long before inactive sessions are cleaned up (minutes) | `60` |
-| `CLEANUP_INTERVAL_SECONDS` | How often the cleanup scheduler runs (seconds) | `60` |
+| Variable | Description | Default | Required |
+|----------|-------------|---------|----------|
+| `GOOGLE_CLIENT_ID` | Google OAuth Client ID for authentication | — | No (if absent, Google Sign-In is hidden) |
+| `WHITELISTED_EMAILS` | Comma-separated list of emails with unlimited access | — | No |
+| `OPENAI_API_KEY` | Server-side OpenAI API key for whitelisted users | — | No |
+| `TOGETHER_API_KEY` | Server-side Together.ai API key for free turns | — | Yes (for free turns feature) |
+| `FREE_PROVIDER` | Provider to use for free chat turns | `together` | No |
+| `FREE_MODEL` | Model to use for free chat turns | `deepseek-ai/DeepSeek-V3.1` | No |
+| `MAX_FREE_TURNS` | Maximum free chat turns per session | `3` | No |
+| `MAX_FREE_MESSAGE_TOKENS` | Maximum input tokens during free turns | `500` | No |
+| `SESSION_TIMEOUT_MINUTES` | How long before inactive sessions are cleaned up (minutes) | `60` | No |
+| `CLEANUP_INTERVAL_SECONDS` | How often the cleanup scheduler runs (seconds) | `60` | No |
+
+### 📝 Example `.env` File
 
 Copy `.env.example` to `.env` and customize as needed:
 
 ```bash
 cp .env.example .env
 ```
+
+Here's a sample configuration:
+
+```env
+# Google OAuth (optional - if not set, only Guest mode is available)
+GOOGLE_CLIENT_ID=your-google-client-id-here.apps.googleusercontent.com
+
+# Whitelisted emails for unlimited access (optional)
+WHITELISTED_EMAILS=admin@example.com,vip@example.com
+
+# API Keys
+OPENAI_API_KEY=sk-your-openai-key-here
+TOGETHER_API_KEY=your-together-api-key-here
+
+# Free Tier Configuration
+FREE_PROVIDER=together
+FREE_MODEL=deepseek-ai/DeepSeek-V3.1
+MAX_FREE_TURNS=3
+MAX_FREE_MESSAGE_TOKENS=500
+
+# Session Management
+SESSION_TIMEOUT_MINUTES=60
+CLEANUP_INTERVAL_SECONDS=60
+```
+
+> 🔒 **Security Note**: Never commit your `.env` file to version control! It's already in `.gitignore` to keep your secrets safe.
 
 </details>
 

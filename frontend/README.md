@@ -5,6 +5,10 @@ A modern, responsive web frontend for the AI Chat API built with React, TypeScri
 ## ✨ Features
 
 - **Modern UI/UX**: Beautiful glassmorphism design with smooth animations
+- **🔐 Google OAuth Authentication**: Optional Google Sign-In for personalized experience
+- **🎁 Free Chat Turns**: Guests and non-whitelisted users get limited free turns
+- **👤 Entry Screen**: Choose between Guest mode or Google Sign-In
+- **🔒 Auth-Aware UI**: Free turns badge, locked model selector for free tier users
 - **Real-time Streaming**: Experience AI responses as they're generated
 - **Responsive Design**: Works perfectly on desktop, tablet, and mobile
 - **Settings Panel**: Configure API keys and system messages
@@ -93,13 +97,18 @@ The application uses CSS modules and custom CSS. Key styling files:
 
 ```
 src/
-├── components/          # React components
-│   ├── Header.tsx      # Application header
-│   ├── ChatInterface.tsx # Main chat component
-│   └── *.css          # Component styles
-├── App.tsx             # Main application component
-├── main.tsx            # Application entry point
-└── index.css           # Global styles
+├── components/              # React components
+│   ├── EntryScreen.tsx     # Guest + Google sign-in screen
+│   ├── Header.tsx          # User avatar, free turns badge, logout
+│   ├── ChatInterface.tsx   # Auth-aware chat interface
+│   ├── SettingsModal.tsx   # Settings with free tier model locking
+│   └── *.css               # Component styles
+├── contexts/
+│   └── AuthContext.tsx     # Authentication state management
+├── AppWrapper.tsx          # Auth routing (Loading → EntryScreen → App)
+├── App.tsx                 # Main application component
+├── main.tsx                # Entry point: AuthProvider → AppWrapper
+└── index.css               # Global styles
 ```
 
 ### Available Scripts
@@ -116,14 +125,52 @@ src/
 3. Import and use in `App.tsx` or other components
 4. Follow TypeScript interfaces for type safety
 
+## 🔐 Authentication
+
+The frontend implements a complete authentication flow:
+
+1. **AuthContext** (`src/contexts/AuthContext.tsx`)
+   - Manages authentication state (session, user info, free turns)
+   - Provides auth methods (guest login, Google login, logout)
+   - Handles session persistence and restoration
+
+2. **Entry Screen** (`src/components/EntryScreen.tsx`)
+   - First screen users see
+   - Offers Guest mode or Google Sign-In options
+   - Uses `@react-oauth/google` for Google OAuth integration
+
+3. **Auth-Aware Components**
+   - **Header**: Shows user avatar, free turns badge, logout button
+   - **ChatInterface**: Displays free turns remaining, handles turn limits
+   - **SettingsModal**: Locks model selector for free tier users
+
+4. **AppWrapper** (`src/AppWrapper.tsx`)
+   - Routes between Loading → EntryScreen → App based on auth state
+   - Handles session restoration on page load
+
+### Dependencies
+
+- **`@react-oauth/google`**: Google OAuth integration for React
+
 ## 🌐 API Integration
 
 The frontend integrates with your FastAPI backend through:
 
-- **Chat Endpoint**: `/api/chat` for streaming AI responses
-- **Health Check**: `/api/health` for service status
+**Authentication Endpoints:**
+- `POST /api/auth/guest` - Create guest session
+- `POST /api/auth/google` - Google OAuth login
+- `GET /api/auth/me` - Get current user info
+- `POST /api/auth/logout` - Destroy session
+- `GET /api/auth/config` - Get auth configuration
+
+**Chat Endpoints:**
+- `POST /api/chat` - Streaming AI responses
+- `GET /api/health` - Service status
+
+**Features:**
 - **CORS Support**: Configured for cross-origin requests
 - **Streaming**: Real-time response streaming for better UX
+- **Session Management**: Automatic session handling via `X-Session-ID` header
 
 ## 📱 Responsive Design
 

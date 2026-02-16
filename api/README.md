@@ -6,7 +6,9 @@ This is a FastAPI-based backend service that provides a streaming chat interface
 
 - Python 3.13 or higher
 - uv (Python package manager) - [Install uv](https://docs.astral.sh/uv/getting-started/installation/)
-- An OpenAI API key
+- A Together.ai API key (required for free chat turns feature)
+- An OpenAI API key (optional, for whitelisted users)
+- A Google OAuth Client ID (optional, for Google Sign-In)
 
 ## Setup
 
@@ -62,6 +64,83 @@ The server will start on `http://localhost:8000`
 - **Method**: GET
 - **Response**: `{"status": "ok"}`
 
+### Authentication Endpoints
+
+#### Create Guest Session
+- **URL**: `/api/auth/guest`
+- **Method**: POST
+- **Rate Limit**: 5 requests per minute
+- **Request Body**: None
+- **Response**:
+```json
+{
+    "session_id": "uuid-string",
+    "user_type": "guest",
+    "free_turns_remaining": 3
+}
+```
+
+#### Google OAuth Login
+- **URL**: `/api/auth/google`
+- **Method**: POST
+- **Rate Limit**: 10 requests per minute
+- **Request Body**:
+```json
+{
+    "credential": "google-id-token-from-oauth"
+}
+```
+- **Response**:
+```json
+{
+    "session_id": "uuid-string",
+    "user_type": "google_whitelisted" | "google_non_whitelisted",
+    "email": "user@example.com",
+    "name": "User Name",
+    "free_turns_remaining": 3 | null
+}
+```
+
+#### Get Current User Info
+- **URL**: `/api/auth/me`
+- **Method**: GET
+- **Rate Limit**: 30 requests per minute
+- **Headers**: `X-Session-ID: your-session-id`
+- **Response**:
+```json
+{
+    "session_id": "uuid-string",
+    "user_type": "guest" | "google_whitelisted" | "google_non_whitelisted",
+    "email": "user@example.com",  // only for Google users
+    "name": "User Name",  // only for Google users
+    "free_turns_remaining": 3 | null
+}
+```
+
+#### Logout
+- **URL**: `/api/auth/logout`
+- **Method**: POST
+- **Rate Limit**: 10 requests per minute
+- **Headers**: `X-Session-ID: your-session-id`
+- **Response**:
+```json
+{
+    "message": "Logged out successfully"
+}
+```
+
+#### Get Auth Configuration
+- **URL**: `/api/auth/config`
+- **Method**: GET
+- **Rate Limit**: 30 requests per minute
+- **Response**:
+```json
+{
+    "googleClientId": "your-client-id.apps.googleusercontent.com" | null,
+    "maxFreeTurns": 3
+}
+```
+
 ## API Documentation
 
 Once the server is running, you can access the interactive API documentation at:
@@ -109,6 +188,47 @@ uv run ruff check .
 uv run ruff format .
 ```
 
+## Environment Variables
+
+The API supports comprehensive configuration via environment variables:
+
+| Variable | Description | Default | Required |
+|----------|-------------|---------|----------|
+| `GOOGLE_CLIENT_ID` | Google OAuth Client ID for authentication | — | No (if absent, Google Sign-In is disabled) |
+| `WHITELISTED_EMAILS` | Comma-separated list of emails with unlimited access | — | No |
+| `OPENAI_API_KEY` | Server-side OpenAI API key for whitelisted users | — | No |
+| `TOGETHER_API_KEY` | Server-side Together.ai API key for free turns | — | Yes (for free turns feature) |
+| `FREE_PROVIDER` | Provider to use for free chat turns | `together` | No |
+| `FREE_MODEL` | Model to use for free chat turns | `deepseek-ai/DeepSeek-V3.1` | No |
+| `MAX_FREE_TURNS` | Maximum free chat turns per session | `3` | No |
+| `MAX_FREE_MESSAGE_TOKENS` | Maximum input tokens during free turns | `500` | No |
+| `SESSION_TIMEOUT_MINUTES` | How long before inactive sessions are cleaned up (minutes) | `60` | No |
+| `CLEANUP_INTERVAL_SECONDS` | How often the cleanup scheduler runs (seconds) | `60` | No |
+
+Create a `.env` file in the project root with your configuration:
+
+```env
+# Google OAuth (optional)
+GOOGLE_CLIENT_ID=your-google-client-id-here.apps.googleusercontent.com
+
+# Whitelisted emails for unlimited access (optional)
+WHITELISTED_EMAILS=admin@example.com,vip@example.com
+
+# API Keys
+OPENAI_API_KEY=sk-your-openai-key-here
+TOGETHER_API_KEY=your-together-api-key-here
+
+# Free Tier Configuration
+FREE_PROVIDER=together
+FREE_MODEL=deepseek-ai/DeepSeek-V3.1
+MAX_FREE_TURNS=3
+MAX_FREE_MESSAGE_TOKENS=500
+
+# Session Management
+SESSION_TIMEOUT_MINUTES=60
+CLEANUP_INTERVAL_SECONDS=60
+```
+
 ## CORS Configuration
 
 The API is configured to accept requests from any origin (`*`). This can be modified in the `app.py` file if you need to restrict access to specific domains.
@@ -120,6 +240,11 @@ The API implements rate limiting to prevent abuse:
 - `/api/chat`: 10 requests per minute per IP
 - `/api/conversations`: 20 requests per minute per IP
 - `/api/conversations/{id}`: 30 requests per minute per IP
+- `/api/auth/guest`: 5 requests per minute per IP
+- `/api/auth/google`: 10 requests per minute per IP
+- `/api/auth/me`: 30 requests per minute per IP
+- `/api/auth/logout`: 10 requests per minute per IP
+- `/api/auth/config`: 30 requests per minute per IP
 - DELETE endpoints: 5-10 requests per minute per IP
 
 ### Input Validation
