@@ -1424,6 +1424,16 @@ async def rag_query(
         # Resolve API key and provider
         api_key, provider = resolve_api_key(session_id, x_api_key, query_request.provider)
 
+        # Check token limits for free tier users
+        if not session.get("has_own_api_key") and not session.get("is_whitelisted"):
+            # Count tokens in user question
+            token_count = count_tokens(query_request.question, query_request.model)
+            if token_count > MAX_FREE_MESSAGE_TOKENS:
+                raise HTTPException(
+                    status_code=403,
+                    detail=f"Message too long for free tier ({token_count} tokens, max {MAX_FREE_MESSAGE_TOKENS}). Please provide your own API key."
+                )
+
         # Debug logging
         print(f"Received RAG query request: session_id={session_id[:8]}..., provider={provider}, model={query_request.model}, question_length={len(query_request.question)}")
         
@@ -1575,11 +1585,5 @@ async def health_check():
 if __name__ == "__main__":
     import uvicorn
 
-    # Start the server on all network interfaces (0.0.0.0) on port 8000
-    uvicorn.run(app, host="0.0.0.0", port=8000)
-
-# Entry point for running the application directly
-if __name__ == "__main__":
-    import uvicorn
     # Start the server on all network interfaces (0.0.0.0) on port 8000
     uvicorn.run(app, host="0.0.0.0", port=8000)

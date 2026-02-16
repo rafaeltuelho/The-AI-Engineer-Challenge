@@ -91,9 +91,9 @@ function App() {
   const getEffectiveApiKey = (): string => {
     if (!user) return ''
 
-    // Whitelisted users: use dummy key to bypass guards
+    // Whitelisted users: backend will use server-side key
     if (user.isWhitelisted) {
-      return 'server-provided'
+      return ''
     }
 
     // Free tier users (not whitelisted, has free turns, no own key)
@@ -101,7 +101,7 @@ function App() {
     const hasOwnKey = selectedProvider === 'together' ? togetherApiKey.trim() : openaiApiKey.trim()
 
     if (!user.isWhitelisted && hasFreeTurns && !hasOwnKey) {
-      return 'free-tier'
+      return ''
     }
 
     // Users with own API keys

@@ -780,8 +780,8 @@ Sample JSON output:
             <button
               className="new-chat-btn sidebar-new-chat"
               onClick={startNewConversation}
-              disabled={!apiKey.trim()}
-              title={apiKey.trim() ? "Start a new conversation" : "Enter API key to start chatting"}
+              disabled={!isWhitelisted && !hasOwnApiKey && !hasFreeTurns}
+              title={isWhitelisted || hasOwnApiKey || hasFreeTurns ? "Start a new conversation" : "Enter API key to start chatting"}
             >
               <MessageSquare size={16} />
               New Chat
@@ -853,8 +853,8 @@ Sample JSON output:
             <button
               className="new-chat-btn"
               onClick={startNewConversation}
-              disabled={!apiKey.trim()}
-              title={apiKey.trim() ? "New Chat" : "Enter API key to start chatting"}
+              disabled={!isWhitelisted && !hasOwnApiKey && !hasFreeTurns}
+              title={isWhitelisted || hasOwnApiKey || hasFreeTurns ? "New Chat" : "Enter API key to start chatting"}
             >
               <MessageSquare size={16} />
               New Chat

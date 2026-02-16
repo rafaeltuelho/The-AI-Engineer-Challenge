@@ -28,7 +28,6 @@ interface AuthContextType {
   loginAsGuest: () => Promise<void>
   loginWithGoogle: (credential: string) => Promise<void>
   logout: () => Promise<void>
-  updateFreeTurns: (turns: number) => void
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -217,12 +216,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   }
 
-  const updateFreeTurns = (turns: number) => {
-    if (user && !user.isWhitelisted) {
-      setUser({ ...user, freeTurnsRemaining: turns })
-    }
-  }
-
   const value: AuthContextType = {
     user,
     isAuthenticated: !!user,
@@ -230,8 +223,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     authConfig,
     loginAsGuest,
     loginWithGoogle,
-    logout,
-    updateFreeTurns
+    logout
   }
 
   return (

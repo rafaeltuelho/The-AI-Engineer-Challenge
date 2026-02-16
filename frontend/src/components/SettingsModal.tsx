@@ -80,10 +80,17 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
               value={selectedProvider}
               onChange={(e) => setSelectedProvider(e.target.value)}
               className="settings-select"
+              disabled={!isWhitelisted && hasFreeTurns && !apiKey.trim()}
             >
               <option value="openai">OpenAI</option>
               <option value="together">Together.ai</option>
             </select>
+            {!isWhitelisted && hasFreeTurns && !apiKey.trim() && (
+              <div className="settings-info-message">
+                <AlertCircle size={14} />
+                <span>Provider is locked during free trial</span>
+              </div>
+            )}
           </div>
 
           {/* API Key Section */}
@@ -149,6 +156,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
               value={selectedModel}
               onChange={(e) => setSelectedModel(e.target.value)}
               className="settings-select"
+              disabled={!isWhitelisted && hasFreeTurns && !apiKey.trim()}
             >
               {Object.entries(modelDescriptions)
                 .filter(([key]) => {
@@ -163,6 +171,12 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                   </option>
                 ))}
             </select>
+            {!isWhitelisted && hasFreeTurns && !apiKey.trim() && (
+              <div className="settings-info-message">
+                <AlertCircle size={14} />
+                <span>Model is locked during free trial</span>
+              </div>
+            )}
           </div>
 
           {/* System Message Section */}

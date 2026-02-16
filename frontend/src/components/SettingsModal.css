@@ -180,6 +180,18 @@
   animation: slideUp var(--transition-base) ease-out;
 }
 
+.settings-info-message {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-sm);
+  border-radius: var(--radius-sm);
+  background: rgba(59, 130, 246, 0.1);
+  color: #3b82f6;
+  font-size: 0.85rem;
+  margin-top: var(--spacing-xs);
+}
+
 .settings-modal-footer {
   padding: var(--spacing-lg);
   border-top: 1px solid var(--border-primary);
