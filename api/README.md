@@ -12,13 +12,31 @@ This is a FastAPI-based backend service that provides a streaming chat interface
 
 ## Setup
 
-1. Install dependencies using uv:
+### Production Installation (Vercel-optimized)
 ```bash
 # From the project root directory
 uv sync
 ```
 
-2. Activate the virtual environment:
+### Development Installation (includes notebooks & tools)
+```bash
+# Install with development dependencies
+uv sync --extra dev
+```
+
+### With RAG Features (document processing)
+```bash
+# Install with RAG/vector database support
+uv sync --extra rag
+```
+
+### Full Installation (everything)
+```bash
+# Install all optional dependencies
+uv sync --extra dev --extra rag
+```
+
+### Activate the virtual environment:
 ```bash
 # uv automatically creates and manages the virtual environment
 source .venv/bin/activate  # On Windows, use: .venv\Scripts\activate
@@ -306,6 +324,28 @@ vercel --prod
 4. **Use different keys for different environments** - Consider separate API keys for staging vs production
 5. **Don't pass API keys in URLs** - Your backend handles this securely
 6. **Keep sensitive data server-side** - API keys are never exposed to the frontend
+
+## Vercel Free Tier Optimization
+
+This API is optimized to run on Vercel's free tier (250MB serverless function limit):
+
+### What's Included (Production)
+- ✅ FastAPI, Uvicorn, OpenAI, Together.ai clients
+- ✅ Google OAuth authentication
+- ✅ Rate limiting and input validation
+- ✅ Session management
+- ✅ Core chat functionality
+
+### What's Optional
+- ❌ **RAG Features** (document upload/query) - requires `qdrant-client` and `numpy`
+- ❌ **Development Tools** - Jupyter notebooks, IPython kernel
+
+### RAG Availability
+- **Vercel Free Tier**: RAG endpoints return 503 (unavailable)
+- **Local Development**: Install with `uv sync --extra rag`
+- **Vercel Pro/Other Hosting**: Install with `pip install -e ".[rag]"`
+
+See [VERCEL_OPTIMIZATION.md](../VERCEL_OPTIMIZATION.md) for detailed optimization info.
 
 ## CORS Configuration
 
