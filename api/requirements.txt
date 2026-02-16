@@ -1,26 +1,29 @@
 # Core API dependencies
-fastapi>=0.100.0
-uvicorn>=0.20.0
-openai>=1.0.0
-together>=1.4.0
-pydantic>=2.0.0
-python-multipart>=0.0.5
+fastapi>=0.116.2
+uvicorn>=0.35.0
+openai>=1.107.3
+together>=0.2.7
+pydantic>=2.11.9
+pydantic-core>=2.33.2
+python-multipart>=0.0.20
 slowapi>=0.1.9
-numpy>=1.20.0
-qdrant-client>=1.7.0
+starlette>=0.48.0
 
-# Lightweight document processing dependencies
-PyPDF2>=3.0.0
+# Lightweight PDF processing dependencies
+PyPDF2>=3.0.1
 pdfplumber>=0.9.0
-python-docx>=0.8.11
-python-pptx>=0.6.21
-tiktoken>=0.5.0
-
-# Google OAuth dependencies
-google-auth>=2.0.0
-google-api-python-client>=2.0.0
+tiktoken>=0.11.0
+python-docx>=1.1.2
+python-pptx>=0.6.23
 
 # Supporting dependencies
-httpx>=0.24.0
-requests>=2.28.0
-python-dotenv>=1.0.0
+httpx>=0.28.1
+httpcore>=1.0.9
+requests>=2.32.5
+python-dotenv>=1.1.1
+
+# Jupyter and development dependencies
+jupyter>=1.1.1
+ipykernel>=6.29.5
+numpy>=2.3.3
+qdrant-client>=1.7.0
