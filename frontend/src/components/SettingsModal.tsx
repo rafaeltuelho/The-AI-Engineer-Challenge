@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { X, Key, Settings, MessageSquare } from 'lucide-react'
+import { X, Key, Settings, MessageSquare, CheckCircle, AlertCircle } from 'lucide-react'
 import './SettingsModal.css'
 
 interface SettingsModalProps {
@@ -14,6 +14,9 @@ interface SettingsModalProps {
   developerMessage: string
   setDeveloperMessage: (message: string) => void
   modelDescriptions: Record<string, string>
+  isWhitelisted?: boolean
+  freeTurnsRemaining?: number
+  hasFreeTurns?: boolean
 }
 
 const SettingsModal: React.FC<SettingsModalProps> = ({
@@ -27,7 +30,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   setSelectedModel,
   developerMessage,
   setDeveloperMessage,
-  modelDescriptions
+  modelDescriptions,
+  isWhitelisted = false,
+  freeTurnsRemaining = 0,
+  hasFreeTurns = false
 }) => {
   const [showApiKeySuccess, setShowApiKeySuccess] = useState(false)
 
@@ -86,23 +92,50 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
               <Key size={16} />
               <span>API Key</span>
             </label>
-            <div className="api-key-input-group">
-              <input
-                type="password"
-                value={apiKey}
-                onChange={handleApiKeyChange}
-                placeholder={`${selectedProvider === 'together' ? 'Together.ai key: tgp_' : 'OpenAI key: sk-'} ...`}
-                className="settings-input"
-              />
-              <button
-                className="api-key-save-btn"
-                onClick={handleSaveApiKey}
-              >
-                Save
-              </button>
-            </div>
-            {showApiKeySuccess && (
-              <div className="api-key-success">✓ API key saved</div>
+
+            {isWhitelisted ? (
+              <div className="api-key-status whitelisted">
+                <CheckCircle size={16} />
+                <span>Using server-provided API keys (unlimited access)</span>
+              </div>
+            ) : hasFreeTurns && !apiKey.trim() ? (
+              <div className="api-key-status free-tier">
+                <AlertCircle size={16} />
+                <span>
+                  You have {freeTurnsRemaining} free message{freeTurnsRemaining === 1 ? '' : 's'} remaining.
+                  Add your API key for unlimited access.
+                </span>
+              </div>
+            ) : !hasFreeTurns && !apiKey.trim() ? (
+              <div className="api-key-status exhausted">
+                <AlertCircle size={16} />
+                <span>
+                  ⚠️ Free turns used up! Enter your API key to continue chatting.
+                </span>
+              </div>
+            ) : null}
+
+            {!isWhitelisted && (
+              <>
+                <div className="api-key-input-group">
+                  <input
+                    type="password"
+                    value={apiKey}
+                    onChange={handleApiKeyChange}
+                    placeholder={`${selectedProvider === 'together' ? 'Together.ai key: tgp_' : 'OpenAI key: sk-'} ...`}
+                    className="settings-input"
+                  />
+                  <button
+                    className="api-key-save-btn"
+                    onClick={handleSaveApiKey}
+                  >
+                    Save
+                  </button>
+                </div>
+                {showApiKeySuccess && (
+                  <div className="api-key-success">✓ API key saved</div>
+                )}
+              </>
             )}
           </div>
 

@@ -27,6 +27,12 @@ interface ChatInterfaceProps {
   sidebarOpen: boolean
   settingsModalOpen: boolean
   setSettingsModalOpen: (open: boolean) => void
+  isWhitelisted: boolean
+  freeTurnsRemaining: number
+  authType: 'guest' | 'google'
+  onFreeTurnsUpdate: (turns: number) => void
+  hasFreeTurns: boolean
+  hasOwnApiKey: boolean
 }
 
 const ChatInterface: React.FC<ChatInterfaceProps> = ({
@@ -40,7 +46,13 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   modelDescriptions,
   sidebarOpen,
   settingsModalOpen,
-  setSettingsModalOpen
+  setSettingsModalOpen,
+  isWhitelisted,
+  freeTurnsRemaining,
+  authType: _authType,  // Received but not used in this component
+  onFreeTurnsUpdate,
+  hasFreeTurns,
+  hasOwnApiKey
 }) => {
   const [messages, setMessages] = useState<Message[]>([])
   const [inputMessage, setInputMessage] = useState('')
@@ -380,7 +392,10 @@ Sample JSON output:
   const handleSubmit = async (e: React.FormEvent, messageContent?: string) => {
     e.preventDefault()
     const messageToSubmit = messageContent || inputMessage
-    if (!messageToSubmit.trim() || !apiKey.trim()) return
+
+    // Guard: check if user can send messages
+    const canSendMessage = isWhitelisted || hasOwnApiKey || hasFreeTurns
+    if (!messageToSubmit.trim() || !canSendMessage) return
 
     const userMessage: Message = {
       id: Date.now().toString(),
@@ -449,11 +464,20 @@ Sample JSON output:
         // Handle RAG response (JSON)
         const ragResult = await response.json()
         assistantMessage = ragResult.answer
-        
+
         // Get conversation ID from response headers or use existing one for RAG queries
         const newConversationId = response.headers.get('X-Conversation-ID') || conversationId
         if (!conversationId && newConversationId) {
           setConversationId(newConversationId)
+        }
+
+        // Update free turns remaining from response header
+        const freeTurnsHeader = response.headers.get('X-Free-Turns-Remaining')
+        if (freeTurnsHeader !== null) {
+          const turns = parseInt(freeTurnsHeader, 10)
+          if (!isNaN(turns)) {
+            onFreeTurnsUpdate(turns)
+          }
         }
         
         // Topic Explorer: parse JSON structure and render sections
@@ -542,6 +566,15 @@ Sample JSON output:
         const newConversationId = response.headers.get('X-Conversation-ID') || conversationId || `conv_${Date.now()}`
         if (!conversationId) {
           setConversationId(newConversationId)
+        }
+
+        // Update free turns remaining from response header
+        const freeTurnsHeader = response.headers.get('X-Free-Turns-Remaining')
+        if (freeTurnsHeader !== null) {
+          const turns = parseInt(freeTurnsHeader, 10)
+          if (!isNaN(turns)) {
+            onFreeTurnsUpdate(turns)
+          }
         }
 
         const reader = response.body?.getReader()
@@ -734,6 +767,9 @@ Sample JSON output:
         developerMessage={developerMessage}
         setDeveloperMessage={setDeveloperMessage}
         modelDescriptions={modelDescriptions}
+        isWhitelisted={isWhitelisted}
+        freeTurnsRemaining={freeTurnsRemaining}
+        hasFreeTurns={hasFreeTurns}
       />
 
       {/* Sidebar - Chat History Only */}
@@ -953,7 +989,7 @@ Sample JSON output:
         </div>
 
         {isUserScrolling && messages.length > 0 && (
-          <button 
+          <button
             className="scroll-to-bottom-btn"
             onClick={() => {
               setShouldAutoScroll(true)
@@ -966,13 +1002,27 @@ Sample JSON output:
           </button>
         )}
 
+        {/* Free tier banner */}
+        {!isWhitelisted && hasFreeTurns && !hasOwnApiKey && (
+          <div className="free-tier-banner">
+            Free mode: {freeTurnsRemaining} message{freeTurnsRemaining === 1 ? '' : 's'} remaining · Using {selectedModel}
+          </div>
+        )}
+
+        {/* Exhausted banner */}
+        {!isWhitelisted && !hasFreeTurns && !hasOwnApiKey && (
+          <div className="exhausted-banner">
+            You've used all your free messages! Configure your API Key in Settings to continue.
+          </div>
+        )}
+
         <form onSubmit={handleSubmit} className="input-form">
           <div className="input-container">
             <button
               type="button"
               className="pdf-upload-button"
               onClick={() => fileInputRef.current?.click()}
-              disabled={isLoading || !apiKey.trim() || isPdfUploading}
+              disabled={isLoading || (!isWhitelisted && !hasOwnApiKey && !hasFreeTurns) || isPdfUploading}
               title="Upload Document (PDF, Word, PowerPoint)"
             >
               <Upload size={20} />
@@ -982,15 +1032,19 @@ Sample JSON output:
               value={inputMessage}
               onChange={(e) => setInputMessage(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder={!apiKey.trim() ? "Enter your API key in Settings to start chatting" : "Type your message here... (Cmd|Ctrl+Enter to send)"}
+              placeholder={
+                !isWhitelisted && !hasOwnApiKey && !hasFreeTurns
+                  ? "Free messages exhausted. Add your API key in Settings to continue."
+                  : "Type your message here... (Cmd|Ctrl+Enter to send)"
+              }
               className="message-input"
-              disabled={isLoading || !apiKey.trim()}
+              disabled={isLoading || (!isWhitelisted && !hasOwnApiKey && !hasFreeTurns)}
               rows={1}
             />
             <button
               type="submit"
               className="send-button"
-              disabled={isLoading || !inputMessage.trim() || !apiKey.trim()}
+              disabled={isLoading || !inputMessage.trim() || (!isWhitelisted && !hasOwnApiKey && !hasFreeTurns)}
             >
               <Send size={16} />
             </button>

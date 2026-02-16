@@ -1,19 +1,19 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import ChatInterface from './components/ChatInterface'
 import Header from './components/Header'
+import { useAuth } from './contexts/AuthContext'
 import './App.css'
 
 function App() {
+  const { user, authConfig } = useAuth()
   const [openaiApiKey, setOpenaiApiKey] = useState<string>('')
   const [togetherApiKey, setTogetherApiKey] = useState<string>('')
-  const [sessionId, setSessionId] = useState<string>('')
   const [theme, setTheme] = useState<'light' | 'dark'>('light')
   const [selectedModel, setSelectedModel] = useState<string>('gpt-5-nano')
   const [selectedProvider, setSelectedProvider] = useState<string>('openai')
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [settingsModalOpen, setSettingsModalOpen] = useState(false)
-  const sessionCreationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const lastCreatedKeyRef = useRef<string>('')
+  const [freeTurnsRemaining, setFreeTurnsRemaining] = useState<number>(user?.freeTurnsRemaining ?? 0)
 
   const modelDescriptions = {
     // OpenAI models
@@ -56,79 +56,21 @@ function App() {
     localStorage.setItem('theme', theme)
   }, [theme])
 
-  // Create session when API key is provided
-  const createSession = async (apiKey: string, provider: string) => {
-    try {
-      const response = await fetch('/api/session', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ api_key: apiKey, provider: provider })
-      })
-      
-      if (response.ok) {
-        const data = await response.json()
-        setSessionId(data.session_id)
-        return data.session_id
-      } else {
-        console.error('Failed to create session:', response.statusText)
-        return null
-      }
-    } catch (error) {
-      console.error('Error creating session:', error)
-      return null
+  // Sync freeTurnsRemaining from user context
+  useEffect(() => {
+    if (user) {
+      setFreeTurnsRemaining(user.freeTurnsRemaining)
     }
-  }
+  }, [user])
 
-  // Debounced session creation to avoid hitting rate limits on every keystroke
-  const debouncedCreateSession = useCallback((apiKey: string, provider: string) => {
-    // Clear any pending session creation
-    if (sessionCreationTimeoutRef.current) {
-      clearTimeout(sessionCreationTimeoutRef.current)
-    }
-
-    // Skip if we already created a session for this exact key
-    if (lastCreatedKeyRef.current === apiKey) {
-      return
-    }
-
-    // Debounce: wait 500ms after user stops typing before creating session
-    sessionCreationTimeoutRef.current = setTimeout(async () => {
-      if (apiKey.trim()) {
-        lastCreatedKeyRef.current = apiKey
-        await createSession(apiKey, provider)
-      }
-    }, 500)
-  }, [])
-
-  // Handle API key changes with debouncing
+  // Handle API key changes
   const handleApiKeyChange = (newApiKey: string) => {
     if (selectedProvider === 'together') {
       setTogetherApiKey(newApiKey)
     } else {
       setOpenaiApiKey(newApiKey)
     }
-    const effectiveKey = newApiKey.trim()
-
-    if (effectiveKey) {
-      // Use debounced session creation to avoid rate limiting
-      debouncedCreateSession(effectiveKey, selectedProvider)
-    } else {
-      // Clear session if API key is empty
-      setSessionId('')
-      lastCreatedKeyRef.current = ''
-    }
   }
-
-  // Cleanup timeout on unmount
-  useEffect(() => {
-    return () => {
-      if (sessionCreationTimeoutRef.current) {
-        clearTimeout(sessionCreationTimeoutRef.current)
-      }
-    }
-  }, [])
 
   // Handle provider changes
   const handleProviderChange = async (newProvider: string) => {
@@ -139,14 +81,60 @@ function App() {
     } else {
       setSelectedModel('gpt-5-nano')
     }
-    // Do NOT recreate the session when switching providers to keep conversations intact.
-    // We will keep using the existing sessionId. Backend stores conversations by the
-    // original session's hashed key; API calls will pass the provider-specific key.
   }
 
   const handleThemeChange = (newTheme: 'light' | 'dark') => {
     setTheme(newTheme)
   }
+
+  // Determine effective API key based on user type
+  const getEffectiveApiKey = (): string => {
+    if (!user) return ''
+
+    // Whitelisted users: use dummy key to bypass guards
+    if (user.isWhitelisted) {
+      return 'server-provided'
+    }
+
+    // Free tier users (not whitelisted, has free turns, no own key)
+    const hasFreeTurns = freeTurnsRemaining > 0
+    const hasOwnKey = selectedProvider === 'together' ? togetherApiKey.trim() : openaiApiKey.trim()
+
+    if (!user.isWhitelisted && hasFreeTurns && !hasOwnKey) {
+      return 'free-tier'
+    }
+
+    // Users with own API keys
+    return selectedProvider === 'together' ? togetherApiKey : openaiApiKey
+  }
+
+  // Lock provider/model for free tier users
+  useEffect(() => {
+    if (!user || !authConfig) return
+
+    const hasOwnKey = selectedProvider === 'together' ? togetherApiKey.trim() : openaiApiKey.trim()
+    const isFreeTierMode = !user.isWhitelisted && freeTurnsRemaining > 0 && !hasOwnKey
+
+    if (isFreeTierMode) {
+      // Lock to free provider and model
+      if (selectedProvider !== authConfig.freeProvider) {
+        setSelectedProvider(authConfig.freeProvider)
+      }
+      if (selectedModel !== authConfig.freeModel) {
+        setSelectedModel(authConfig.freeModel)
+      }
+    }
+  }, [user, authConfig, freeTurnsRemaining, togetherApiKey, openaiApiKey, selectedProvider, selectedModel])
+
+  const handleFreeTurnsUpdate = (turns: number) => {
+    setFreeTurnsRemaining(turns)
+  }
+
+  if (!user) return null
+
+  const effectiveApiKey = getEffectiveApiKey()
+  const hasOwnKey = selectedProvider === 'together' ? togetherApiKey.trim() : openaiApiKey.trim()
+  const hasFreeTurns = freeTurnsRemaining > 0
 
   return (
     <div className="app">
@@ -158,12 +146,17 @@ function App() {
         onSettingsClick={() => setSettingsModalOpen(true)}
         isSidebarOpen={sidebarOpen}
         onToggleSidebar={() => setSidebarOpen(prev => !prev)}
+        isWhitelisted={user.isWhitelisted}
+        freeTurnsRemaining={freeTurnsRemaining}
+        authType={user.authType}
+        userName={user.name}
+        userPicture={user.picture}
       />
       <main className="main-content">
         <ChatInterface
-          apiKey={selectedProvider === 'together' ? togetherApiKey : openaiApiKey}
+          apiKey={effectiveApiKey}
           setApiKey={handleApiKeyChange}
-          sessionId={sessionId}
+          sessionId={user.sessionId}
           selectedModel={selectedModel}
           setSelectedModel={setSelectedModel}
           selectedProvider={selectedProvider}
@@ -172,6 +165,12 @@ function App() {
           sidebarOpen={sidebarOpen}
           settingsModalOpen={settingsModalOpen}
           setSettingsModalOpen={setSettingsModalOpen}
+          isWhitelisted={user.isWhitelisted}
+          freeTurnsRemaining={freeTurnsRemaining}
+          authType={user.authType}
+          onFreeTurnsUpdate={handleFreeTurnsUpdate}
+          hasFreeTurns={hasFreeTurns}
+          hasOwnApiKey={!!hasOwnKey}
         />
       </main>
     </div>

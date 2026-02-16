@@ -153,6 +153,7 @@ app.add_middleware(
     allow_credentials=True,  # Allows cookies to be included in requests
     allow_methods=["*"],  # Allows all HTTP methods (GET, POST, etc.)
     allow_headers=["*"],  # Allows all headers in requests
+    expose_headers=["X-Conversation-ID", "X-Free-Turns-Remaining"],  # Expose custom headers to frontend
 )
 
 # In-memory storage for conversations (in production, use a proper database)
@@ -1041,9 +1042,16 @@ async def chat(
                     user_conversations[conversation_id]["messages"].pop()
                 raise e
 
+        # Calculate free turns remaining before creating response
+        if session.get("is_whitelisted"):
+            free_turns_remaining = -1  # Unlimited
+        else:
+            free_turns_remaining = max(0, MAX_FREE_TURNS - session["free_turns_used"] - 1)
+
         # Return a streaming response to the client with conversation ID in headers
         response = StreamingResponse(generate(), media_type="text/plain")
         response.headers["X-Conversation-ID"] = conversation_id
+        response.headers["X-Free-Turns-Remaining"] = str(free_turns_remaining)
         return response
     
     except Exception as e:
@@ -1472,19 +1480,33 @@ async def rag_query(
         )
         user_conversations[conversation_id]["messages"].append(assistant_message)
         user_conversations[conversation_id]["last_updated"] = datetime.now(timezone.utc)
-        
+
+        # Increment free turns counter if using server API key
+        if not session.get("has_own_api_key") and not session.get("is_whitelisted"):
+            session["free_turns_used"] += 1
+            print(f"Free turn used (RAG): {session['free_turns_used']}/{MAX_FREE_TURNS} for session {session_id[:8]}...")
+
+        # Calculate free turns remaining
+        if session.get("is_whitelisted"):
+            free_turns_remaining = -1  # Unlimited
+        else:
+            free_turns_remaining = max(0, MAX_FREE_TURNS - session["free_turns_used"])
+
         # Create response with conversation ID in headers
         response = RAGQueryResponse(
             answer=answer,
             relevant_chunks_count=relevant_chunks_count,
             document_info=doc_info
         )
-        
-        # Return response with conversation ID in headers
+
+        # Return response with conversation ID and free turns remaining in headers
         from fastapi.responses import JSONResponse
         return JSONResponse(
             content=response.model_dump(),
-            headers={"X-Conversation-ID": conversation_id}
+            headers={
+                "X-Conversation-ID": conversation_id,
+                "X-Free-Turns-Remaining": str(free_turns_remaining)
+            }
         )
     
     except Exception as e:

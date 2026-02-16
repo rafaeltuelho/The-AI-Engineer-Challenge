@@ -63,7 +63,61 @@
   color: var(--text-muted);
 }
 
-.theme-toggle {
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.free-turns-badge {
+  padding: 4px 12px;
+  background: var(--accent-primary);
+  color: white;
+  border-radius: 12px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.user-display {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  transition: background var(--transition-base);
+}
+
+.user-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.user-avatar-placeholder {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--bg-tertiary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+}
+
+.user-name {
+  font-size: 0.875rem;
+  color: var(--text-primary);
+  font-weight: 500;
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.theme-toggle,
+.logout-button {
   background: transparent;
   border: none;
   color: var(--text-secondary);
@@ -76,7 +130,8 @@
   transition: background var(--transition-base), color var(--transition-base);
 }
 
-.theme-toggle:hover {
+.theme-toggle:hover,
+.logout-button:hover {
   background: var(--bg-tertiary);
   color: var(--text-primary);
 }
