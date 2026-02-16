@@ -375,9 +375,10 @@ class ChatRequest(BaseModel):
         if not isinstance(v, str):
             raise ValueError('API key must be a string')
 
-        # Just check that it's not empty if provided
+        # Treat empty/whitespace-only strings as "no key provided"
+        # This happens when whitelisted/free-tier users don't have their own key
         if len(v.strip()) == 0:
-            raise ValueError('API key cannot be empty')
+            return None
 
         return v
     
@@ -492,8 +493,10 @@ class SessionRequest(BaseModel):
         if not isinstance(v, str):
             raise ValueError('API key must be a string')
 
+        # Treat empty/whitespace-only strings as "no key provided"
+        # This happens when whitelisted/free-tier users don't have their own key
         if len(v.strip()) == 0:
-            raise ValueError('API key cannot be empty')
+            return None
 
         return v
 

@@ -424,7 +424,7 @@ Sample JSON output:
         headers: {
           'Content-Type': 'application/json',
           'X-Session-ID': sessionId,
-          'X-API-Key': apiKey,
+          ...(apiKey ? { 'X-API-Key': apiKey } : {}),
           ...(isRagMode && conversationId ? { 'X-Conversation-ID': conversationId } : {})
         },
         body: JSON.stringify(isRagMode ? {
@@ -439,7 +439,7 @@ Sample JSON output:
           developer_message: developerMessage,
           user_message: currentMessage,
           model: selectedModel,
-          api_key: apiKey,
+          api_key: apiKey || undefined,
           provider: selectedProvider
         })
       })
@@ -688,7 +688,7 @@ Sample JSON output:
         method: 'POST',
         headers: {
           'X-Session-ID': sessionId,
-          'X-API-Key': apiKey,
+          ...(apiKey ? { 'X-API-Key': apiKey } : {}),
           'X-Provider': selectedProvider
         },
         body: formData
