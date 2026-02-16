@@ -1,94 +1,197 @@
-# Merge Instructions: ChatGPT-Style UI Redesign
+# 🚀 Merge Instructions: Google OAuth Authentication Feature
 
-## Overview
-This branch (`chatgpt-style-ui-redesign`) contains a complete redesign of the frontend to match ChatGPT's UI pattern with:
-- Centered input on empty state
-- Input moves to bottom when chat starts
-- Settings modal for configuration
-- Simplified sidebar showing only chat history
+Hey there! 👋 Ready to bring Google OAuth authentication to the main branch? This guide will walk you through merging PR #13 like a pro.
 
-## Changes Made
-- Created `SettingsModal.tsx` and `SettingsModal.css` components
-- Refactored `ChatInterface.tsx` to use the new layout
-- Updated `ChatInterface.css` with new layout styles
-- Removed settings sections from sidebar
+## 🎯 What You're Merging
 
-## Merge via GitHub PR
+This PR adds optional Google OAuth authentication with:
+- 🔐 Google Sign-In (optional, configurable)
+- 🎟️ Free chat turns for guests and non-whitelisted users
+- ✅ Email whitelisting for unlimited access
+- 🔒 Secure API key handling (no localStorage, no query params)
 
-### Step 1: Create a Pull Request
+**PR Link**: https://github.com/rafaeltuelho/The-AI-Engineer-Challenge/pull/13
+
+---
+
+## ✅ Pre-Merge Checklist
+
+Before you merge, make sure you've got these environment variables ready:
+
+### Required for Free Tier
 ```bash
-# The branch is already pushed, create a PR on GitHub:
-# 1. Go to https://github.com/rafaeltuelho/The-AI-Engineer-Challenge
-# 2. Click "New Pull Request"
-# 3. Set base: main, compare: chatgpt-style-ui-redesign
-# 4. Add title: "feat: ChatGPT-style UI redesign"
-# 5. Add description with the changes listed above
-# 6. Click "Create Pull Request"
+TOGETHER_API_KEY=your_together_api_key_here
 ```
 
-### Step 2: Review and Merge
+### Optional (but recommended for Google OAuth)
 ```bash
-# After approval, merge via GitHub UI:
-# 1. Click "Merge pull request"
-# 2. Choose merge strategy (Squash and merge recommended)
-# 3. Confirm merge
+GOOGLE_CLIENT_ID=your_google_oauth_client_id.apps.googleusercontent.com
+WHITELISTED_EMAILS=admin@example.com,vip@example.com
 ```
 
-### Step 3: Update Local Main
+### Optional Customization
+```bash
+FREE_PROVIDER=together                    # Default: together
+FREE_MODEL=deepseek-ai/DeepSeek-V3.1     # Default: deepseek-ai/DeepSeek-V3.1
+MAX_FREE_TURNS=3                          # Default: 3
+MAX_FREE_MESSAGE_TOKENS=500               # Default: 500
+```
+
+> **Note**: If you don't set `GOOGLE_CLIENT_ID`, the Google Sign-In button won't appear, and users will only see "Continue as Guest".
+
+### Testing Steps (Recommended)
+1. **Test Guest Flow**: Start the app without `GOOGLE_CLIENT_ID` and verify guest sessions work
+2. **Test Google OAuth**: Add `GOOGLE_CLIENT_ID` and test Google Sign-In
+3. **Test Whitelisting**: Add your email to `WHITELISTED_EMAILS` and verify unlimited access
+4. **Test Free Turns**: As a guest, verify you get exactly `MAX_FREE_TURNS` free messages
+5. **Test API Key Fallback**: Exhaust free turns and verify the API key prompt appears
+
+---
+
+## 🌐 Route 1: GitHub Web UI (The Clicky Way)
+
+Perfect for visual folks who like buttons! 🖱️
+
+1. **Navigate to the PR**
+   Go to: https://github.com/rafaeltuelho/The-AI-Engineer-Challenge/pull/13
+
+2. **Review the Changes**
+   - Click the "Files changed" tab
+   - Review the 18 changed files (+1629 additions, -208 deletions)
+   - Check out the new auth components, backend endpoints, and security improvements
+
+3. **Run CI Checks** (if configured)
+   - Wait for any automated tests to pass ✅
+   - If tests fail, address issues before merging
+
+4. **Merge the PR**
+   - Scroll to the bottom of the PR page
+   - Click the big green **"Merge pull request"** button
+   - Choose your merge strategy:
+     - **Create a merge commit** (recommended) — Preserves full history
+     - **Squash and merge** — Combines all 6 commits into one
+     - **Rebase and merge** — Replays commits on top of main
+   - Click **"Confirm merge"**
+
+5. **Delete the Branch** (optional but tidy)
+   - After merging, GitHub will offer to delete `add-google-oauth-authentication`
+   - Click **"Delete branch"** to keep your repo clean
+
+6. **Pull the Latest Main**
+   ```bash
+   git checkout main
+   git pull origin main
+   ```
+
+---
+
+## 💻 Route 2: GitHub CLI (The Terminal Ninja Way)
+
+For those who live in the terminal! ⌨️
+
+### Prerequisites
+Make sure you have the GitHub CLI installed:
+```bash
+# Check if gh is installed
+gh --version
+
+# If not, install it:
+# macOS
+brew install gh
+
+# Linux
+sudo apt install gh  # Debian/Ubuntu
+sudo dnf install gh  # Fedora
+
+# Windows
+winget install GitHub.cli
+```
+
+### Authenticate (if you haven't already)
+```bash
+gh auth login
+```
+
+### Merge the PR
+
+#### Option A: Auto-Merge (Quick & Easy)
+```bash
+# Merge PR #13 with a merge commit
+gh pr merge 13 --merge --delete-branch
+
+# Or squash all commits into one
+gh pr merge 13 --squash --delete-branch
+
+# Or rebase onto main
+gh pr merge 13 --rebase --delete-branch
+```
+
+#### Option B: Review First, Then Merge
+```bash
+# View PR details
+gh pr view 13
+
+# Check out the PR locally to test
+gh pr checkout 13
+
+# Run tests, verify functionality
+npm run dev  # or whatever your test command is
+
+# If everything looks good, merge it
+gh pr merge 13 --merge --delete-branch
+```
+
+### Pull the Latest Main
 ```bash
 git checkout main
 git pull origin main
 ```
 
-## Merge via GitHub CLI
+---
 
-### One-Command Merge
+## 🧹 Post-Merge Cleanup
+
+### Local Branch Cleanup
+If you checked out the feature branch locally, clean it up:
+
 ```bash
-# Create and merge PR in one command
-gh pr create --title "feat: ChatGPT-style UI redesign" \
-  --body "Redesign frontend to ChatGPT-style UI with centered input and settings modal" \
-  --base main --head chatgpt-style-ui-redesign && \
-gh pr merge --squash --auto
+# Delete local branch
+git branch -d add-google-oauth-authentication
+
+# If it complains, force delete
+git branch -D add-google-oauth-authentication
+
+# Prune remote-tracking branches
+git fetch --prune
 ```
 
-### Manual Steps
-```bash
-# 1. Create PR
-gh pr create --title "feat: ChatGPT-style UI redesign" \
-  --body "Redesign frontend to ChatGPT-style UI with centered input and settings modal" \
-  --base main --head chatgpt-style-ui-redesign
+### Verify Deployment
+After merging, verify the feature works in your deployment environment:
 
-# 2. Merge PR (replace PR_NUMBER with actual number)
-gh pr merge PR_NUMBER --squash
+1. **Set environment variables** in your hosting platform (Vercel, Heroku, etc.)
+2. **Redeploy** if necessary
+3. **Test the auth flow** in production:
+   - Guest sign-in
+   - Google OAuth (if enabled)
+   - Free turns mechanism
+   - API key fallback
 
-# 3. Update local main
-git checkout main
-git pull origin main
-```
+---
 
-## Testing Before Merge
-```bash
-# Run the dev server
-cd frontend && npm run dev
+## 🎉 You're Done!
 
-# Visit http://localhost:3000 and verify:
-# ✅ Settings modal opens/closes
-# ✅ Input is centered when no messages
-# ✅ Input moves to bottom after first message
-# ✅ Sidebar shows chat history
-# ✅ All form fields work correctly
-```
+Congrats! You've successfully merged the Google OAuth authentication feature. Your app now has:
+- ✅ Optional Google Sign-In
+- ✅ Free chat turns for guests
+- ✅ Email whitelisting
+- ✅ Secure API key handling
 
-## Rollback (if needed)
-```bash
-# If issues arise after merge:
-git revert <commit-hash>
-git push origin main
-```
+### Need Help?
+- **PR Issues**: Comment on PR #13
+- **Merge Conflicts**: Reach out to the PR author
+- **Environment Setup**: Check the PR description for detailed env var docs
 
-## Notes
-- All TypeScript types are correct (no compilation errors)
-- Accessibility features are WCAG AA compliant
-- Responsive design works on mobile, tablet, and desktop
-- Dark/Light theme support is maintained
+---
+
+**Happy Merging! 🚀**
 
