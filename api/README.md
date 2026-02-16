@@ -229,6 +229,84 @@ SESSION_TIMEOUT_MINUTES=60
 CLEANUP_INTERVAL_SECONDS=60
 ```
 
+## Deployment to Vercel
+
+### Setting Up Environment Variables on Vercel
+
+#### Option 1: Using Vercel Dashboard (Recommended for UI)
+
+1. **Go to your Vercel project dashboard**
+   - Navigate to https://vercel.com/dashboard
+   - Select your project
+
+2. **Go to Settings → Environment Variables**
+   - Click on the "Settings" tab
+   - Select "Environment Variables" from the left sidebar
+
+3. **Add each environment variable:**
+   - Click "Add New"
+   - Enter the variable name and value
+   - Select which environments it applies to (Production, Preview, Development)
+   - Click "Save"
+
+#### Option 2: Using Vercel CLI (Faster)
+
+```bash
+# Install Vercel CLI if you haven't already
+npm i -g vercel
+
+# Link your project (if not already linked)
+vercel link
+
+# Add environment variables
+vercel env add GOOGLE_CLIENT_ID
+vercel env add WHITELISTED_EMAILS
+vercel env add MAX_FREE_TURNS
+vercel env add MAX_FREE_MESSAGE_TOKENS
+vercel env add FREE_PROVIDER
+vercel env add FREE_MODEL
+vercel env add OPENAI_API_KEY
+vercel env add TOGETHER_API_KEY
+vercel env add SESSION_TIMEOUT_MINUTES
+vercel env add CLEANUP_INTERVAL_SECONDS
+```
+
+### Environment Variables for Production
+
+| Variable | Required? | Example Value | Notes |
+|----------|-----------|---------------|-------|
+| `GOOGLE_CLIENT_ID` | ✅ Yes | `xxx.apps.googleusercontent.com` | Get from Google Cloud Console |
+| `WHITELISTED_EMAILS` | ❌ Optional | `admin@example.com,vip@example.com` | Comma-separated, no spaces |
+| `OPENAI_API_KEY` | ⚠️ Conditional | `sk-...` | Required if `FREE_PROVIDER=openai` |
+| `TOGETHER_API_KEY` | ⚠️ Conditional | `xxx` | Required if `FREE_PROVIDER=together` |
+| `MAX_FREE_TURNS` | ❌ Optional | `3` | Default: 3 |
+| `MAX_FREE_MESSAGE_TOKENS` | ❌ Optional | `500` | Default: 500 |
+| `FREE_PROVIDER` | ❌ Optional | `together` | Default: together |
+| `FREE_MODEL` | ❌ Optional | `deepseek-ai/DeepSeek-V3.1` | Default: deepseek-ai/DeepSeek-V3.1 |
+| `SESSION_TIMEOUT_MINUTES` | ❌ Optional | `60` | Default: 60 |
+| `CLEANUP_INTERVAL_SECONDS` | ❌ Optional | `60` | Default: 60 |
+
+### Verification
+
+After setting variables, you can verify they're deployed:
+
+```bash
+# View all environment variables for your project
+vercel env list
+
+# Redeploy to apply changes
+vercel --prod
+```
+
+### Security Best Practices for Vercel Deployment
+
+1. **Never commit `.env` to git** - It's already in `.gitignore`
+2. **Use Vercel's encrypted storage** - All env vars are encrypted at rest
+3. **Rotate API keys regularly** - Especially if compromised
+4. **Use different keys for different environments** - Consider separate API keys for staging vs production
+5. **Don't pass API keys in URLs** - Your backend handles this securely
+6. **Keep sensitive data server-side** - API keys are never exposed to the frontend
+
 ## CORS Configuration
 
 The API is configured to accept requests from any origin (`*`). This can be modified in the `app.py` file if you need to restrict access to specific domains.
