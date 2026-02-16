@@ -25,6 +25,10 @@ from pydantic import BaseModel, field_validator
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
+# Import Google OAuth libraries
+from google.oauth2 import id_token
+from google.auth.transport import requests as google_requests
+import tiktoken
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 if current_dir not in sys.path:
@@ -37,6 +41,28 @@ if current_dir not in sys.path:
 SESSION_TIMEOUT_MINUTES = int(os.getenv("SESSION_TIMEOUT_MINUTES", "60"))
 # Cleanup interval: How often the cleanup scheduler runs (in seconds)
 CLEANUP_INTERVAL_SECONDS = int(os.getenv("CLEANUP_INTERVAL_SECONDS", "60"))
+
+# ============================================
+# Google OAuth Configuration
+# ============================================
+GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
+WHITELISTED_EMAILS = set(
+    email.strip()
+    for email in os.getenv("WHITELISTED_EMAILS", "").split(",")
+    if email.strip()
+)
+
+# ============================================
+# Free Tier Configuration
+# ============================================
+MAX_FREE_TURNS = int(os.getenv("MAX_FREE_TURNS", "10"))
+MAX_FREE_MESSAGE_TOKENS = int(os.getenv("MAX_FREE_MESSAGE_TOKENS", "1000"))
+FREE_PROVIDER = os.getenv("FREE_PROVIDER", "openai")
+FREE_MODEL = os.getenv("FREE_MODEL", "gpt-4.1-mini")
+
+# Server-side API keys (for free tier)
+SERVER_OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+SERVER_TOGETHER_API_KEY = os.getenv("TOGETHER_API_KEY", "")
 
 # Import our lightweight PDF RAG functionality
 from rag_lightweight import DocumentProcessor, get_or_create_rag_system
@@ -134,30 +160,150 @@ app.add_middleware(
 conversations: Dict[str, Dict[str, Dict[str, Any]]] = {}
 
 # Session management
-# Structure: {session_id: {"api_key": hashed_api_key, "last_access": datetime}}
+# Structure: {session_id: {
+#   "auth_type": "api_key" | "google" | "guest",
+#   "email": Optional[str],
+#   "name": Optional[str],
+#   "picture": Optional[str],
+#   "is_whitelisted": bool,
+#   "free_turns_used": int,
+#   "has_own_api_key": bool,
+#   "api_key": Optional[str],  # Only for api_key auth_type
+#   "provider": str,
+#   "last_access": datetime
+# }}
 sessions: Dict[str, Dict[str, Any]] = {}
 
 def hash_api_key(api_key: str) -> str:
     """Hash the API key using SHA-256 for secure storage key generation"""
     return hashlib.sha256(api_key.encode('utf-8')).hexdigest()
 
-def create_session(api_key: str) -> str:
-    """Create a new session for the given API key"""
-    session_id = str(uuid.uuid4())    
+def create_session(
+    auth_type: str = "api_key",
+    api_key: Optional[str] = None,
+    provider: str = "openai",
+    email: Optional[str] = None,
+    name: Optional[str] = None,
+    picture: Optional[str] = None
+) -> str:
+    """Create a new session with the specified authentication type and user info.
+
+    Args:
+        auth_type: Type of authentication ("api_key", "google", or "guest")
+        api_key: API key for api_key auth type (optional)
+        provider: Provider for API calls (default: "openai")
+        email: User email (for Google auth)
+        name: User name (for Google auth)
+        picture: User profile picture URL (for Google auth)
+
+    Returns:
+        session_id: Unique session identifier
+    """
+    session_id = str(uuid.uuid4())
+
+    # Determine if user is whitelisted
+    is_whitelisted = False
+    if email and WHITELISTED_EMAILS:
+        is_whitelisted = email in WHITELISTED_EMAILS
+
     sessions[session_id] = {
+        "auth_type": auth_type,
+        "email": email,
+        "name": name,
+        "picture": picture,
+        "is_whitelisted": is_whitelisted,
+        "free_turns_used": 0,
+        "has_own_api_key": api_key is not None,
+        "api_key": api_key,
+        "provider": provider,
         "last_access": datetime.now(timezone.utc)
     }
-    
+
     return session_id
 
-def get_session(session_id: str) -> Optional[str]:
-    """Get the hashed API key for a session, return None if session doesn't exist"""
+def get_session(session_id: str) -> Optional[Dict[str, Any]]:
+    """Get session data for a session, return None if session doesn't exist"""
     if session_id not in sessions:
         return None
-    
+
     # Update session access time
     sessions[session_id]["last_access"] = datetime.now(timezone.utc)
     return sessions[session_id]
+
+def count_tokens(text: str, model: str = "gpt-4") -> int:
+    """Count the number of tokens in a text string.
+
+    Args:
+        text: The text to count tokens for
+        model: The model to use for tokenization (default: "gpt-4")
+
+    Returns:
+        Number of tokens in the text
+    """
+    try:
+        encoding = tiktoken.encoding_for_model(model)
+        return len(encoding.encode(text))
+    except Exception:
+        # Fallback to approximate token count if encoding fails
+        return len(text) // 4
+
+def resolve_api_key(session_id: str, user_api_key: Optional[str] = None, provider: Optional[str] = None) -> tuple[str, str]:
+    """Resolve which API key to use based on session and user input.
+
+    Priority:
+    1. User-provided API key (if given)
+    2. Session's stored API key (if has_own_api_key is True)
+    3. Server-side API key for free tier
+
+    Args:
+        session_id: The session ID
+        user_api_key: Optional API key provided by the user
+        provider: Optional provider override
+
+    Returns:
+        Tuple of (api_key, provider)
+
+    Raises:
+        HTTPException: If no API key is available
+    """
+    session = get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=401, detail="Invalid or expired session")
+
+    # Determine provider
+    resolved_provider = provider or session.get("provider", "openai")
+
+    # Priority 1: User-provided API key
+    if user_api_key:
+        return user_api_key, resolved_provider
+
+    # Priority 2: Session's stored API key
+    if session.get("has_own_api_key") and session.get("api_key"):
+        return session["api_key"], resolved_provider
+
+    # Priority 3: Server-side API key for free tier
+    # Check if user has exceeded free turns
+    if session["free_turns_used"] >= MAX_FREE_TURNS and not session.get("is_whitelisted"):
+        raise HTTPException(
+            status_code=403,
+            detail=f"Free tier limit reached ({MAX_FREE_TURNS} turns). Please provide your own API key or sign in with a whitelisted account."
+        )
+
+    # Use server-side API key based on provider
+    if resolved_provider == "together":
+        if not SERVER_TOGETHER_API_KEY:
+            raise HTTPException(
+                status_code=500,
+                detail="Server-side Together.ai API key not configured. Please provide your own API key."
+            )
+        return SERVER_TOGETHER_API_KEY, resolved_provider
+    else:
+        if not SERVER_OPENAI_API_KEY:
+            raise HTTPException(
+                status_code=500,
+                detail="Server-side OpenAI API key not configured. Please provide your own API key."
+            )
+        return SERVER_OPENAI_API_KEY, resolved_provider
 
 def get_session_conversations(session_id: str) -> Dict[str, Dict[str, Any]]:
     """Get conversations scoped to a specific session."""
@@ -211,20 +357,23 @@ class ChatRequest(BaseModel):
     developer_message: str  # Message from the developer/system
     user_message: str      # Message from the user
     model: Optional[str] = "gpt-4.1-mini"  # Optional model selection with default
-    api_key: str          # API key for authentication
+    api_key: Optional[str] = None  # API key for authentication (optional, can use session's key or server key)
     provider: Optional[str] = "openai"  # Provider selection: "openai" or "together"
-    
+
     @field_validator('api_key')
     @classmethod
     def validate_api_key(cls, v):
-        """Validate API key format"""
-        if not v or not isinstance(v, str):
-            raise ValueError('API key is required')
-        
-        # Just check that it's not empty and is a string
+        """Validate API key format if provided"""
+        if v is None:
+            return v
+
+        if not isinstance(v, str):
+            raise ValueError('API key must be a string')
+
+        # Just check that it's not empty if provided
         if len(v.strip()) == 0:
             raise ValueError('API key cannot be empty')
-        
+
         return v
     
     @field_validator('provider')
@@ -325,37 +474,72 @@ class ConversationResponse(BaseModel):
     timestamp: datetime
 
 class SessionRequest(BaseModel):
-    api_key: str
+    api_key: Optional[str] = None  # API key is now optional
     provider: Optional[str] = "openai"  # Provider selection: "openai" or "together"
-    
+
     @field_validator('api_key')
     @classmethod
     def validate_api_key(cls, v):
-        """Validate API key format"""
-        if not v or not isinstance(v, str):
-            raise ValueError('API key is required')
-        
+        """Validate API key format if provided"""
+        if v is None:
+            return v
+
+        if not isinstance(v, str):
+            raise ValueError('API key must be a string')
+
         if len(v.strip()) == 0:
             raise ValueError('API key cannot be empty')
-        
+
         return v
-    
+
     @field_validator('provider')
     @classmethod
     def validate_provider(cls, v):
         """Validate provider selection"""
         if not v:
             return "openai"  # Default provider
-        
+
         allowed_providers = ["openai", "together"]
         if v.lower() not in allowed_providers:
             raise ValueError(f'Invalid provider: {v}. Allowed providers: {", ".join(allowed_providers)}')
-        
+
         return v.lower()
 
 class SessionResponse(BaseModel):
     session_id: str
     message: str
+
+class GoogleAuthRequest(BaseModel):
+    id_token: str  # Google ID token from frontend
+
+    @field_validator('id_token')
+    @classmethod
+    def validate_id_token(cls, v):
+        """Validate ID token format"""
+        if not v or not isinstance(v, str):
+            raise ValueError('ID token is required')
+
+        if len(v.strip()) == 0:
+            raise ValueError('ID token cannot be empty')
+
+        return v.strip()
+
+class AuthMeResponse(BaseModel):
+    auth_type: str
+    email: Optional[str] = None
+    name: Optional[str] = None
+    picture: Optional[str] = None
+    is_whitelisted: bool
+    free_turns_used: int
+    free_turns_remaining: int
+    has_own_api_key: bool
+    provider: str
+
+class AuthConfigResponse(BaseModel):
+    google_client_id: str
+    max_free_turns: int
+    free_model: str
+    free_provider: str
 
 class DocumentUploadResponse(BaseModel):
     document_id: str
@@ -462,13 +646,13 @@ class RAGQueryResponse(BaseModel):
     relevant_chunks_count: int
     document_info: Dict[str, Any]
 
-# Endpoint to create a new session
+# Endpoint to create a new session (backward compatible)
 @app.post(
     "/api/session",
     response_model=SessionResponse,
     tags=["Authentication"],
     summary="Create a new session",
-    description="Create a new authenticated session using your OpenAI API key. Returns a session ID that you'll use for subsequent requests.",
+    description="Create a new authenticated session using your API key (optional). Returns a session ID that you'll use for subsequent requests. If no API key is provided, creates a guest session with free tier access.",
     responses={
         200: {"description": "Session created successfully"},
         500: {"description": "Internal server error"}
@@ -477,10 +661,24 @@ class RAGQueryResponse(BaseModel):
 @limiter.limit("30/minute")  # Limit to 30 session creations per minute per IP (increased for better UX during development)
 async def create_session_endpoint(request: Request, session_request: SessionRequest):
     try:
-        session_id = create_session(session_request.api_key)
+        # Create session with API key if provided, otherwise create guest session
+        if session_request.api_key:
+            session_id = create_session(
+                auth_type="api_key",
+                api_key=session_request.api_key,
+                provider=session_request.provider
+            )
+            message = "Session created successfully with API key"
+        else:
+            session_id = create_session(
+                auth_type="guest",
+                provider=session_request.provider
+            )
+            message = f"Guest session created successfully ({MAX_FREE_TURNS} free turns available)"
+
         return SessionResponse(
             session_id=session_id,
-            message="Session created successfully"
+            message=message
         )
     except Exception as e:
         print(f"Error creating session: {str(e)}")

@@ -8,6 +8,16 @@ services:
       - "8000:8000"
     environment:
       - PYTHONUNBUFFERED=1
+      - SESSION_TIMEOUT_MINUTES=${SESSION_TIMEOUT_MINUTES:-60}
+      - CLEANUP_INTERVAL_SECONDS=${CLEANUP_INTERVAL_SECONDS:-60}
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - WHITELISTED_EMAILS=${WHITELISTED_EMAILS:-}
+      - MAX_FREE_TURNS=${MAX_FREE_TURNS:-10}
+      - MAX_FREE_MESSAGE_TOKENS=${MAX_FREE_MESSAGE_TOKENS:-1000}
+      - FREE_PROVIDER=${FREE_PROVIDER:-openai}
+      - FREE_MODEL=${FREE_MODEL:-gpt-4.1-mini}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - TOGETHER_API_KEY=${TOGETHER_API_KEY:-}
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
       interval: 30s
