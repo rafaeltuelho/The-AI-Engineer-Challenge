@@ -70,8 +70,8 @@ const EntryScreen: React.FC = () => {
             <div className="option-content">
               <h3 className="option-title">Continue as Guest</h3>
               <p className="option-description">
-                {authConfig?.guestFreeTurns 
-                  ? `Get ${authConfig.guestFreeTurns} free turns to try the chat`
+                {authConfig?.maxFreeTurns
+                  ? `Get ${authConfig.maxFreeTurns} free turns to try the chat`
                   : 'Try the chat with limited turns'}
               </p>
             </div>
@@ -84,7 +84,7 @@ const EntryScreen: React.FC = () => {
               <div className="google-option-content">
                 <h3 className="option-title">Sign in with Google</h3>
                 <p className="option-description">
-                  Get unlimited access with your Google account
+                  Sign in for personalized access
                 </p>
               </div>
               <div className="google-button-wrapper">

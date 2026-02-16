@@ -1,18 +1,23 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react'
+import { GoogleOAuthProvider } from '@react-oauth/google'
 
 interface User {
-  id: string
-  email?: string
-  name?: string
-  picture?: string
+  sessionId: string
+  email: string | null
+  name: string | null
+  picture: string | null
   authType: 'guest' | 'google'
-  freeTurns?: number
+  isWhitelisted: boolean
+  freeTurnsRemaining: number  // -1 = unlimited
+  hasOwnApiKey: boolean
 }
 
 interface AuthConfig {
   googleAuthEnabled: boolean
-  googleClientId?: string
-  guestFreeTurns: number
+  googleClientId: string | null
+  maxFreeTurns: number
+  freeModel: string
+  freeProvider: string
 }
 
 interface AuthContextType {
@@ -52,12 +57,21 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         const response = await fetch('/api/auth/config')
         if (response.ok) {
           const config = await response.json()
-          setAuthConfig(config)
+          setAuthConfig({
+            googleAuthEnabled: config.google_auth_enabled,
+            googleClientId: config.google_client_id || null,
+            maxFreeTurns: config.max_free_turns,
+            freeModel: config.free_model,
+            freeProvider: config.free_provider
+          })
         } else {
           // Default config if endpoint fails
           setAuthConfig({
             googleAuthEnabled: false,
-            guestFreeTurns: 5
+            googleClientId: null,
+            maxFreeTurns: 3,
+            freeModel: 'deepseek-ai/DeepSeek-V3.1',
+            freeProvider: 'together'
           })
         }
       } catch (error) {
@@ -65,7 +79,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         // Default config on error
         setAuthConfig({
           googleAuthEnabled: false,
-          guestFreeTurns: 5
+          googleClientId: null,
+          maxFreeTurns: 3,
+          freeModel: 'deepseek-ai/DeepSeek-V3.1',
+          freeProvider: 'together'
         })
       }
     }
@@ -90,8 +107,17 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         })
 
         if (response.ok) {
-          const userData = await response.json()
-          setUser(userData)
+          const data = await response.json()
+          setUser({
+            sessionId: sessionId,
+            email: data.email,
+            name: data.name || (data.auth_type === 'guest' ? 'Guest' : null),
+            picture: data.picture,
+            authType: data.auth_type,
+            isWhitelisted: data.is_whitelisted,
+            freeTurnsRemaining: data.free_turns_remaining,
+            hasOwnApiKey: data.has_own_api_key
+          })
         } else {
           // Invalid session, clear it
           localStorage.removeItem('sessionId')
@@ -120,8 +146,17 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       if (response.ok) {
         const data = await response.json()
-        localStorage.setItem('sessionId', data.sessionId)
-        setUser(data.user)
+        localStorage.setItem('sessionId', data.session_id)
+        setUser({
+          sessionId: data.session_id,
+          email: data.user.email,
+          name: data.user.name || 'Guest',
+          picture: data.user.picture,
+          authType: data.user.auth_type,
+          isWhitelisted: data.user.is_whitelisted,
+          freeTurnsRemaining: data.user.free_turns_remaining,
+          hasOwnApiKey: data.user.has_own_api_key
+        })
       } else {
         throw new Error('Failed to login as guest')
       }
@@ -143,8 +178,17 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       if (response.ok) {
         const data = await response.json()
-        localStorage.setItem('sessionId', data.sessionId)
-        setUser(data.user)
+        localStorage.setItem('sessionId', data.session_id)
+        setUser({
+          sessionId: data.session_id,
+          email: data.user.email,
+          name: data.user.name,
+          picture: data.user.picture,
+          authType: data.user.auth_type,
+          isWhitelisted: data.user.is_whitelisted,
+          freeTurnsRemaining: data.user.free_turns_remaining,
+          hasOwnApiKey: data.user.has_own_api_key
+        })
       } else {
         throw new Error('Failed to login with Google')
       }
@@ -174,8 +218,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   }
 
   const updateFreeTurns = (turns: number) => {
-    if (user && user.authType === 'guest') {
-      setUser({ ...user, freeTurns: turns })
+    if (user && !user.isWhitelisted) {
+      setUser({ ...user, freeTurnsRemaining: turns })
     }
   }
 
@@ -190,7 +234,17 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     updateFreeTurns
   }
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
+  return (
+    <AuthContext.Provider value={value}>
+      {authConfig?.googleClientId ? (
+        <GoogleOAuthProvider clientId={authConfig.googleClientId}>
+          {children}
+        </GoogleOAuthProvider>
+      ) : (
+        children
+      )}
+    </AuthContext.Provider>
+  )
 }
 
 

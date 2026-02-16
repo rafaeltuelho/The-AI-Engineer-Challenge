@@ -47,7 +47,7 @@ CLEANUP_INTERVAL_SECONDS = int(os.getenv("CLEANUP_INTERVAL_SECONDS", "60"))
 # ============================================
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
 WHITELISTED_EMAILS = set(
-    email.strip()
+    email.strip().lower()
     for email in os.getenv("WHITELISTED_EMAILS", "").split(",")
     if email.strip()
 )
@@ -55,10 +55,10 @@ WHITELISTED_EMAILS = set(
 # ============================================
 # Free Tier Configuration
 # ============================================
-MAX_FREE_TURNS = int(os.getenv("MAX_FREE_TURNS", "10"))
-MAX_FREE_MESSAGE_TOKENS = int(os.getenv("MAX_FREE_MESSAGE_TOKENS", "1000"))
-FREE_PROVIDER = os.getenv("FREE_PROVIDER", "openai")
-FREE_MODEL = os.getenv("FREE_MODEL", "gpt-4.1-mini")
+MAX_FREE_TURNS = int(os.getenv("MAX_FREE_TURNS", "3"))
+MAX_FREE_MESSAGE_TOKENS = int(os.getenv("MAX_FREE_MESSAGE_TOKENS", "500"))
+FREE_PROVIDER = os.getenv("FREE_PROVIDER", "together")
+FREE_MODEL = os.getenv("FREE_MODEL", "deepseek-ai/DeepSeek-V3.1")
 
 # Server-side API keys (for free tier)
 SERVER_OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
@@ -204,7 +204,7 @@ def create_session(
     # Determine if user is whitelisted
     is_whitelisted = False
     if email and WHITELISTED_EMAILS:
-        is_whitelisted = email in WHITELISTED_EMAILS
+        is_whitelisted = email.lower() in WHITELISTED_EMAILS
 
     sessions[session_id] = {
         "auth_type": auth_type,
@@ -509,18 +509,23 @@ class SessionResponse(BaseModel):
     session_id: str
     message: str
 
-class GoogleAuthRequest(BaseModel):
-    id_token: str  # Google ID token from frontend
+class AuthLoginResponse(BaseModel):
+    session_id: str
+    message: str
+    user: dict  # Contains auth_type, email, name, picture, is_whitelisted, free_turns_remaining, has_own_api_key
 
-    @field_validator('id_token')
+class GoogleAuthRequest(BaseModel):
+    credential: str  # Google credential from frontend
+
+    @field_validator('credential')
     @classmethod
-    def validate_id_token(cls, v):
-        """Validate ID token format"""
+    def validate_credential(cls, v):
+        """Validate credential format"""
         if not v or not isinstance(v, str):
-            raise ValueError('ID token is required')
+            raise ValueError('Credential is required')
 
         if len(v.strip()) == 0:
-            raise ValueError('ID token cannot be empty')
+            raise ValueError('Credential cannot be empty')
 
         return v.strip()
 
@@ -537,6 +542,7 @@ class AuthMeResponse(BaseModel):
 
 class AuthConfigResponse(BaseModel):
     google_client_id: str
+    google_auth_enabled: bool
     max_free_turns: int
     free_model: str
     free_provider: str
@@ -687,7 +693,7 @@ async def create_session_endpoint(request: Request, session_request: SessionRequ
 # Endpoint to create a guest session
 @app.post(
     "/api/auth/guest",
-    response_model=SessionResponse,
+    response_model=AuthLoginResponse,
     tags=["Authentication"],
     summary="Create a guest session",
     description=f"Create a guest session with free tier access ({MAX_FREE_TURNS} turns). No authentication required.",
@@ -700,10 +706,20 @@ async def create_session_endpoint(request: Request, session_request: SessionRequ
 async def create_guest_session(request: Request):
     try:
         session_id = create_session(auth_type="guest", provider=FREE_PROVIDER)
-        return SessionResponse(
-            session_id=session_id,
-            message=f"Guest session created successfully ({MAX_FREE_TURNS} free turns available)"
-        )
+        return {
+            "session_id": session_id,
+            "message": f"Guest session created successfully ({MAX_FREE_TURNS} free turns available)",
+            "user": {
+                "auth_type": "guest",
+                "email": None,
+                "name": "Guest",
+                "picture": None,
+                "is_whitelisted": False,
+                "free_turns_remaining": MAX_FREE_TURNS,
+                "has_own_api_key": False,
+                "session_id": session_id
+            }
+        }
     except Exception as e:
         print(f"Error creating guest session: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -711,7 +727,7 @@ async def create_guest_session(request: Request):
 # Endpoint to authenticate with Google OAuth
 @app.post(
     "/api/auth/google",
-    response_model=SessionResponse,
+    response_model=AuthLoginResponse,
     tags=["Authentication"],
     summary="Authenticate with Google",
     description="Authenticate using Google OAuth. Provide the Google ID token from the frontend.",
@@ -733,7 +749,7 @@ async def google_auth(request: Request, auth_request: GoogleAuthRequest):
         # Verify the Google ID token
         try:
             idinfo = id_token.verify_oauth2_token(
-                auth_request.id_token,
+                auth_request.credential,
                 google_requests.Request(),
                 GOOGLE_CLIENT_ID
             )
@@ -756,17 +772,29 @@ async def google_auth(request: Request, auth_request: GoogleAuthRequest):
             )
 
             # Check if user is whitelisted
-            is_whitelisted = email in WHITELISTED_EMAILS if WHITELISTED_EMAILS else False
+            is_whitelisted = email.lower() in WHITELISTED_EMAILS if WHITELISTED_EMAILS else False
 
             if is_whitelisted:
                 message = f"Welcome {name}! You have unlimited access."
+                free_turns_remaining = -1  # Unlimited
             else:
                 message = f"Welcome {name}! You have {MAX_FREE_TURNS} free turns."
+                free_turns_remaining = MAX_FREE_TURNS
 
-            return SessionResponse(
-                session_id=session_id,
-                message=message
-            )
+            return {
+                "session_id": session_id,
+                "message": message,
+                "user": {
+                    "auth_type": "google",
+                    "email": email,
+                    "name": name,
+                    "picture": picture,
+                    "is_whitelisted": is_whitelisted,
+                    "free_turns_remaining": free_turns_remaining,
+                    "has_own_api_key": False,
+                    "session_id": session_id
+                }
+            }
 
         except ValueError as e:
             # Invalid token
@@ -858,6 +886,7 @@ async def logout(
 async def get_auth_config(request: Request):
     return AuthConfigResponse(
         google_client_id=GOOGLE_CLIENT_ID,
+        google_auth_enabled=bool(GOOGLE_CLIENT_ID),
         max_free_turns=MAX_FREE_TURNS,
         free_model=FREE_MODEL,
         free_provider=FREE_PROVIDER
