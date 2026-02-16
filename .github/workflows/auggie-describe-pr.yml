@@ -1,9 +1,6 @@
 # Automatically generates AI-powered descriptions for new pull requests
 
 name: Auto-describe PRs
-on:
-  pull_request:
-    types: [opened]
 
 jobs:
   describe:
