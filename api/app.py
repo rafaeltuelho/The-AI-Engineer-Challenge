@@ -29,6 +29,10 @@ from slowapi.util import get_remote_address
 from google.oauth2 import id_token
 from google.auth.transport import requests as google_requests
 import tiktoken
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 if current_dir not in sys.path:
