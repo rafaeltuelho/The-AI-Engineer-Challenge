@@ -28,9 +28,17 @@ dependencies = [
     "httpcore>=1.0.9",
     "requests>=2.32.5",
     "python-dotenv>=1.1.1",
-    # Jupyter and development dependencies
+]
+
+[project.optional-dependencies]
+dev = [
+    # Development and notebook dependencies
     "jupyter>=1.1.1",
     "ipykernel>=6.29.5",
     "numpy>=2.3.3",
+]
+rag = [
+    # Optional RAG/Vector database dependencies
     "qdrant-client>=1.7.0",
+    "numpy>=2.3.3",
 ]

@@ -68,11 +68,19 @@ FREE_MODEL = os.getenv("FREE_MODEL", "deepseek-ai/DeepSeek-V3.1")
 SERVER_OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 SERVER_TOGETHER_API_KEY = os.getenv("TOGETHER_API_KEY", "")
 
-# Import our lightweight PDF RAG functionality
-from rag_lightweight import DocumentProcessor, get_or_create_rag_system
+# Try to import RAG functionality (optional for Vercel free tier)
+RAG_ENABLED = False
+DocumentProcessor = None
+get_or_create_rag_system = None
+ChatOpenAI = None
 
-# Import ChatOpenAI for document summarization
-from aimakerspace.openai_utils.chatmodel import ChatOpenAI
+try:
+    from rag_lightweight import DocumentProcessor, get_or_create_rag_system
+    from aimakerspace.openai_utils.chatmodel import ChatOpenAI
+    RAG_ENABLED = True
+except ImportError:
+    # RAG dependencies not available - this is OK for basic chat functionality
+    pass
 
 # Initialize FastAPI application with comprehensive OpenAPI configuration
 app = FastAPI(
@@ -1228,7 +1236,8 @@ async def clear_all_conversations(
         400: {"description": "Invalid file type or size"},
         401: {"description": "Invalid or expired session"},
         429: {"description": "Rate limit exceeded"},
-        500: {"description": "Internal server error"}
+        500: {"description": "Internal server error"},
+        503: {"description": "RAG functionality not available"}
     }
 )
 @limiter.limit("3/minute")  # Limit to 3 document uploads per minute per IP
@@ -1240,6 +1249,13 @@ async def upload_document(
     x_provider: Optional[str] = Header(None, alias="X-Provider", description="Provider for document processing (openai or together)")
 ):
     """Upload and process a document file for RAG functionality."""
+
+    # Check if RAG is enabled
+    if not RAG_ENABLED:
+        raise HTTPException(
+            status_code=503,
+            detail="RAG functionality is not available in this deployment. Please install optional dependencies: pip install -e '.[rag]'"
+        )
     try:
         # Use session ID from header parameter
         session_id = x_session_id
@@ -1407,7 +1423,8 @@ async def upload_document(
         200: {"description": "RAG query processed successfully"},
         401: {"description": "Invalid or expired session"},
         429: {"description": "Rate limit exceeded"},
-        500: {"description": "Internal server error"}
+        500: {"description": "Internal server error"},
+        503: {"description": "RAG functionality not available"}
     }
 )
 @limiter.limit("20/minute")  # Limit to 20 RAG queries per minute per IP
@@ -1419,6 +1436,14 @@ async def rag_query(
     x_conversation_id: Optional[str] = Header(None, alias="X-Conversation-ID", description="Conversation ID for tracking RAG queries")
 ):
     """Query the RAG system with a question."""
+
+    # Check if RAG is enabled
+    if not RAG_ENABLED:
+        raise HTTPException(
+            status_code=503,
+            detail="RAG functionality is not available in this deployment. Please install optional dependencies: pip install -e '.[rag]'"
+        )
+
     try:
         # Use session ID from header parameter
         session_id = x_session_id
@@ -1540,7 +1565,8 @@ async def rag_query(
         200: {"description": "Document information retrieved successfully"},
         401: {"description": "Invalid or expired session"},
         429: {"description": "Rate limit exceeded"},
-        500: {"description": "Internal server error"}
+        500: {"description": "Internal server error"},
+        503: {"description": "RAG functionality not available"}
     }
 )
 @limiter.limit("10/minute")  # Limit to 10 requests per minute per IP
@@ -1551,6 +1577,14 @@ async def get_documents(
     x_provider: Optional[str] = Header(None, alias="X-Provider", description="Provider for document processing (openai or together)")
 ):
     """Get information about uploaded documents for the session."""
+
+    # Check if RAG is enabled
+    if not RAG_ENABLED:
+        raise HTTPException(
+            status_code=503,
+            detail="RAG functionality is not available in this deployment. Please install optional dependencies: pip install -e '.[rag]'"
+        )
+
     try:
         # Use session ID from header parameter
         session_id = x_session_id
