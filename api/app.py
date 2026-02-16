@@ -684,6 +684,185 @@ async def create_session_endpoint(request: Request, session_request: SessionRequ
         print(f"Error creating session: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
+# Endpoint to create a guest session
+@app.post(
+    "/api/auth/guest",
+    response_model=SessionResponse,
+    tags=["Authentication"],
+    summary="Create a guest session",
+    description=f"Create a guest session with free tier access ({MAX_FREE_TURNS} turns). No authentication required.",
+    responses={
+        200: {"description": "Guest session created successfully"},
+        500: {"description": "Internal server error"}
+    }
+)
+@limiter.limit("10/minute")  # More restrictive rate limit for guest sessions
+async def create_guest_session(request: Request):
+    try:
+        session_id = create_session(auth_type="guest", provider=FREE_PROVIDER)
+        return SessionResponse(
+            session_id=session_id,
+            message=f"Guest session created successfully ({MAX_FREE_TURNS} free turns available)"
+        )
+    except Exception as e:
+        print(f"Error creating guest session: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Endpoint to authenticate with Google OAuth
+@app.post(
+    "/api/auth/google",
+    response_model=SessionResponse,
+    tags=["Authentication"],
+    summary="Authenticate with Google",
+    description="Authenticate using Google OAuth. Provide the Google ID token from the frontend.",
+    responses={
+        200: {"description": "Google authentication successful"},
+        401: {"description": "Invalid Google ID token"},
+        500: {"description": "Internal server error"}
+    }
+)
+@limiter.limit("20/minute")
+async def google_auth(request: Request, auth_request: GoogleAuthRequest):
+    try:
+        if not GOOGLE_CLIENT_ID:
+            raise HTTPException(
+                status_code=500,
+                detail="Google OAuth not configured on server"
+            )
+
+        # Verify the Google ID token
+        try:
+            idinfo = id_token.verify_oauth2_token(
+                auth_request.id_token,
+                google_requests.Request(),
+                GOOGLE_CLIENT_ID
+            )
+
+            # Extract user information
+            email = idinfo.get('email')
+            name = idinfo.get('name')
+            picture = idinfo.get('picture')
+
+            if not email:
+                raise HTTPException(status_code=401, detail="Email not found in Google token")
+
+            # Create session with Google auth
+            session_id = create_session(
+                auth_type="google",
+                email=email,
+                name=name,
+                picture=picture,
+                provider=FREE_PROVIDER
+            )
+
+            # Check if user is whitelisted
+            is_whitelisted = email in WHITELISTED_EMAILS if WHITELISTED_EMAILS else False
+
+            if is_whitelisted:
+                message = f"Welcome {name}! You have unlimited access."
+            else:
+                message = f"Welcome {name}! You have {MAX_FREE_TURNS} free turns."
+
+            return SessionResponse(
+                session_id=session_id,
+                message=message
+            )
+
+        except ValueError as e:
+            # Invalid token
+            raise HTTPException(status_code=401, detail=f"Invalid Google ID token: {str(e)}")
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error in Google authentication: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Endpoint to get current user info
+@app.get(
+    "/api/auth/me",
+    response_model=AuthMeResponse,
+    tags=["Authentication"],
+    summary="Get current user info",
+    description="Get information about the currently authenticated user/session.",
+    responses={
+        200: {"description": "User info retrieved successfully"},
+        401: {"description": "Invalid or expired session"}
+    }
+)
+@limiter.limit("30/minute")
+async def get_current_user(
+    request: Request,
+    x_session_id: str = Header(..., alias="X-Session-ID", description="Session ID for authentication")
+):
+    session = get_session(x_session_id)
+    if not session:
+        raise HTTPException(status_code=401, detail="Invalid or expired session")
+
+    free_turns_remaining = max(0, MAX_FREE_TURNS - session["free_turns_used"])
+    if session.get("is_whitelisted"):
+        free_turns_remaining = -1  # Unlimited for whitelisted users
+
+    return AuthMeResponse(
+        auth_type=session["auth_type"],
+        email=session.get("email"),
+        name=session.get("name"),
+        picture=session.get("picture"),
+        is_whitelisted=session.get("is_whitelisted", False),
+        free_turns_used=session["free_turns_used"],
+        free_turns_remaining=free_turns_remaining,
+        has_own_api_key=session.get("has_own_api_key", False),
+        provider=session.get("provider", "openai")
+    )
+
+# Endpoint to logout (delete session)
+@app.post(
+    "/api/auth/logout",
+    tags=["Authentication"],
+    summary="Logout",
+    description="Logout and delete the current session.",
+    responses={
+        200: {"description": "Logout successful"},
+        401: {"description": "Invalid or expired session"}
+    }
+)
+@limiter.limit("30/minute")
+async def logout(
+    request: Request,
+    x_session_id: str = Header(..., alias="X-Session-ID", description="Session ID for authentication")
+):
+    session = get_session(x_session_id)
+    if not session:
+        raise HTTPException(status_code=401, detail="Invalid or expired session")
+
+    # Delete session and its conversations
+    if x_session_id in conversations:
+        del conversations[x_session_id]
+    if x_session_id in sessions:
+        del sessions[x_session_id]
+
+    return {"message": "Logout successful"}
+
+# Endpoint to get auth configuration
+@app.get(
+    "/api/auth/config",
+    response_model=AuthConfigResponse,
+    tags=["Authentication"],
+    summary="Get authentication configuration",
+    description="Get public authentication configuration (Google Client ID, free tier limits, etc.).",
+    responses={
+        200: {"description": "Configuration retrieved successfully"}
+    }
+)
+@limiter.limit("60/minute")
+async def get_auth_config(request: Request):
+    return AuthConfigResponse(
+        google_client_id=GOOGLE_CLIENT_ID,
+        max_free_turns=MAX_FREE_TURNS,
+        free_model=FREE_MODEL,
+        free_provider=FREE_PROVIDER
+    )
+
 # Define the main chat endpoint that handles POST requests
 @app.post(
     "/api/chat",
@@ -706,17 +885,31 @@ async def chat(
     try:
         # Use session ID from header parameter
         session_id = x_session_id
-        
-        # Validate session
-        if not get_session(session_id):
+
+        # Validate session and get session data
+        session = get_session(session_id)
+        if not session:
             raise HTTPException(status_code=401, detail="Invalid or expired session")
-        
+
+        # Resolve API key and provider
+        api_key, provider = resolve_api_key(session_id, chat_request.api_key, chat_request.provider)
+
+        # Check token limits for free tier users
+        if not session.get("has_own_api_key") and not session.get("is_whitelisted"):
+            # Count tokens in user message
+            token_count = count_tokens(chat_request.user_message, chat_request.model)
+            if token_count > MAX_FREE_MESSAGE_TOKENS:
+                raise HTTPException(
+                    status_code=403,
+                    detail=f"Message too long for free tier ({token_count} tokens, max {MAX_FREE_MESSAGE_TOKENS}). Please provide your own API key."
+                )
+
         # Debug logging
-        print(f"Received chat request: session_id={session_id[:8]}..., provider={chat_request.provider}, model={chat_request.model}, user_message_length={len(chat_request.user_message)}")
-        
-        # Initialize OpenAI client with the provided API key and provider
-        client_kwargs = {"api_key": chat_request.api_key}
-        if chat_request.provider == "together":
+        print(f"Received chat request: session_id={session_id[:8]}..., provider={provider}, model={chat_request.model}, user_message_length={len(chat_request.user_message)}")
+
+        # Initialize OpenAI client with the resolved API key and provider
+        client_kwargs = {"api_key": api_key}
+        if provider == "together":
             client_kwargs["base_url"] = "https://api.together.xyz/v1"
         client = OpenAI(**client_kwargs)
         
@@ -807,7 +1000,12 @@ async def chat(
                 )
                 user_conversations[conversation_id]["messages"].append(assistant_message)
                 user_conversations[conversation_id]["last_updated"] = datetime.now(timezone.utc)
-                
+
+                # Increment free turns counter if using server API key
+                if not session.get("has_own_api_key") and not session.get("is_whitelisted"):
+                    session["free_turns_used"] += 1
+                    print(f"Free turn used: {session['free_turns_used']}/{MAX_FREE_TURNS} for session {session_id[:8]}...")
+
             except Exception as e:
                 # Remove the user message if the API call failed
                 if user_conversations[conversation_id]["messages"]:
@@ -994,23 +1192,21 @@ async def upload_document(
     request: Request,
     file: UploadFile = File(..., description="Document file to upload (PDF, DOCX, PPTX - max 20MB)"),
     x_session_id: str = Header(..., alias="X-Session-ID", description="Session ID for authentication"),
-    x_api_key: str = Header(..., alias="X-API-Key", description="API key for document processing"),
-    x_provider: str = Header("openai", alias="X-Provider", description="Provider for document processing (openai or together)")
+    x_api_key: Optional[str] = Header(None, alias="X-API-Key", description="API key for document processing (optional)"),
+    x_provider: Optional[str] = Header(None, alias="X-Provider", description="Provider for document processing (openai or together)")
 ):
     """Upload and process a document file for RAG functionality."""
     try:
-        # Use session ID, API key, and provider from header parameters
+        # Use session ID from header parameter
         session_id = x_session_id
-        api_key = x_api_key
-        provider = x_provider.lower()
-        
-        # Validate provider
-        if provider not in ["openai", "together"]:
-            raise HTTPException(status_code=400, detail="Invalid provider. Must be 'openai' or 'together'")
-        
-        # Get hashed API key from session
-        if not get_session(session_id):
+
+        # Validate session and resolve API key
+        session = get_session(session_id)
+        if not session:
             raise HTTPException(status_code=401, detail="Invalid or expired session")
+
+        # Resolve API key and provider
+        api_key, provider = resolve_api_key(session_id, x_api_key, x_provider)
         
         # Validate file type
         if not file.filename:
@@ -1172,27 +1368,30 @@ async def upload_document(
 )
 @limiter.limit("20/minute")  # Limit to 20 RAG queries per minute per IP
 async def rag_query(
-    request: Request, 
+    request: Request,
     query_request: RAGQueryRequest,
     x_session_id: str = Header(..., alias="X-Session-ID", description="Session ID for authentication"),
-    x_api_key: str = Header(..., alias="X-API-Key", description="OpenAI API key for RAG processing"),
+    x_api_key: Optional[str] = Header(None, alias="X-API-Key", description="API key for RAG processing (optional)"),
     x_conversation_id: Optional[str] = Header(None, alias="X-Conversation-ID", description="Conversation ID for tracking RAG queries")
 ):
     """Query the RAG system with a question."""
     try:
-        # Use session ID and API key from header parameters
+        # Use session ID from header parameter
         session_id = x_session_id
-        api_key = x_api_key
+
+        # Validate session and resolve API key
+        session = get_session(session_id)
+        if not session:
+            raise HTTPException(status_code=401, detail="Invalid or expired session")
+
+        # Resolve API key and provider
+        api_key, provider = resolve_api_key(session_id, x_api_key, query_request.provider)
 
         # Debug logging
-        print(f"Received RAG query request: session_id={session_id[:8]}..., provider={query_request.provider}, model={query_request.model}, question_length={len(query_request.question)}")
-
-        # Validate session
-        if not get_session(session_id):
-            raise HTTPException(status_code=401, detail="Invalid or expired session")
+        print(f"Received RAG query request: session_id={session_id[:8]}..., provider={provider}, model={query_request.model}, question_length={len(query_request.question)}")
         
-        # Get RAG system for this session with the specified model and provider
-        rag_system = get_or_create_rag_system(session_id, api_key, query_request.provider)
+        # Get RAG system for this session with the resolved provider
+        rag_system = get_or_create_rag_system(session_id, api_key, provider)
         
         # Query the RAG system with the specified mode and developer message
         answer = rag_system.query(query_request.question, k=query_request.k, mode=query_request.mode, model_name=query_request.model, system_message=query_request.developer_message)
@@ -1280,25 +1479,23 @@ async def rag_query(
 async def get_documents(
     request: Request,
     x_session_id: str = Header(..., alias="X-Session-ID", description="Session ID for authentication"),
-    x_api_key: str = Header(..., alias="X-API-Key", description="API key for document processing"),
-    x_provider: str = Header("openai", alias="X-Provider", description="Provider for document processing (openai or together)")
+    x_api_key: Optional[str] = Header(None, alias="X-API-Key", description="API key for document processing (optional)"),
+    x_provider: Optional[str] = Header(None, alias="X-Provider", description="Provider for document processing (openai or together)")
 ):
     """Get information about uploaded documents for the session."""
     try:
-        # Use session ID, API key, and provider from header parameters
+        # Use session ID from header parameter
         session_id = x_session_id
-        api_key = x_api_key
-        provider = x_provider.lower()
-        
-        # Validate provider
-        if provider not in ["openai", "together"]:
-            raise HTTPException(status_code=400, detail="Invalid provider. Must be 'openai' or 'together'")
-        
-        # Validate session
-        if not get_session(session_id):
+
+        # Validate session and resolve API key
+        session = get_session(session_id)
+        if not session:
             raise HTTPException(status_code=401, detail="Invalid or expired session")
-        
-        # Get RAG system for this session with the specified provider
+
+        # Resolve API key and provider
+        api_key, provider = resolve_api_key(session_id, x_api_key, x_provider)
+
+        # Get RAG system for this session with the resolved provider
         rag_system = get_or_create_rag_system(session_id, api_key, provider)
         
         # Get document info
