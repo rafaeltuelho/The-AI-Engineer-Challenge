@@ -52,6 +52,13 @@ Comprehensive analysis of the codebase identified and removed the following dead
 - **Issue**: Function is defined but never called anywhere in the codebase
 - **Status**: REMOVED
 
+### 7. **Entire `aimakerspace/openai_utils/prompts.py` file** ✅ REMOVED
+- **File**: `aimakerspace/openai_utils/prompts.py`
+- **Lines**: 1-375
+- **Issue**: File contains 375 lines of prompt template classes (PromptValidationError, ConditionalPrompt, BasePrompt, RolePrompt, PromptTemplate, MessageAdapter, SystemRolePrompt) that are NEVER imported or used by any backend code. Only the `if __name__ == "__main__":` block (lines 333-374) executes, which is example/test code that only runs when the file is executed directly.
+- **Verification**: Comprehensive codebase search confirmed zero imports of any classes from this module in backend code (api/app.py, api/rag_lightweight.py, or any other backend files)
+- **Status**: REMOVED (entire file is dead code)
+
 ## Verified as Used (NOT Removed)
 
 ### 1. **`asyncio` import in aimakerspace/vectordatabase.py**
@@ -84,12 +91,6 @@ Comprehensive analysis of the codebase identified and removed the following dead
 - **Issue**: All are used as request/response validators in FastAPI endpoints
 - **Status**: KEPT (actually used)
 
-### 6. **All classes in aimakerspace/openai_utils/prompts.py**
-- **File**: `aimakerspace/openai_utils/prompts.py`
-- **Classes**: PromptValidationError, ConditionalPrompt, BasePrompt, RolePrompt, PromptTemplate, MessageAdapter
-- **Issue**: All are used in `__main__` block for testing
-- **Status**: KEPT (actually used)
-
 ## Dependency Analysis
 
 ### All dependencies in pyproject.toml and api/requirements.txt are used:
@@ -118,13 +119,15 @@ Comprehensive analysis of the codebase identified and removed the following dead
 **Total dead code removed:**
 - 5 unused imports
 - 1 unused function
+- 1 entire unused file (375 lines)
 - Complete refactoring of vectordatabase.py to remove numpy dead code
 
-**Files modified:**
+**Files modified/removed:**
 1. `api/rag_lightweight.py` - Removed 2 unused imports
 2. `aimakerspace/openai_utils/embedding.py` - Removed 1 unused import
 3. `aimakerspace/vectordatabase.py` - Complete refactoring to remove numpy
 4. `api/app.py` - Removed 4 unused imports and 1 unused function
+5. `aimakerspace/openai_utils/prompts.py` - **REMOVED ENTIRELY** (375 lines of unused code)
 
 **All changes verified:**
 - ✅ Syntax verified with `python3 -m py_compile`
