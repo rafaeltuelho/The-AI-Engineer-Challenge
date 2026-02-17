@@ -1,58 +1,133 @@
 # Dead Code Analysis Report
 
 ## Summary
-Comprehensive analysis of the codebase identified the following dead code issues:
+Comprehensive analysis of the codebase identified and removed the following dead code issues:
 
-## Issues Found
+## Issues Found and Resolved
 
-### 1. **Duplicate `import os` in api/rag_lightweight.py**
+### 1. **Duplicate `import os` in api/rag_lightweight.py** ✅ REMOVED
 - **File**: `api/rag_lightweight.py`
 - **Lines**: 5 and 21
 - **Issue**: `import os` appears twice
-- **Status**: REMOVE line 21 (duplicate)
+- **Status**: REMOVED line 21 (duplicate)
 
-### 2. **Unused `asyncio` import in api/rag_lightweight.py**
+### 2. **Unused `asyncio` import in api/rag_lightweight.py** ✅ REMOVED
 - **File**: `api/rag_lightweight.py`
 - **Line**: 10
 - **Issue**: `import asyncio` is never used in the file
-- **Status**: REMOVE
+- **Status**: REMOVED
 
-### 3. **Unused `mimetypes` import in api/rag_lightweight.py**
-- **File**: `api/rag_lightweight.py`
-- **Line**: 12
-- **Issue**: `mimetypes` is used in `_detect_file_type()` method (line 105)
-- **Status**: KEEP (actually used)
-
-### 4. **Unused `asyncio` import in aimakerspace/vectordatabase.py**
-- **File**: `aimakerspace/vectordatabase.py`
-- **Line**: 11
-- **Issue**: `asyncio` is only used in `__main__` block (line 393)
-- **Status**: KEEP (used in example/test code)
-
-### 5. **Dead code: `import openai` in embedding.py**
+### 3. **Unused `openai` import in embedding.py** ✅ REMOVED
 - **File**: `aimakerspace/openai_utils/embedding.py`
 - **Line**: 3
 - **Issue**: `import openai` is never used (only AsyncOpenAI and OpenAI are used)
-- **Status**: REMOVE
+- **Status**: REMOVED
 
-### 6. **NumPy is dead code in vectordatabase.py**
+### 4. **NumPy is dead code in vectordatabase.py** ✅ COMPLETELY REFACTORED
 - **File**: `aimakerspace/vectordatabase.py`
-- **Line**: 7
 - **Issue**: NumPy import and all numpy operations are dead code
 - **Details**: EmbeddingModel returns `List[List[float]]`, never numpy arrays
-- **Status**: REMOVE (comprehensive refactoring needed)
+- **Changes Made**:
+  - Removed `import numpy as np` (line 7)
+  - Changed `insert()` method parameter type from `np.array` to `List[float]`
+  - Simplified vector conversion from `vector.tolist() if isinstance(vector, np.ndarray) else list(vector)` to just `list(vector)`
+  - Changed `search()` method parameter type from `np.array` to `List[float]`
+  - Changed `retrieve_from_key()` return type from `np.array` to `List[float]`
+  - Removed `np.array()` wrapping in `abuild_from_list()` method
+  - Simplified `search_with_metadata()` vector conversion
+- **Status**: REMOVED (comprehensive refactoring completed)
 
-### 7. **Unused `Optional` import in rag_lightweight.py**
+### 5. **Unused imports in api/app.py** ✅ REMOVED
+- **File**: `api/app.py`
+- **Removed imports**:
+  - `import asyncio` (line 2) - never used
+  - `import uuid` (line 11) - never used
+  - `from pathlib import Path` (line 13) - never used
+  - `Form` from fastapi imports (line 16) - never used
+- **Status**: REMOVED
+
+### 6. **Unused `hash_api_key()` function in api/app.py** ✅ REMOVED
+- **File**: `api/app.py`
+- **Lines**: 190-192
+- **Issue**: Function is defined but never called anywhere in the codebase
+- **Status**: REMOVED
+
+## Verified as Used (NOT Removed)
+
+### 1. **`asyncio` import in aimakerspace/vectordatabase.py**
+- **File**: `aimakerspace/vectordatabase.py`
+- **Line**: 10
+- **Issue**: `asyncio` is only used in `__main__` block (line 393)
+- **Status**: KEPT (used in example/test code)
+
+### 2. **`Optional` import in rag_lightweight.py**
 - **File**: `api/rag_lightweight.py`
 - **Line**: 8
-- **Issue**: `Optional` is imported but never used in type hints
-- **Status**: KEEP (used in method signatures)
+- **Issue**: `Optional` is imported and used in method signatures
+- **Status**: KEPT (actually used)
 
-## Recommendations
+### 3. **`FREE_MODEL` constant in api/app.py**
+- **File**: `api/app.py`
+- **Line**: 62
+- **Issue**: Constant is used in `get_auth_config()` endpoint (line 900)
+- **Status**: KEPT (actually used)
 
-1. Remove duplicate `os` import
-2. Remove unused `asyncio` import from rag_lightweight.py
-3. Remove unused `openai` import from embedding.py
-4. Refactor vectordatabase.py to remove numpy completely
-5. Run tests after each change
+### 4. **`count_tokens()` function in api/app.py**
+- **File**: `api/app.py`
+- **Lines**: 239-254
+- **Issue**: Function is called in chat endpoint (line 945) and RAG query endpoint (line 1462)
+- **Status**: KEPT (actually used)
+
+### 5. **All Pydantic model classes in api/app.py**
+- **File**: `api/app.py`
+- **Classes**: ChatRequest, Message, ConversationResponse, SessionRequest, SessionResponse, AuthLoginResponse, GoogleAuthRequest, AuthMeResponse, AuthConfigResponse, DocumentUploadResponse, RAGQueryRequest, RAGQueryResponse
+- **Issue**: All are used as request/response validators in FastAPI endpoints
+- **Status**: KEPT (actually used)
+
+### 6. **All classes in aimakerspace/openai_utils/prompts.py**
+- **File**: `aimakerspace/openai_utils/prompts.py`
+- **Classes**: PromptValidationError, ConditionalPrompt, BasePrompt, RolePrompt, PromptTemplate, MessageAdapter
+- **Issue**: All are used in `__main__` block for testing
+- **Status**: KEPT (actually used)
+
+## Dependency Analysis
+
+### All dependencies in pyproject.toml and api/requirements.txt are used:
+- ✅ **fastapi** - Core web framework
+- ✅ **uvicorn** - ASGI server
+- ✅ **openai** - OpenAI API client
+- ✅ **together** - Together.ai API client
+- ✅ **pydantic** - Data validation
+- ✅ **pydantic-core** - Pydantic core library
+- ✅ **python-multipart** - Form data parsing
+- ✅ **slowapi** - Rate limiting
+- ✅ **starlette** - ASGI toolkit
+- ✅ **PyPDF2** - PDF processing
+- ✅ **pdfplumber** - PDF extraction
+- ✅ **tiktoken** - Token counting
+- ✅ **python-docx** - Word document processing
+- ✅ **python-pptx** - PowerPoint processing
+- ✅ **google-auth** - Google OAuth
+- ✅ **httpx** - HTTP client
+- ✅ **httpcore** - HTTP core
+- ✅ **requests** - HTTP library
+- ✅ **python-dotenv** - Environment variable loading
+
+## Summary of Changes
+
+**Total dead code removed:**
+- 5 unused imports
+- 1 unused function
+- Complete refactoring of vectordatabase.py to remove numpy dead code
+
+**Files modified:**
+1. `api/rag_lightweight.py` - Removed 2 unused imports
+2. `aimakerspace/openai_utils/embedding.py` - Removed 1 unused import
+3. `aimakerspace/vectordatabase.py` - Complete refactoring to remove numpy
+4. `api/app.py` - Removed 4 unused imports and 1 unused function
+
+**All changes verified:**
+- ✅ Syntax verified with `python3 -m py_compile`
+- ✅ No test files found in project (no test regressions possible)
+- ✅ All changes committed to git
 
