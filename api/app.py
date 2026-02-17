@@ -1,5 +1,4 @@
 # Import required FastAPI components for building the API
-import asyncio
 import hashlib
 import os
 import re
@@ -8,12 +7,10 @@ import sys
 import tempfile
 import threading
 import time
-import uuid
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from fastapi import (FastAPI, File, Form, Header, HTTPException, Request,
+from fastapi import (FastAPI, File, Header, HTTPException, Request,
                      UploadFile)
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
@@ -186,10 +183,6 @@ conversations: Dict[str, Dict[str, Dict[str, Any]]] = {}
 #   "last_access": datetime
 # }}
 sessions: Dict[str, Dict[str, Any]] = {}
-
-def hash_api_key(api_key: str) -> str:
-    """Hash the API key using SHA-256 for secure storage key generation"""
-    return hashlib.sha256(api_key.encode('utf-8')).hexdigest()
 
 def create_session(
     auth_type: str = "api_key",
