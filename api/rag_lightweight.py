@@ -7,7 +7,6 @@ import tempfile
 import uuid
 from typing import List, Dict, Any, Optional
 from pathlib import Path
-import asyncio
 import re
 import mimetypes
 
@@ -18,7 +17,6 @@ from docx import Document
 from pptx import Presentation
 
 import sys
-import os
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
 from aimakerspace.vectordatabase import VectorDatabase

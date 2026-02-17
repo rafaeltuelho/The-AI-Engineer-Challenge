@@ -1,6 +1,5 @@
 from dotenv import load_dotenv
 from openai import AsyncOpenAI, OpenAI
-import openai
 from together import Together
 from typing import List, Optional
 import os

@@ -4,7 +4,6 @@ Vector Database implementation using Qdrant in-memory for similarity search.
 This module provides a VectorDatabase class that uses Qdrant in-memory mode
 for efficient vector storage and similarity search operations.
 """
-import numpy as np
 import uuid
 from typing import List, Tuple, Callable, Union
 from aimakerspace.openai_utils.embedding import EmbeddingModel
@@ -81,17 +80,17 @@ class VectorDatabase:
             self._collection_created = True
             self._vector_size = vector_size
 
-    def insert(self, key: str, vector: np.array, metadata: dict = None) -> None:
+    def insert(self, key: str, vector: List[float], metadata: dict = None) -> None:
         """
         Insert a vector into the database with the given key and optional metadata.
 
         Args:
             key: Unique string key for the vector
-            vector: Vector to insert (numpy array or list)
+            vector: Vector to insert (list of floats)
             metadata: Optional metadata dictionary to store with the vector
         """
-        # Convert numpy array to list if needed
-        vector_list = vector.tolist() if isinstance(vector, np.ndarray) else list(vector)
+        # Convert to list if needed
+        vector_list = list(vector)
 
         # Ensure collection exists with correct vector size
         self._ensure_collection(len(vector_list))
@@ -137,7 +136,7 @@ class VectorDatabase:
 
     def search(
         self,
-        query_vector: np.array,
+        query_vector: List[float],
         k: int,
         distance_measure: Union[str, DistanceMeasure, Callable] = DistanceMeasure.COSINE,
     ) -> List[Tuple[str, float]]:
@@ -155,8 +154,8 @@ class VectorDatabase:
         if not self._collection_created:
             return []
 
-        # Convert numpy array to list if needed
-        query_list = query_vector.tolist() if isinstance(query_vector, np.ndarray) else list(query_vector)
+        # Convert to list if needed
+        query_list = list(query_vector)
 
         # Search in Qdrant using query_points (replaces deprecated search method)
         response = self.client.query_points(
@@ -197,7 +196,7 @@ class VectorDatabase:
         results = self.search(query_vector, k, distance_measure)
         return [result[0] for result in results] if return_as_text else results
 
-    def retrieve_from_key(self, key: str) -> np.array:
+    def retrieve_from_key(self, key: str) -> List[float]:
         """
         Retrieve a vector by its key.
 
@@ -205,7 +204,7 @@ class VectorDatabase:
             key: The key of the vector to retrieve
 
         Returns:
-            The vector as numpy array, or None if not found
+            The vector as a list of floats, or None if not found
         """
         if key not in self._key_to_id:
             return None
@@ -219,7 +218,7 @@ class VectorDatabase:
                 with_vectors=True
             )
             if points:
-                return np.array(points[0].vector)
+                return points[0].vector
         except Exception:
             pass
 
@@ -237,7 +236,7 @@ class VectorDatabase:
         """
         embeddings = await self.embedding_model.async_get_embeddings(list_of_text)
         for text, embedding in zip(list_of_text, embeddings):
-            self.insert(text, np.array(embedding))
+            self.insert(text, embedding)
         return self
 
     def get_available_distance_measures(self) -> List[str]:
@@ -265,7 +264,7 @@ class VectorDatabase:
             return []
 
         query_vector = self.embedding_model.get_embedding(query_text)
-        query_list = query_vector if isinstance(query_vector, list) else query_vector.tolist()
+        query_list = list(query_vector)
 
         # Search in Qdrant with full payload using query_points (replaces deprecated search method)
         response = self.client.query_points(
