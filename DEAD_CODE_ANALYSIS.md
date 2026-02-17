@@ -59,6 +59,13 @@ Comprehensive analysis of the codebase identified and removed the following dead
 - **Verification**: Comprehensive codebase search confirmed zero imports of any classes from this module in backend code (api/app.py, api/rag_lightweight.py, or any other backend files)
 - **Status**: REMOVED (entire file is dead code)
 
+### 8. **Entire `aimakerspace/text_utils.py` file** ✅ REMOVED
+- **File**: `aimakerspace/text_utils.py`
+- **Lines**: 1-84
+- **Issue**: File contains 84 lines of text processing classes (TextFileUtils, CharacterTextSplitter) that are NEVER imported or used by any backend code. Only the `if __name__ == "__main__":` block (lines 71-83) executes, which is example/test code. The backend uses DocumentProcessor from rag_lightweight.py instead for document processing.
+- **Verification**: Comprehensive codebase search confirmed zero imports of TextFileUtils or CharacterTextSplitter in backend code
+- **Status**: REMOVED (entire file is dead code)
+
 ## Verified as Used (NOT Removed)
 
 ### 1. **`asyncio` import in aimakerspace/vectordatabase.py**
@@ -119,7 +126,7 @@ Comprehensive analysis of the codebase identified and removed the following dead
 **Total dead code removed:**
 - 5 unused imports
 - 1 unused function
-- 1 entire unused file (375 lines)
+- 2 entire unused files (375 + 84 = 459 lines)
 - Complete refactoring of vectordatabase.py to remove numpy dead code
 
 **Files modified/removed:**
@@ -128,6 +135,7 @@ Comprehensive analysis of the codebase identified and removed the following dead
 3. `aimakerspace/vectordatabase.py` - Complete refactoring to remove numpy
 4. `api/app.py` - Removed 4 unused imports and 1 unused function
 5. `aimakerspace/openai_utils/prompts.py` - **REMOVED ENTIRELY** (375 lines of unused code)
+6. `aimakerspace/text_utils.py` - **REMOVED ENTIRELY** (84 lines of unused code)
 
 **All changes verified:**
 - ✅ Syntax verified with `python3 -m py_compile`
