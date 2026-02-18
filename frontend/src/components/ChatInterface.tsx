@@ -1063,7 +1063,7 @@ Sample JSON output:
               placeholder={
                 !isWhitelisted && !hasOwnApiKey && !hasFreeTurns
                   ? "Free messages exhausted. Add your API key in Settings to continue."
-                  : "Type your message here... (Cmd|Ctrl+Enter to send)"
+                  : ""
               }
               className="message-input"
               disabled={isLoading || (!isWhitelisted && !hasOwnApiKey && !hasFreeTurns)}
