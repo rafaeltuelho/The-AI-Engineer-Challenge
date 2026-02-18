@@ -1055,7 +1055,7 @@ async def chat(
         if session.get("is_whitelisted"):
             free_turns_remaining = -1  # Unlimited
         else:
-            free_turns_remaining = max(0, MAX_FREE_TURNS - session["free_turns_used"] - 1)
+            free_turns_remaining = max(0, MAX_FREE_TURNS - session["free_turns_used"])
 
         # Return a streaming response to the client with conversation ID in headers
         response = StreamingResponse(generate(), media_type="text/plain")
