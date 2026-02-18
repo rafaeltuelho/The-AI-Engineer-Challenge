@@ -6,7 +6,7 @@ import type { CredentialResponse } from '@react-oauth/google'
 
 // Mock @react-oauth/google
 vi.mock('@react-oauth/google', () => ({
-  GoogleLogin: ({ onSuccess, onError }: { onSuccess: (response: CredentialResponse) => void; onError: () => void }) => (
+  GoogleLogin: ({ onSuccess, _onError }: { onSuccess: (response: CredentialResponse) => void; _onError: () => void }) => (
     <button
       data-testid="google-login-button"
       onClick={() => onSuccess({ credential: 'test-google-credential' } as CredentialResponse)}
