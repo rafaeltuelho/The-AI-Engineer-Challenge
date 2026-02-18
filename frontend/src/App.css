@@ -1,5 +1,6 @@
 .app {
   height: 100vh;
+  height: 100dvh; /* Dynamic viewport height for mobile */
   display: flex;
   flex-direction: column;
   background: var(--bg-primary);
@@ -26,7 +27,8 @@
 /* Mobile breakpoint */
 @media (max-width: 768px) {
   .main-content {
-    padding: var(--spacing-md) 0;
+    padding: 0; /* No padding on mobile - fill remaining height */
+    min-height: 0;
   }
 }
 
