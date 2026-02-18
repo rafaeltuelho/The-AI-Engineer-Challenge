@@ -22,6 +22,7 @@ import httpx
 os.environ["TOGETHER_API_KEY"] = "test-together-key"
 os.environ["OPENAI_API_KEY"] = "test-openai-key"
 os.environ["MAX_FREE_TURNS"] = "3"
+os.environ["SESSION_TIMEOUT_MINUTES"] = "60"
 os.environ["GOOGLE_CLIENT_ID"] = ""  # Disable Google OAuth by default
 
 # Add parent directory to path for imports
@@ -361,12 +362,13 @@ def test_resolve_api_key_missing_server_key():
     original_key = app_module.SERVER_OPENAI_API_KEY
     app_module.SERVER_OPENAI_API_KEY = ""
 
-    with pytest.raises(Exception) as exc_info:
-        resolve_api_key(session_id)
-    assert "500" in str(exc_info.value) or "not configured" in str(exc_info.value)
-
-    # Restore
-    app_module.SERVER_OPENAI_API_KEY = original_key
+    try:
+        with pytest.raises(Exception) as exc_info:
+            resolve_api_key(session_id)
+        assert "500" in str(exc_info.value) or "not configured" in str(exc_info.value)
+    finally:
+        # Always restore, even if assertions fail
+        app_module.SERVER_OPENAI_API_KEY = original_key
 
 
 # ============================================
