@@ -781,8 +781,9 @@ async def google_auth(request: Request, auth_request: GoogleAuthRequest):
                 provider=FREE_PROVIDER
             )
 
-            # Check if user is whitelisted
-            is_whitelisted = email.lower() in WHITELISTED_EMAILS if WHITELISTED_EMAILS else False
+            # Get whitelisted status from session (already computed in create_session)
+            session = get_session(session_id)
+            is_whitelisted = session["is_whitelisted"]
 
             if is_whitelisted:
                 message = f"Welcome {name}! You have unlimited access."
