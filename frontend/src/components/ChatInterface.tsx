@@ -34,6 +34,7 @@ interface ChatInterfaceProps {
   onFreeTurnsUpdate: (turns: number) => void
   hasFreeTurns: boolean
   hasOwnApiKey: boolean
+  welcomeSuggestions?: string[]
 }
 
 const ChatInterface: React.FC<ChatInterfaceProps> = ({
@@ -54,7 +55,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   authType: _authType,  // Received but not used in this component
   onFreeTurnsUpdate,
   hasFreeTurns,
-  hasOwnApiKey
+  hasOwnApiKey,
+  welcomeSuggestions = []
 }) => {
   const [messages, setMessages] = useState<Message[]>([])
   const [inputMessage, setInputMessage] = useState('')
@@ -944,20 +946,21 @@ Sample JSON output:
                 </button>
               </div>
 
-              <div className="suggestion-chips">
-                <button className="suggestion-chip" onClick={() => handleSuggestedQuestionClick("Explain quantum computing in simple terms")}>
-                  Explain quantum computing
-                </button>
-                <button className="suggestion-chip" onClick={() => handleSuggestedQuestionClick("Write a creative short story about time travel")}>
-                  Write a short story
-                </button>
-                <button className="suggestion-chip" onClick={() => handleSuggestedQuestionClick("What are the best practices for REST API design?")}>
-                  REST API best practices
-                </button>
-                <button className="suggestion-chip" onClick={() => handleSuggestedQuestionClick("Help me debug a React useEffect issue")}>
-                  Debug React useEffect
-                </button>
-              </div>
+              {welcomeSuggestions && welcomeSuggestions.length > 0 ? (
+                <div className="suggestion-chips">
+                  {welcomeSuggestions.map((suggestion, index) => (
+                    <button key={index} className="suggestion-chip" onClick={() => handleSuggestedQuestionClick(suggestion)}>
+                      {suggestion}
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div className="suggestion-chips loading">
+                  {[1,2,3,4].map(i => (
+                    <div key={i} className="suggestion-chip skeleton" />
+                  ))}
+                </div>
+              )}
             </div>
           ) : (
             messages.map((message) => (

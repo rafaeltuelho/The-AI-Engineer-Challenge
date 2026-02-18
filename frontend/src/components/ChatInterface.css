@@ -621,6 +621,15 @@
   color: var(--text-primary);
 }
 
+.suggestion-chip.skeleton {
+  background: var(--bg-tertiary);
+  color: transparent;
+  min-width: 120px;
+  height: 36px;
+  animation: shimmer 1.5s infinite;
+  pointer-events: none;
+}
+
 .conversation-hint {
   margin-top: var(--spacing-md);
   padding: var(--spacing-md);

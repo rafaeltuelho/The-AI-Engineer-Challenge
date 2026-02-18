@@ -14,6 +14,7 @@ function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [settingsModalOpen, setSettingsModalOpen] = useState(false)
   const [freeTurnsRemaining, setFreeTurnsRemaining] = useState<number>(user?.freeTurnsRemaining ?? 0)
+  const [welcomeSuggestions, setWelcomeSuggestions] = useState<string[]>([])
 
   const modelDescriptions = {
     // OpenAI models
@@ -38,6 +39,24 @@ function App() {
     'moonshotai/Kimi-K2-Instruct-0905': 'Moonshot.ai Kimi K2 Instruct 0905',
     'Qwen/Qwen3-Next-80B-A3B-Thinking': 'Qwen 3 Next 80B A3B Thinking'
   }
+
+  // Fetch app config (suggestions) on mount
+  useEffect(() => {
+    const fetchAppConfig = async () => {
+      try {
+        const response = await fetch('/api/config')
+        if (response.ok) {
+          const data = await response.json()
+          if (data.suggestions && Array.isArray(data.suggestions)) {
+            setWelcomeSuggestions(data.suggestions)
+          }
+        }
+      } catch (error) {
+        console.error('Failed to fetch app config:', error)
+      }
+    }
+    fetchAppConfig()
+  }, [])
 
   // Load theme preference from localStorage on component mount
   useEffect(() => {
@@ -172,6 +191,7 @@ function App() {
           onFreeTurnsUpdate={handleFreeTurnsUpdate}
           hasFreeTurns={hasFreeTurns}
           hasOwnApiKey={!!hasOwnKey}
+          welcomeSuggestions={welcomeSuggestions}
         />
       </main>
     </div>
