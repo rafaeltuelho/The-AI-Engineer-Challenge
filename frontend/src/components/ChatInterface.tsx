@@ -25,6 +25,7 @@ interface ChatInterfaceProps {
   setSelectedProvider: (provider: string) => void
   modelDescriptions: Record<string, string>
   sidebarOpen: boolean
+  onToggleSidebar?: () => void
   settingsModalOpen: boolean
   setSettingsModalOpen: (open: boolean) => void
   isWhitelisted: boolean
@@ -45,6 +46,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   setSelectedProvider,
   modelDescriptions,
   sidebarOpen,
+  onToggleSidebar,
   settingsModalOpen,
   setSettingsModalOpen,
   isWhitelisted,
@@ -70,6 +72,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const [hasConversationStarted, setHasConversationStarted] = useState(false)
   const [documentSuggestedQuestions, setDocumentSuggestedQuestions] = useState<string[]>([])
   const [documentSummary, setDocumentSummary] = useState<string | null>(null)
+  const [isMobile, setIsMobile] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
 
@@ -217,6 +220,18 @@ Sample JSON output:
     }
   }, [inputMessage])
 
+  // Detect mobile viewport
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth <= 768)
+    }
+
+    checkMobile()
+    window.addEventListener('resize', checkMobile)
+
+    return () => window.removeEventListener('resize', checkMobile)
+  }, [])
+
   // Load conversations on component mount
   useEffect(() => {
     if (sessionId) {
@@ -309,11 +324,11 @@ Sample JSON output:
       })
       if (response.ok) {
         const data = await response.json()
-        
+
         // Set the conversation mode based on the response
         const conversationMode = data.mode || "regular"
         setChatMode(conversationMode as 'regular' | 'rag' | 'topic-explorer')
-        
+
         // Process messages based on conversation mode
         const processedMessages = data.messages.map((msg: any) => {
           const baseMessage = {
@@ -353,8 +368,13 @@ Sample JSON output:
         } else {
           setLastSuggestedQuestions([])
         }
-        
+
         setHasConversationStarted(true) // Mark conversation as started when loading existing conversation
+
+        // Close sidebar on mobile when conversation is selected
+        if (isMobile && onToggleSidebar && sidebarOpen) {
+          onToggleSidebar()
+        }
       } else {
         console.error('Failed to load conversation:', response.statusText)
       }
@@ -771,6 +791,14 @@ Sample JSON output:
         freeTurnsRemaining={freeTurnsRemaining}
         hasFreeTurns={hasFreeTurns}
       />
+
+      {/* Backdrop for mobile sidebar */}
+      {isMobile && sidebarOpen && (
+        <div
+          className="sidebar-backdrop"
+          onClick={() => onToggleSidebar && onToggleSidebar()}
+        />
+      )}
 
       {/* Sidebar - Chat History Only */}
       <div className={`left-panel ${!sidebarOpen ? 'collapsed' : ''}`}>

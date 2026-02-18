@@ -1117,7 +1117,6 @@
 /* Mobile breakpoint */
 @media (max-width: 768px) {
   .chat-interface {
-    flex-direction: column;
     height: auto;
     min-height: 100vh;
     min-height: 100dvh; /* Dynamic viewport height for mobile */
@@ -1126,17 +1125,34 @@
   }
 
   .left-panel {
-    width: 100% !important;
-    min-width: 100% !important;
-    max-width: 100% !important;
-    order: 2;
-    border-radius: var(--radius-lg);
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 280px !important;
+    min-width: 280px !important;
+    max-width: 280px !important;
+    z-index: 1000;
+    transform: translateX(100%);
+    transition: transform 0.3s ease;
+    border-radius: 0;
+    border-right: none;
+    border-left: 1px solid var(--border-primary);
+  }
+
+  .left-panel:not(.collapsed) {
+    transform: translateX(0);
   }
 
   .left-panel.collapsed {
-    width: 100% !important;
-    height: auto;
-    max-height: 60px;
+    transform: translateX(100%);
+  }
+
+  .sidebar-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 999;
   }
 
   .panel-resizer {
@@ -1144,9 +1160,7 @@
   }
 
   .chat-container {
-    order: 1;
-    min-height: 50vh;
-    max-height: 70vh;
+    height: 100%;
     border-radius: var(--radius-lg);
   }
 
@@ -1202,6 +1216,14 @@
 
   .input-form {
     padding: 12px;
+    padding-bottom: max(12px, env(safe-area-inset-bottom, 8px)); /* iPhone home indicator */
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .input-disclaimer {
+    font-size: 0.625rem; /* Smaller on mobile */
+    padding: 6px 0 2px 0;
   }
 
   .input-container {

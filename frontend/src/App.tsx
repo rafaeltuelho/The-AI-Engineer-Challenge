@@ -163,6 +163,7 @@ function App() {
           setSelectedProvider={handleProviderChange}
           modelDescriptions={modelDescriptions}
           sidebarOpen={sidebarOpen}
+          onToggleSidebar={() => setSidebarOpen(prev => !prev)}
           settingsModalOpen={settingsModalOpen}
           setSettingsModalOpen={setSettingsModalOpen}
           isWhitelisted={user.isWhitelisted}
