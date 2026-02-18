@@ -1,5 +1,6 @@
 # Import required FastAPI components for building the API
 import hashlib
+import json
 import os
 import re
 # Add current directory to Python path for Vercel deployment
@@ -65,6 +66,9 @@ FREE_MODEL = os.getenv("FREE_MODEL", "deepseek-ai/DeepSeek-V3.1")
 # Server-side API keys (for free tier)
 SERVER_OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 SERVER_TOGETHER_API_KEY = os.getenv("TOGETHER_API_KEY", "")
+
+# Cache for dynamic suggestions
+_cached_suggestions: Optional[List[str]] = None
 
 # Try to import RAG functionality (optional for Vercel free tier)
 RAG_ENABLED = False
@@ -557,6 +561,9 @@ class AuthConfigResponse(BaseModel):
     free_model: str
     free_provider: str
 
+class AppConfigResponse(BaseModel):
+    suggestions: List[str]
+
 class DocumentUploadResponse(BaseModel):
     document_id: str
     message: str
@@ -882,6 +889,98 @@ async def logout(
 
     return {"message": "Logout successful"}
 
+def _fetch_suggestions() -> List[str]:
+    """
+    Fetch dynamic conversation starter suggestions using LLM.
+    Returns cached suggestions if available, otherwise generates new ones.
+    Falls back to hardcoded suggestions on error.
+    """
+    global _cached_suggestions
+
+    # Return cached suggestions if available
+    if _cached_suggestions is not None:
+        return _cached_suggestions
+
+    # Hardcoded fallback suggestions
+    fallback_suggestions = [
+        "What can you help me with?",
+        "Tell me about your capabilities",
+        "How do I get started?",
+        "What are some interesting topics we can discuss?"
+    ]
+
+    try:
+        # Determine which API key to use
+        api_key = SERVER_TOGETHER_API_KEY or SERVER_OPENAI_API_KEY
+        if not api_key:
+            print("No API key available for suggestions, using fallback")
+            _cached_suggestions = fallback_suggestions
+            return fallback_suggestions
+
+        # Determine provider and model
+        if SERVER_TOGETHER_API_KEY:
+            base_url = "https://api.together.xyz/v1"
+            model = "deepseek-ai/DeepSeek-V3.1"
+        else:
+            base_url = "https://api.openai.com/v1"
+            model = "gpt-4o-mini"
+
+        # Create OpenAI client
+        client = OpenAI(api_key=api_key, base_url=base_url)
+
+        # Generate suggestions using LLM
+        response = client.chat.completions.create(
+            model=model,
+            messages=[
+                {
+                    "role": "system",
+                    "content": "You are a helpful assistant that generates diverse, engaging conversation starters."
+                },
+                {
+                    "role": "user",
+                    "content": "Generate 4 diverse, interesting conversation starter questions that a user might ask an AI assistant. Return ONLY a JSON array of strings, nothing else. Example: [\"question 1\", \"question 2\", \"question 3\", \"question 4\"]"
+                }
+            ],
+            temperature=0.8,
+            max_tokens=200
+        )
+
+        # Extract response content
+        content = response.choices[0].message.content.strip()
+
+        # Handle markdown code block wrapping (strip ``` markers)
+        if content.startswith("```"):
+            # Remove opening ```json or ``` and closing ```
+            lines = content.split("\n")
+            # Remove first line if it's ```json or ```
+            if lines[0].strip().startswith("```"):
+                lines = lines[1:]
+            # Remove last line if it's ```
+            if lines and lines[-1].strip() == "```":
+                lines = lines[:-1]
+            content = "\n".join(lines).strip()
+
+        # Parse JSON response
+        suggestions = json.loads(content)
+
+        # Validate that we got a list of strings
+        if not isinstance(suggestions, list) or len(suggestions) != 4:
+            raise ValueError("Invalid suggestions format")
+
+        for suggestion in suggestions:
+            if not isinstance(suggestion, str):
+                raise ValueError("Invalid suggestion type")
+
+        # Cache and return the suggestions
+        _cached_suggestions = suggestions
+        return suggestions
+
+    except Exception as e:
+        print(f"Error fetching suggestions: {str(e)}")
+        # Cache and return fallback suggestions
+        _cached_suggestions = fallback_suggestions
+        return fallback_suggestions
+
 # Endpoint to get auth configuration
 @app.get(
     "/api/auth/config",
@@ -902,6 +1001,22 @@ async def get_auth_config(request: Request):
         free_model=FREE_MODEL,
         free_provider=FREE_PROVIDER
     )
+
+# Endpoint to get app configuration with dynamic suggestions
+@app.get(
+    "/api/config",
+    response_model=AppConfigResponse,
+    tags=["Configuration"],
+    summary="Get app configuration",
+    description="Get app configuration including dynamic conversation starter suggestions.",
+    responses={
+        200: {"description": "Configuration retrieved successfully"}
+    }
+)
+@limiter.limit("30/minute")
+async def get_app_config(request: Request):
+    suggestions = _fetch_suggestions()
+    return AppConfigResponse(suggestions=suggestions)
 
 # Define the main chat endpoint that handles POST requests
 @app.post(
