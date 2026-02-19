@@ -985,7 +985,13 @@ Sample JSON output:
                       {message.role === 'user' ? 'You' : 'Assistant'}
                     </div>
                     <div className="message-content">
-                      {renderMessageContent(message)}
+                      {message.role === 'assistant' && !message.content && isLoading ? (
+                        <div className="typing-indicator">
+                          <span></span>
+                          <span></span>
+                          <span></span>
+                        </div>
+                      ) : renderMessageContent(message)}
                     </div>
                     <div className="message-timestamp">
                       {message.timestamp.toLocaleTimeString()}
@@ -1008,7 +1014,7 @@ Sample JSON output:
               </div>
             ))
           )}
-          {isLoading && (
+          {isLoading && !messages.some(m => m.role === 'assistant' && !m.content) && (
             <div className="message-row assistant">
               <div className="message-row-inner">
                 <div className="message-avatar">
