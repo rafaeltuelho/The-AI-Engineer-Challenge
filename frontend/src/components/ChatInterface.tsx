@@ -495,7 +495,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         try {
           const errorData = await response.json()
           if (errorData.detail) {
-            errorDetail = errorData.detail
+            // FastAPI's detail can be a string, array, or object (e.g. validation errors)
+            errorDetail = typeof errorData.detail === 'string'
+              ? errorData.detail
+              : JSON.stringify(errorData.detail)
           }
         } catch {
           // If JSON parsing fails, use the default HTTP status message
