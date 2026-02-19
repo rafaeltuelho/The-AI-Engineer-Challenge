@@ -335,15 +335,10 @@ This API is optimized to run on Vercel's free tier (250MB serverless function li
 - ✅ Rate limiting and input validation
 - ✅ Session management
 - ✅ Core chat functionality
+- ✅ RAG Features (document upload/query via `qdrant-client`)
 
 ### What's Optional
-- ❌ **RAG Features** (document upload/query) - requires `qdrant-client` and `numpy`
-- ❌ **Development Tools** - Jupyter notebooks, IPython kernel
-
-### RAG Availability
-- **Vercel Free Tier**: RAG endpoints return 503 (unavailable)
-- **Local Development**: Install with `uv sync --extra rag`
-- **Vercel Pro/Other Hosting**: Install with `pip install -e ".[rag]"`
+- ❌ **Development Tools** - Jupyter notebooks, IPython kernel (`pip install -e ".[dev]"`)
 
 See [VERCEL_OPTIMIZATION.md](../VERCEL_OPTIMIZATION.md) for detailed optimization info.
 

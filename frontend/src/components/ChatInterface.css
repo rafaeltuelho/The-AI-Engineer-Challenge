@@ -1294,6 +1294,32 @@
   .section-content {
     padding: var(--spacing-sm);
   }
+
+  .mode-cards {
+    gap: 8px;
+    margin-bottom: 20px;
+    flex-wrap: nowrap;
+  }
+
+  .mode-card {
+    padding: 12px 10px;
+    min-width: 0;
+    flex: 1;
+    gap: 4px;
+  }
+
+  .mode-card svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  .mode-card-title {
+    font-size: 0.8125rem;
+  }
+
+  .mode-card-desc {
+    font-size: 0.6875rem;
+  }
 }
 
 /* Small mobile breakpoint */
@@ -1311,7 +1337,15 @@
   }
 
   .mode-card {
-    min-width: 100%;
+    padding: 10px 8px;
+  }
+
+  .mode-card-title {
+    font-size: 0.75rem;
+  }
+
+  .mode-card-desc {
+    font-size: 0.625rem;
   }
 }
 

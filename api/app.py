@@ -905,8 +905,7 @@ def _fetch_suggestions() -> List[str]:
     fallback_suggestions = [
         "What can you help me with?",
         "Tell me about your capabilities",
-        "How do I get started?",
-        "What are some interesting topics we can discuss?"
+        "How do I get started?"
     ]
 
     try:
@@ -938,7 +937,7 @@ def _fetch_suggestions() -> List[str]:
                 },
                 {
                     "role": "user",
-                    "content": "Generate 4 diverse, interesting conversation starter questions that a user might ask an AI assistant. Return ONLY a JSON array of strings, nothing else. Example: [\"question 1\", \"question 2\", \"question 3\", \"question 4\"]"
+                    "content": "Generate 3 diverse, interesting conversation starter questions that a user might ask an AI assistant. Return ONLY a JSON array of strings, nothing else. Example: [\"question 1\", \"question 2\", \"question 3\"]"
                 }
             ],
             temperature=0.8,
@@ -964,7 +963,7 @@ def _fetch_suggestions() -> List[str]:
         suggestions = json.loads(content)
 
         # Validate that we got a list of strings
-        if not isinstance(suggestions, list) or len(suggestions) != 4:
+        if not isinstance(suggestions, list) or len(suggestions) != 3:
             raise ValueError("Invalid suggestions format")
 
         for suggestion in suggestions:

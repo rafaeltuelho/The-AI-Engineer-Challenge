@@ -11,11 +11,11 @@ Your build was exceeding Vercel's 250MB serverless function size limit due to he
 
 These are only needed for local development notebooks, not production.
 
-### 2. **Made RAG Optional**
-- ❌ `qdrant-client` (~50MB) - moved to optional
-- ❌ `numpy` (~50MB) - moved to optional
+### 2. **RAG Now Included by Default**
+- ✅ `qdrant-client` (~50MB) - included in core dependencies
+- ❌ `numpy` - removed (no longer used in the codebase)
 
-RAG (Retrieval-Augmented Generation) is a nice-to-have feature, not core functionality.
+RAG (Retrieval-Augmented Generation) is now available by default in all deployments.
 
 ### 3. **Dependency Structure**
 
@@ -23,7 +23,7 @@ RAG (Retrieval-Augmented Generation) is a nice-to-have feature, not core functio
 ```
 fastapi, uvicorn, openai, together, pydantic, google-auth,
 PyPDF2, pdfplumber, tiktoken, python-docx, python-pptx,
-httpx, requests, python-dotenv, slowapi
+httpx, requests, python-dotenv, slowapi, qdrant-client
 ```
 
 **Optional - Development:**
@@ -31,52 +31,39 @@ httpx, requests, python-dotenv, slowapi
 pip install -e ".[dev]"  # Adds: jupyter, ipykernel, numpy
 ```
 
-**Optional - RAG Features:**
-```
-pip install -e ".[rag]"  # Adds: qdrant-client, numpy
-```
-
-### 4. **Graceful Degradation**
-- Core chat functionality works without RAG
-- RAG endpoints return 503 with helpful message if dependencies missing
-- No breaking changes to existing code
+### 4. **All Features Available**
+- Core chat functionality ✅
+- RAG document upload/query ✅
+- Topic Explorer mode ✅
 
 ## Deployment Steps
 
 ### For Vercel Production:
-1. No changes needed - uses production dependencies only
-2. Build should now fit within 250MB limit
-3. Core chat features fully functional
+1. No changes needed - uses production dependencies including RAG
+2. Build fits within 250MB limit
+3. All features fully functional
 
 ### For Local Development:
 ```bash
 # Install everything including dev tools
 uv sync
 # or
-pip install -e ".[dev,rag]"
+pip install -e ".[dev]"
 ```
 
-### For RAG Features on Vercel:
-If you upgrade to Vercel Pro or use a different platform:
-```bash
-pip install -e ".[rag]"
-```
-
-## Expected Size Reduction
-- **Before:** ~280-300MB (exceeds limit)
-- **After:** ~150-180MB (well within limit)
+## Expected Size
+- **Estimated:** ~200-230MB (within 250MB limit)
 
 ## Testing
 ```bash
 # Test core chat (should work)
 curl -X POST http://localhost:8000/api/chat
 
-# Test RAG (should return 503 on free tier)
+# Test RAG (should work - RAG is included by default)
 curl -X POST http://localhost:8000/api/upload-document
 ```
 
 ## Next Steps
 1. Push to Vercel and verify deployment succeeds
-2. Test core chat functionality
-3. If you need RAG, consider upgrading Vercel plan or using alternative hosting
+2. Test all features including RAG and Topic Explorer
 

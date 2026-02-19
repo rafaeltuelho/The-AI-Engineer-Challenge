@@ -100,7 +100,7 @@ function extractQuestionsFromSection(section: string): string[] {
   // Filter out duplicates and limit to reasonable number
   const uniqueQuestions = Array.from(new Set(questions))
     .filter(q => q.length > 5 && q.length < 200) // Reasonable length
-    .slice(0, 5) // Limit to 5 questions max
+    .slice(0, 3) // Limit to 3 questions max
 
   return uniqueQuestions
 }

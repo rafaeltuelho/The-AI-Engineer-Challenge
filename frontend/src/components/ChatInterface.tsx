@@ -467,7 +467,17 @@ Sample JSON output:
       })
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
+        // Try to parse a user-friendly error message from the backend
+        let errorDetail = `HTTP error! status: ${response.status}`
+        try {
+          const errorData = await response.json()
+          if (errorData.detail) {
+            errorDetail = errorData.detail
+          }
+        } catch {
+          // If JSON parsing fails, use the default HTTP status message
+        }
+        throw new Error(errorDetail)
       }
 
       let assistantMessage = ''
@@ -629,10 +639,11 @@ Sample JSON output:
 
     } catch (error) {
       console.error('Error:', error)
+      const friendlyMessage = error instanceof Error ? error.message : 'An unexpected error occurred'
       const errorMessage: Message = {
         id: Date.now().toString(),
         role: 'assistant',
-        content: 'Sorry, there was an error processing your request.\n\nError: ' + error,
+        content: `Sorry, there was an error processing your request.\n\n${friendlyMessage}`,
         timestamp: new Date()
       }
       setMessages(prev => [...prev, errorMessage])
@@ -948,7 +959,7 @@ Sample JSON output:
 
               {welcomeSuggestions && welcomeSuggestions.length > 0 ? (
                 <div className="suggestion-chips">
-                  {welcomeSuggestions.map((suggestion, index) => (
+                  {welcomeSuggestions.slice(0, 3).map((suggestion, index) => (
                     <button key={index} className="suggestion-chip" onClick={() => handleSuggestedQuestionClick(suggestion)}>
                       {suggestion}
                     </button>
@@ -956,7 +967,7 @@ Sample JSON output:
                 </div>
               ) : (
                 <div className="suggestion-chips loading">
-                  {[1,2,3,4].map(i => (
+                  {[1,2,3].map(i => (
                     <div key={i} className="suggestion-chip skeleton" />
                   ))}
                 </div>
