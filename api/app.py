@@ -962,13 +962,16 @@ def _fetch_suggestions() -> List[str]:
         # Parse JSON response
         suggestions = json.loads(content)
 
-        # Validate that we got a list of strings
-        if not isinstance(suggestions, list) or len(suggestions) != 3:
+        # Validate that we got a non-empty list of strings
+        if not isinstance(suggestions, list) or len(suggestions) == 0:
             raise ValueError("Invalid suggestions format")
 
         for suggestion in suggestions:
             if not isinstance(suggestion, str):
                 raise ValueError("Invalid suggestion type")
+
+        # Limit to 3 suggestions (models may return more than requested)
+        suggestions = suggestions[:3]
 
         # Cache and return the suggestions
         _cached_suggestions = suggestions
