@@ -3,7 +3,7 @@ import { Send, MessageSquare, User, Bot, Trash2, Settings, ArrowDown, X, FileTex
 import MarkdownRenderer from './MarkdownRenderer'
 import SuggestedQuestions from './SuggestedQuestions'
 import SettingsModal from './SettingsModal'
-import type { ExtractedContent } from '../utils/suggestedQuestionsExtractor'
+import { extractSuggestedQuestions, type ExtractedContent } from '../utils/suggestedQuestionsExtractor'
 import './ChatInterface.css'
 
 interface Message {
@@ -82,12 +82,22 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const getDefaultDeveloperMessage = (mode: 'regular' | 'rag' | 'topic-explorer'): string => {
     switch (mode) {
       case 'regular':
-        return `You are a helpful AI assistant.
+        return `You are a friendly and curious AI study buddy for students. Your mission is to spark curiosity, make learning exciting, and encourage students to keep exploring and asking questions.
+
+When answering:
+- Be warm, encouraging, and enthusiastic — like a friend who loves learning
+- Explain things clearly and make complex ideas feel approachable
+- Use real-world examples and analogies that students can relate to
+- Celebrate good questions and encourage deeper thinking
+- Keep responses focused but engaging — don't overwhelm with walls of text
+
 If the topic involves math, always write equations or expressions in LaTeX notation, enclosed in double dollar signs ($$...$$) for block equations or single dollar signs ($...$) for inline expressions.
 Do not explain LaTeX syntax to the user, only show the math properly formatted. If your response contains any sentence with money representation using the dollar currency sign followed by a number (money value), make sure you escape it with '\\$' to not confuse with an inline LaTeX math notation.
-Aways enrich the markdown response with emoji markups and engaging words to make the content more apealing for young students.
+Always enrich the markdown response with emoji markups and engaging words to make the content more appealing for students.
 If you need to show a picture, use the ![description](url) format.
-        `
+
+At the end of every response, include a section titled "### Suggested Questions" with exactly 3 short follow-up questions the student could ask next to keep exploring the topic. These should spark curiosity and invite deeper engagement. Format them as a numbered list.
+`
       case 'rag':
         return `You are a helpful assistant that answers questions based on provided context. If the context doesn\'t contain enough information to answer the question, please say so.
 If the topic involves math, always write equations or expressions in LaTeX notation, enclosed in double dollar signs ($$...$$) for block equations or single dollar signs ($...$) for inline expressions.
@@ -350,6 +360,18 @@ Sample JSON output:
             }
           }
 
+          // Process regular chat assistant messages - extract suggested questions from text
+          if (conversationMode === 'regular' && msg.role === 'assistant') {
+            const extracted = extractSuggestedQuestions(msg.content)
+            if (extracted.hasSuggestedQuestions) {
+              return {
+                ...baseMessage,
+                content: extracted.mainContent,
+                suggestedQuestions: extracted.suggestedQuestions
+              }
+            }
+          }
+
           return baseMessage
         })
 
@@ -358,7 +380,7 @@ Sample JSON output:
         setDeveloperMessage(data.system_message)
 
         // Set lastSuggestedQuestions for backwards compatibility (from the last assistant message)
-        if (conversationMode === 'topic-explorer') {
+        if (conversationMode === 'topic-explorer' || conversationMode === 'regular') {
           const lastAssistantMessage = processedMessages
             .filter((msg: any) => msg.role === 'assistant')
             .pop()
@@ -628,8 +650,25 @@ Sample JSON output:
           )
         }
 
-        // Clear suggested questions for regular chat mode
-        setLastSuggestedQuestions([])
+        // Extract suggested questions from the streamed response
+        const extracted = extractSuggestedQuestions(assistantMessage)
+        let regularSuggestedQuestions: string[] = []
+        if (extracted.hasSuggestedQuestions) {
+          assistantMessage = extracted.mainContent
+          regularSuggestedQuestions = extracted.suggestedQuestions
+        }
+
+        // Update message with cleaned content and suggested questions
+        setMessages(prev =>
+          prev.map(msg =>
+            msg.id === assistantMessageId
+              ? { ...msg, content: assistantMessage, suggestedQuestions: regularSuggestedQuestions }
+              : msg
+          )
+        )
+
+        // Update lastSuggestedQuestions state
+        setLastSuggestedQuestions(regularSuggestedQuestions)
 
         // Reload conversations to show the updated list
         setTimeout(() => {
@@ -997,9 +1036,9 @@ Sample JSON output:
                       {message.timestamp.toLocaleTimeString()}
                     </div>
 
-                    {/* Show Topic Explorer suggested questions after assistant messages */}
+                    {/* Show suggested questions after assistant messages (Topic Explorer and regular Chat) */}
                     {message.role === 'assistant' &&
-                     chatMode === 'topic-explorer' &&
+                     (chatMode === 'topic-explorer' || chatMode === 'regular') &&
                      message.suggestedQuestions && message.suggestedQuestions.length > 0 && (
                       <div className="topic-explorer-suggested-questions">
                         <SuggestedQuestions
