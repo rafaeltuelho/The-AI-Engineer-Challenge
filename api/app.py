@@ -27,6 +27,7 @@ from google.oauth2 import id_token
 from google.auth.transport import requests as google_requests
 import tiktoken
 from dotenv import load_dotenv
+from persistence import load_conversations, save_conversations
 
 # Load environment variables from .env file
 load_dotenv()
@@ -740,6 +741,12 @@ async def google_auth(request: Request, auth_request: GoogleAuthRequest):
             session = get_session(session_id)
             is_whitelisted = session["is_whitelisted"]
 
+            # Load persisted conversations for Google-authenticated users
+            if email:
+                persisted = load_conversations(email)
+                if persisted:
+                    conversations[session_id] = persisted
+
             if is_whitelisted:
                 message = f"Welcome {name}! You have unlimited access."
                 free_turns_remaining = -1  # Unlimited
@@ -829,7 +836,13 @@ async def logout(
     if not session:
         raise HTTPException(status_code=401, detail="Invalid or expired session")
 
-    # Delete session and its conversations
+    # Persist conversations for Google users before clearing in-memory
+    if session.get("auth_type") == "google" and session.get("email"):
+        user_convs = conversations.get(x_session_id, {})
+        if user_convs:
+            save_conversations(session["email"], user_convs)
+
+    # Delete session and its conversations from memory
     if x_session_id in conversations:
         del conversations[x_session_id]
     if x_session_id in sessions:
@@ -1106,6 +1119,10 @@ async def chat(
                 user_conversations[conversation_id]["messages"].append(assistant_message)
                 user_conversations[conversation_id]["last_updated"] = datetime.now(timezone.utc)
 
+                # Persist conversations for Google-authenticated users
+                if session.get("auth_type") == "google" and session.get("email"):
+                    save_conversations(session["email"], user_conversations)
+
                 # Increment free turns counter if using server API key
                 if not session.get("has_own_api_key") and not session.get("is_whitelisted"):
                     session["free_turns_used"] += 1
@@ -1242,16 +1259,22 @@ async def delete_conversation(
     session_id = x_session_id
     
     # Validate session
-    if not get_session(session_id):
+    session = get_session(session_id)
+    if not session:
         raise HTTPException(status_code=401, detail="Invalid or expired session")
-    
+
     # Get session-specific conversations
     user_conversations = get_session_conversations(session_id)
-    
+
     if conversation_id not in user_conversations:
         raise HTTPException(status_code=404, detail="Conversation not found")
-    
+
     del user_conversations[conversation_id]
+
+    # Persist updated conversations for Google-authenticated users
+    if session.get("auth_type") == "google" and session.get("email"):
+        save_conversations(session["email"], user_conversations)
+
     return {"message": "Conversation deleted successfully"}
 
 # Endpoint to clear all conversations for a specific user
@@ -1275,13 +1298,18 @@ async def clear_all_conversations(
     session_id = x_session_id
     
     # Validate session
-    if not get_session(session_id):
+    session = get_session(session_id)
+    if not session:
         raise HTTPException(status_code=401, detail="Invalid or expired session")
-    
+
     # Get session-specific conversations and clear them
     user_conversations = get_session_conversations(session_id)
     user_conversations.clear()
-    
+
+    # Persist cleared state for Google-authenticated users
+    if session.get("auth_type") == "google" and session.get("email"):
+        save_conversations(session["email"], user_conversations)
+
     return {"message": "All conversations cleared successfully"}
 
 # Document Upload endpoint
@@ -1582,6 +1610,10 @@ async def rag_query(
         )
         user_conversations[conversation_id]["messages"].append(assistant_message)
         user_conversations[conversation_id]["last_updated"] = datetime.now(timezone.utc)
+
+        # Persist conversations for Google-authenticated users
+        if session.get("auth_type") == "google" and session.get("email"):
+            save_conversations(session["email"], user_conversations)
 
         # Increment free turns counter if using server API key
         if not session.get("has_own_api_key") and not session.get("is_whitelisted"):

@@ -13,6 +13,7 @@
       "use": "@vercel/python",
       "config": {
         "includeFiles": [
+          "api/persistence.py",
           "api/pdf_rag_lightweight.py",
           "aimakerspace/**",
           "pyproject.toml",
