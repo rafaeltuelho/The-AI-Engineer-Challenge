@@ -30,7 +30,7 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 # Now import the app
-from app import app, sessions, conversations, create_session, get_session, count_tokens, resolve_api_key, cleanup_inactive_conversations
+from app import app, sessions, conversations, create_session, get_session, count_tokens, resolve_api_key
 
 
 @pytest_asyncio.fixture
@@ -253,40 +253,6 @@ def test_get_session_returns_none_for_missing():
     sessions.clear()
     result = get_session("non-existent-session-id")
     assert result is None
-
-
-def test_get_session_updates_last_access():
-    """Test get_session() updates last_access timestamp."""
-    sessions.clear()
-    session_id = create_session(auth_type="guest")
-    original_time = sessions[session_id]["last_access"]
-
-    # Get session (should update last_access)
-    import time
-    time.sleep(0.01)  # Small delay to ensure timestamp changes
-    session = get_session(session_id)
-
-    assert session is not None
-    assert session["last_access"] > original_time
-
-
-def test_cleanup_inactive_conversations():
-    """Test cleanup_inactive_conversations() removes expired sessions."""
-    from datetime import timedelta
-    sessions.clear()
-    conversations.clear()
-
-    # Create a session with old last_access time
-    session_id = create_session(auth_type="guest")
-    sessions[session_id]["last_access"] = datetime.now(timezone.utc) - timedelta(hours=2)
-    conversations[session_id] = {"conv1": {"messages": []}}
-
-    # Run cleanup
-    cleanup_inactive_conversations()
-
-    # Verify session and conversations are removed
-    assert session_id not in sessions
-    assert session_id not in conversations
 
 
 # ============================================

@@ -6,10 +6,8 @@ import re
 # Add current directory to Python path for Vercel deployment
 import sys
 import tempfile
-import threading
-import time
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from fastapi import (FastAPI, File, Header, HTTPException, Request,
@@ -36,14 +34,6 @@ load_dotenv()
 current_dir = os.path.dirname(os.path.abspath(__file__))
 if current_dir not in sys.path:
     sys.path.insert(0, current_dir)
-
-# ============================================
-# Configurable Timeout Settings
-# ============================================
-# Session timeout: How long before an inactive session is cleaned up (in minutes)
-SESSION_TIMEOUT_MINUTES = int(os.getenv("SESSION_TIMEOUT_MINUTES", "60"))
-# Cleanup interval: How often the cleanup scheduler runs (in seconds)
-CLEANUP_INTERVAL_SECONDS = int(os.getenv("CLEANUP_INTERVAL_SECONDS", "60"))
 
 # ============================================
 # Google OAuth Configuration
@@ -226,8 +216,7 @@ def create_session(
         "free_turns_used": 0,
         "has_own_api_key": api_key is not None,
         "api_key": api_key,
-        "provider": provider,
-        "last_access": datetime.now(timezone.utc)
+        "provider": provider
     }
 
     return session_id
@@ -237,8 +226,6 @@ def get_session(session_id: str) -> Optional[Dict[str, Any]]:
     if session_id not in sessions:
         return None
 
-    # Update session access time
-    sessions[session_id]["last_access"] = datetime.now(timezone.utc)
     return sessions[session_id]
 
 def count_tokens(text: str, model: str = "gpt-4") -> int:
@@ -321,45 +308,6 @@ def get_session_conversations(session_id: str) -> Dict[str, Dict[str, Any]]:
     if session_id not in conversations:
         conversations[session_id] = {}
     return conversations[session_id]
-
-def cleanup_inactive_conversations():
-    """Clean up conversations and sessions that have been inactive.
-
-    Timeout is configurable via SESSION_TIMEOUT_MINUTES env var (default: 60).
-    """
-    current_time = datetime.now(timezone.utc)
-    inactive_sessions = []
-    # Identify inactive sessions based on configurable timeout
-    for session_id, session_data in sessions.items():
-        if current_time - session_data["last_access"] > timedelta(minutes=SESSION_TIMEOUT_MINUTES):
-            inactive_sessions.append(session_id)
-    # Remove conversations and sessions for inactive session_ids
-    for session_id in inactive_sessions:
-        if session_id in conversations:
-            del conversations[session_id]
-        del sessions[session_id]
-        print(f"Cleaned up inactive session and its conversations: {session_id[:8]}...")
-
-def start_cleanup_scheduler():
-    """Start the background cleanup scheduler.
-
-    Interval is configurable via CLEANUP_INTERVAL_SECONDS env var (default: 60).
-    """
-    def cleanup_loop():
-        while True:
-            try:
-                cleanup_inactive_conversations()
-                time.sleep(CLEANUP_INTERVAL_SECONDS)
-            except Exception as e:
-                print(f"Error in cleanup scheduler: {e}")
-                time.sleep(CLEANUP_INTERVAL_SECONDS)
-
-    cleanup_thread = threading.Thread(target=cleanup_loop, daemon=True)
-    cleanup_thread.start()
-    print(f"Started conversation cleanup scheduler (session timeout: {SESSION_TIMEOUT_MINUTES}min, interval: {CLEANUP_INTERVAL_SECONDS}s)")
-
-# Start the cleanup scheduler when the module loads
-start_cleanup_scheduler()
 
 # Define the data model for chat requests using Pydantic
 # This ensures incoming request data is properly validated
