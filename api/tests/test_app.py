@@ -828,3 +828,195 @@ def test_guest_users_no_persistence(clean_state):
             save_conversations(session["email"], user_conversations)
 
         mock_save.assert_not_called()
+
+
+# ============================================
+# Context Management Tests
+# ============================================
+
+class TestGetContextWindowSize:
+    """Tests for get_context_window_size."""
+
+    def test_exact_match(self):
+        from context_manager import get_context_window_size
+        assert get_context_window_size("gpt-4") == 8_192
+        assert get_context_window_size("gpt-4.1-mini") == 1_048_576
+
+    def test_prefix_match(self):
+        from context_manager import get_context_window_size
+        # "gpt-4-0613" should match "gpt-4" prefix
+        assert get_context_window_size("gpt-4-0613") == 8_192
+
+    def test_fallback(self):
+        from context_manager import get_context_window_size, DEFAULT_CONTEXT_WINDOW
+        assert get_context_window_size("unknown-model-xyz") == DEFAULT_CONTEXT_WINDOW
+
+
+class TestCountConversationTokens:
+    """Tests for count_conversation_tokens."""
+
+    def test_counts_system_and_messages(self):
+        from context_manager import count_conversation_tokens
+        messages = [
+            {"role": "user", "content": "Hello there"},
+            {"role": "assistant", "content": "Hi! How can I help?"},
+        ]
+        tokens = count_conversation_tokens(messages, "You are helpful.", "gpt-4")
+        assert tokens > 0
+
+    def test_handles_message_objects(self):
+        from context_manager import count_conversation_tokens
+        from app import Message
+        msgs = [Message(role="user", content="test", timestamp=datetime.now(timezone.utc))]
+        tokens = count_conversation_tokens(msgs, "system", "gpt-4")
+        assert tokens > 0
+
+    def test_empty_messages(self):
+        from context_manager import count_conversation_tokens
+        tokens = count_conversation_tokens([], "system prompt", "gpt-4")
+        # Should only count the system message tokens
+        assert tokens > 0
+
+
+class TestShouldCompress:
+    """Tests for should_compress."""
+
+    def test_returns_false_under_threshold(self):
+        from context_manager import should_compress
+        messages = [{"role": "user", "content": "Hi"}]
+        assert should_compress(messages, "system", "gpt-4", threshold_pct=0.8) is False
+
+    def test_returns_true_over_threshold(self):
+        from context_manager import should_compress
+        # Create enough messages to exceed a very low threshold on a small model
+        messages = [
+            {"role": "user", "content": "x " * 2000}
+            for _ in range(10)
+        ]
+        # gpt-4 has 8192 tokens, with threshold 0.1 that's ~819 tokens
+        assert should_compress(messages, "system", "gpt-4", threshold_pct=0.1) is True
+
+
+class TestCompressConversation:
+    """Tests for compress_conversation (with mocked LLM)."""
+
+    def test_compresses_old_keeps_recent(self):
+        from context_manager import compress_conversation, SUMMARY_PREFIX
+
+        mock_client = MagicMock()
+        mock_client.chat.completions.create.return_value = MagicMock(
+            choices=[MagicMock(message=MagicMock(content="Summary of old msgs"))]
+        )
+
+        messages = [
+            {"role": "user", "content": f"Message {i}"}
+            for i in range(10)
+        ]
+        result = compress_conversation(messages, mock_client, "gpt-4", "system", keep_recent=3)
+
+        # Should be 1 summary + 3 recent = 4 messages
+        assert len(result) == 4
+        assert result[0]["content"].startswith(SUMMARY_PREFIX)
+        assert result[1]["content"] == "Message 7"
+        assert result[3]["content"] == "Message 9"
+
+    def test_too_few_messages_returns_unchanged(self):
+        from context_manager import compress_conversation
+
+        messages = [{"role": "user", "content": "Hi"}]
+        result = compress_conversation(messages, None, "gpt-4", "system", keep_recent=3)
+        assert result == messages
+
+    def test_llm_failure_returns_recent_only(self):
+        from context_manager import compress_conversation
+
+        mock_client = MagicMock()
+        mock_client.chat.completions.create.side_effect = Exception("API error")
+
+        messages = [{"role": "user", "content": f"Msg {i}"} for i in range(10)]
+        result = compress_conversation(messages, mock_client, "gpt-4", "system", keep_recent=3)
+
+        # Should fallback to just the 3 recent messages (no summary)
+        assert len(result) == 3
+        assert result[0]["content"] == "Msg 7"
+
+    def test_preserves_existing_summary_in_compression(self):
+        from context_manager import compress_conversation, SUMMARY_PREFIX
+
+        mock_client = MagicMock()
+        mock_client.chat.completions.create.return_value = MagicMock(
+            choices=[MagicMock(message=MagicMock(content="Updated summary"))]
+        )
+
+        messages = [
+            {"role": "system", "content": f"{SUMMARY_PREFIX} Old summary"},
+            {"role": "user", "content": "Msg 1"},
+            {"role": "assistant", "content": "Msg 2"},
+            {"role": "user", "content": "Msg 3"},
+            {"role": "assistant", "content": "Msg 4"},
+            {"role": "user", "content": "Msg 5"},
+            {"role": "assistant", "content": "Msg 6"},
+            {"role": "user", "content": "Msg 7"},
+        ]
+        result = compress_conversation(messages, mock_client, "gpt-4", "system", keep_recent=3)
+
+        assert len(result) == 4  # 1 summary + 3 recent
+        assert result[0]["content"].startswith(SUMMARY_PREFIX)
+        # The LLM call should have included the old summary text
+        call_args = mock_client.chat.completions.create.call_args
+        user_msg = call_args[1]["messages"][1]["content"]
+        assert "Old summary" in user_msg
+
+
+class TestTrimMessagesForPersistence:
+    """Tests for trim_messages_for_persistence."""
+
+    def test_under_limit_returns_unchanged(self):
+        from context_manager import trim_messages_for_persistence
+        messages = [{"role": "user", "content": f"Msg {i}"} for i in range(5)]
+        result = trim_messages_for_persistence(messages, max_count=10)
+        assert len(result) == 5
+
+    def test_over_limit_trims_oldest(self):
+        from context_manager import trim_messages_for_persistence
+        messages = [{"role": "user", "content": f"Msg {i}"} for i in range(15)]
+        result = trim_messages_for_persistence(messages, max_count=10)
+        assert len(result) == 10
+        assert result[0]["content"] == "Msg 5"
+        assert result[-1]["content"] == "Msg 14"
+
+    def test_preserves_summary_message(self):
+        from context_manager import trim_messages_for_persistence, SUMMARY_PREFIX
+        messages = [
+            {"role": "system", "content": f"{SUMMARY_PREFIX} Important context"},
+        ] + [{"role": "user", "content": f"Msg {i}"} for i in range(14)]
+        result = trim_messages_for_persistence(messages, max_count=10)
+        assert len(result) == 10
+        assert result[0]["content"].startswith(SUMMARY_PREFIX)
+        assert result[1]["content"] == "Msg 5"
+
+
+class TestPersistenceTrimIntegration:
+    """Tests for _trim_conversation_messages in persistence.py."""
+
+    def test_trim_on_save(self):
+        from persistence import _trim_conversation_messages
+        convs = {
+            "conv-1": {
+                "messages": [{"role": "user", "content": f"Msg {i}"} for i in range(150)],
+                "title": "Test",
+            }
+        }
+        result = _trim_conversation_messages(convs)
+        assert len(result["conv-1"]["messages"]) == 100  # default MAX
+
+    def test_preserves_short_conversations(self):
+        from persistence import _trim_conversation_messages
+        convs = {
+            "conv-1": {
+                "messages": [{"role": "user", "content": "Hi"}],
+                "title": "Test",
+            }
+        }
+        result = _trim_conversation_messages(convs)
+        assert len(result["conv-1"]["messages"]) == 1

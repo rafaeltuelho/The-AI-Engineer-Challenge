@@ -28,6 +28,10 @@ from google.auth.transport import requests as google_requests
 import tiktoken
 from dotenv import load_dotenv
 from persistence import load_conversations, save_conversations
+from context_manager import (
+    should_compress, compress_conversation, count_conversation_tokens,
+    SUMMARY_PREFIX,
+)
 
 # Load environment variables from .env file
 load_dotenv()
@@ -1064,21 +1068,39 @@ async def chat(
             user_conversations[conversation_id]["title"] = first_line[:50] + ("..." if len(first_line) > 50 else "")
         
         # Build the full conversation context for OpenAI
-        messages_for_openai = [
-            {"role": "system", "content": user_conversations[conversation_id]["system_message"]}
-        ]
-        
-        # Add conversation history (limit to last 20 messages to avoid token limits)
-        recent_messages = user_conversations[conversation_id]["messages"][-20:]
-        for msg in recent_messages:
-            # Map our roles to OpenAI's expected roles
-            # By using alternating user and assistant messages, 
-            # you capture the previous state of a conversation in one request to the model.
-            openai_role = "assistant" if msg.role == "assistant" else msg.role
-            messages_for_openai.append({
-                "role": openai_role,
-                "content": msg.content
-            })
+        conv_data = user_conversations[conversation_id]
+        system_msg = conv_data["system_message"]
+        all_messages = conv_data["messages"]
+
+        # Token-aware context management: compress if approaching context window
+        if should_compress(all_messages, system_msg, chat_request.model):
+            compressed = compress_conversation(
+                all_messages, client, chat_request.model, system_msg
+            )
+            # Build messages_for_openai from compressed result (already dicts)
+            messages_for_openai = [{"role": "system", "content": system_msg}]
+            for m in compressed:
+                openai_role = "assistant" if m.get("role") == "assistant" else m.get("role", "user")
+                messages_for_openai.append({"role": openai_role, "content": m.get("content", "")})
+
+            # Update in-memory messages with compressed version (convert to Message objects)
+            compressed_messages = []
+            for m in compressed:
+                compressed_messages.append(Message(
+                    role=m.get("role", "user"),
+                    content=m.get("content", ""),
+                    timestamp=datetime.now(timezone.utc),
+                ))
+            conv_data["messages"] = compressed_messages
+
+            # Persist compressed state for Google-authenticated users
+            if session.get("auth_type") == "google" and session.get("email"):
+                save_conversations(session["email"], user_conversations)
+        else:
+            messages_for_openai = [{"role": "system", "content": system_msg}]
+            for msg in all_messages:
+                openai_role = "assistant" if msg.role == "assistant" else msg.role
+                messages_for_openai.append({"role": openai_role, "content": msg.content})
         
         # Create an async generator function for streaming responses
         async def generate():

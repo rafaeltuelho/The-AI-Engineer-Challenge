@@ -15,6 +15,9 @@ from typing import Any, Dict, Optional
 
 logger = logging.getLogger(__name__)
 
+# Per-conversation message limit for Redis persistence
+MAX_MESSAGES_PER_CONVERSATION = int(os.getenv("MAX_MESSAGES_PER_CONVERSATION", "100"))
+
 # Redis client singleton (None if not configured)
 _redis_client = None
 _redis_initialized = False
@@ -95,9 +98,41 @@ def load_conversations(email: str) -> Dict[str, Dict[str, Any]]:
         return {}
 
 
+def _trim_conversation_messages(convs: Dict[str, Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
+    """Trim each conversation's messages to MAX_MESSAGES_PER_CONVERSATION.
+
+    Preserves leading summary messages (prefixed with [CONVERSATION SUMMARY]).
+    Operates on a shallow copy to avoid mutating in-memory data.
+    """
+    from context_manager import SUMMARY_PREFIX
+
+    trimmed = {}
+    for conv_id, conv_data in convs.items():
+        messages = conv_data.get("messages", [])
+        if len(messages) <= MAX_MESSAGES_PER_CONVERSATION:
+            trimmed[conv_id] = conv_data
+            continue
+
+        # Check if first message is a summary
+        first = messages[0]
+        content = first.content if hasattr(first, "content") else first.get("content", "")
+        has_summary = content.startswith(SUMMARY_PREFIX)
+
+        if has_summary:
+            trimmed_msgs = [first] + messages[-(MAX_MESSAGES_PER_CONVERSATION - 1):]
+        else:
+            trimmed_msgs = messages[-MAX_MESSAGES_PER_CONVERSATION:]
+
+        # Shallow copy conv_data with trimmed messages
+        trimmed[conv_id] = {**conv_data, "messages": trimmed_msgs}
+
+    return trimmed
+
+
 def save_conversations(email: str, convs: Dict[str, Dict[str, Any]]) -> None:
     """Save all conversations for a user to Redis (best-effort).
 
+    Trims each conversation to MAX_MESSAGES_PER_CONVERSATION before saving.
     Logs errors but never raises — in-memory data is the source of truth.
     """
     redis = _get_redis_client()
@@ -110,7 +145,8 @@ def save_conversations(email: str, convs: Dict[str, Dict[str, Any]]) -> None:
             # Delete key if no conversations to save (save space)
             redis.delete(key)
         else:
-            data = json.dumps(convs, cls=_ConversationEncoder)
+            trimmed = _trim_conversation_messages(convs)
+            data = json.dumps(trimmed, cls=_ConversationEncoder)
             redis.set(key, data)
     except Exception as e:
         logger.warning(f"Failed to save conversations to Redis: {e}")
