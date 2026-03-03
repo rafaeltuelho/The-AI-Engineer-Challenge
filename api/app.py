@@ -28,14 +28,16 @@ from google.oauth2 import id_token
 from google.auth.transport import requests as google_requests
 import tiktoken
 from dotenv import load_dotenv
+
+# Load environment variables from .env file BEFORE importing modules
+# that read config via os.getenv() at module level.
+load_dotenv()
+
 from persistence import load_conversations, save_conversations
 from context_manager import (
     should_compress, compress_conversation, count_conversation_tokens,
     SUMMARY_PREFIX,
 )
-
-# Load environment variables from .env file
-load_dotenv()
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 if current_dir not in sys.path:
@@ -763,9 +765,11 @@ async def google_auth(request: Request, auth_request: GoogleAuthRequest):
             session = get_session(session_id)
             is_whitelisted = session["is_whitelisted"]
 
-            # Load persisted conversations for Google-authenticated users
+            # Load persisted conversations for Google-authenticated users (non-blocking)
             if email:
-                persisted = load_conversations(email)
+                persisted = await asyncio.get_event_loop().run_in_executor(
+                    None, load_conversations, email
+                )
                 if persisted:
                     conversations[session_id] = persisted
 
@@ -858,11 +862,13 @@ async def logout(
     if not session:
         raise HTTPException(status_code=401, detail="Invalid or expired session")
 
-    # Persist conversations for Google users before clearing in-memory
+    # Persist conversations for Google users before clearing in-memory (non-blocking)
     if session.get("auth_type") == "google" and session.get("email"):
         user_convs = conversations.get(x_session_id, {})
         if user_convs:
-            save_conversations(session["email"], user_convs)
+            await asyncio.get_event_loop().run_in_executor(
+                None, save_conversations, session["email"], user_convs
+            )
 
     # Delete session and its conversations from memory
     if x_session_id in conversations:
@@ -1318,9 +1324,11 @@ async def delete_conversation(
 
     del user_conversations[conversation_id]
 
-    # Persist updated conversations for Google-authenticated users
+    # Persist updated conversations for Google-authenticated users (non-blocking)
     if session.get("auth_type") == "google" and session.get("email"):
-        save_conversations(session["email"], user_conversations)
+        await asyncio.get_event_loop().run_in_executor(
+            None, save_conversations, session["email"], user_conversations
+        )
 
     return {"message": "Conversation deleted successfully"}
 
@@ -1353,9 +1361,11 @@ async def clear_all_conversations(
     user_conversations = get_session_conversations(session_id)
     user_conversations.clear()
 
-    # Persist cleared state for Google-authenticated users
+    # Persist cleared state for Google-authenticated users (non-blocking)
     if session.get("auth_type") == "google" and session.get("email"):
-        save_conversations(session["email"], user_conversations)
+        await asyncio.get_event_loop().run_in_executor(
+            None, save_conversations, session["email"], user_conversations
+        )
 
     return {"message": "All conversations cleared successfully"}
 
@@ -1658,9 +1668,11 @@ async def rag_query(
         user_conversations[conversation_id]["messages"].append(assistant_message)
         user_conversations[conversation_id]["last_updated"] = datetime.now(timezone.utc)
 
-        # Persist conversations for Google-authenticated users
+        # Persist conversations for Google-authenticated users (non-blocking)
         if session.get("auth_type") == "google" and session.get("email"):
-            save_conversations(session["email"], user_conversations)
+            await asyncio.get_event_loop().run_in_executor(
+                None, save_conversations, session["email"], user_conversations
+            )
 
         # Increment free turns counter if using server API key
         if not session.get("has_own_api_key") and not session.get("is_whitelisted"):

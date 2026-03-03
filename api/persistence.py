@@ -10,6 +10,7 @@ import hashlib
 import json
 import logging
 import os
+import threading
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
@@ -21,31 +22,43 @@ MAX_MESSAGES_PER_CONVERSATION = int(os.getenv("MAX_MESSAGES_PER_CONVERSATION", "
 # Redis client singleton (None if not configured)
 _redis_client = None
 _redis_initialized = False
+_redis_lock = threading.Lock()
 
 
 def _get_redis_client():
-    """Get or create the Upstash Redis client. Returns None if not configured."""
+    """Get or create the Upstash Redis client. Returns None if not configured.
+
+    Thread-safe: uses a lock to prevent race conditions when called from
+    multiple threads (e.g., via asyncio.run_in_executor).
+    """
     global _redis_client, _redis_initialized
 
+    # Fast path: already initialized (read is atomic for booleans in CPython,
+    # but the lock ensures _redis_client is fully assigned before we return it)
     if _redis_initialized:
         return _redis_client
 
-    _redis_initialized = True
+    with _redis_lock:
+        # Double-check inside lock (another thread may have initialized while we waited)
+        if _redis_initialized:
+            return _redis_client
 
-    url = os.getenv("UPSTASH_REDIS_REST_URL")
-    token = os.getenv("UPSTASH_REDIS_REST_TOKEN")
+        _redis_initialized = True
 
-    if not url or not token:
-        logger.info("Upstash Redis not configured — conversation persistence disabled")
-        return None
+        url = os.getenv("UPSTASH_REDIS_REST_URL")
+        token = os.getenv("UPSTASH_REDIS_REST_TOKEN")
 
-    try:
-        from upstash_redis import Redis
-        _redis_client = Redis(url=url, token=token)
-        logger.info("Upstash Redis connected — conversation persistence enabled")
-    except Exception as e:
-        logger.warning(f"Failed to initialize Upstash Redis: {e}")
-        _redis_client = None
+        if not url or not token:
+            logger.info("Upstash Redis not configured — conversation persistence disabled")
+            return None
+
+        try:
+            from upstash_redis import Redis
+            _redis_client = Redis(url=url, token=token)
+            logger.info("Upstash Redis connected — conversation persistence enabled")
+        except Exception as e:
+            logger.warning(f"Failed to initialize Upstash Redis: {e}")
+            _redis_client = None
 
     return _redis_client
 
