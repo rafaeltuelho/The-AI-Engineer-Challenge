@@ -1,4 +1,5 @@
 # Import required FastAPI components for building the API
+import asyncio
 import hashlib
 import json
 import os
@@ -57,6 +58,9 @@ MAX_FREE_TURNS = int(os.getenv("MAX_FREE_TURNS", "3"))
 MAX_FREE_MESSAGE_TOKENS = int(os.getenv("MAX_FREE_MESSAGE_TOKENS", "500"))
 FREE_PROVIDER = os.getenv("FREE_PROVIDER", "together")
 FREE_MODEL = os.getenv("FREE_MODEL", "deepseek-ai/DeepSeek-V3.1")
+
+# Session expiry: sessions inactive for this many seconds are eligible for cleanup
+SESSION_TTL_SECONDS = int(os.getenv("SESSION_TTL_SECONDS", str(24 * 60 * 60)))  # 24 hours
 
 # Server-side API keys (for free tier)
 SERVER_OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
@@ -221,17 +225,31 @@ def create_session(
         "free_turns_used": 0,
         "has_own_api_key": api_key is not None,
         "api_key": api_key,
-        "provider": provider
+        "provider": provider,
+        "created_at": datetime.now(timezone.utc),
+        "last_access": datetime.now(timezone.utc),
     }
 
     return session_id
 
 def get_session(session_id: str) -> Optional[Dict[str, Any]]:
-    """Get session data for a session, return None if session doesn't exist"""
+    """Get session data for a session, return None if session doesn't exist or is expired."""
     if session_id not in sessions:
         return None
 
-    return sessions[session_id]
+    session = sessions[session_id]
+
+    # Check if session has expired
+    last_access = session.get("last_access")
+    if last_access and (datetime.now(timezone.utc) - last_access).total_seconds() > SESSION_TTL_SECONDS:
+        # Clean up expired session and its conversations
+        del sessions[session_id]
+        conversations.pop(session_id, None)
+        return None
+
+    # Update last access time
+    session["last_access"] = datetime.now(timezone.utc)
+    return session
 
 def count_tokens(text: str, model: str = "gpt-4") -> int:
     """Count the number of tokens in a text string.
@@ -1093,14 +1111,19 @@ async def chat(
                 ))
             conv_data["messages"] = compressed_messages
 
-            # Persist compressed state for Google-authenticated users
+            # Persist compressed state for Google-authenticated users (non-blocking)
             if session.get("auth_type") == "google" and session.get("email"):
-                save_conversations(session["email"], user_conversations)
+                asyncio.get_event_loop().run_in_executor(
+                    None, save_conversations, session["email"], user_conversations
+                )
         else:
             messages_for_openai = [{"role": "system", "content": system_msg}]
             for msg in all_messages:
-                openai_role = "assistant" if msg.role == "assistant" else msg.role
-                messages_for_openai.append({"role": openai_role, "content": msg.content})
+                # Handle both Message objects and dicts (from Redis)
+                role = msg.role if hasattr(msg, "role") else msg.get("role", "user")
+                content = msg.content if hasattr(msg, "content") else msg.get("content", "")
+                openai_role = "assistant" if role == "assistant" else role
+                messages_for_openai.append({"role": openai_role, "content": content})
         
         # Create an async generator function for streaming responses
         async def generate():
@@ -1141,9 +1164,11 @@ async def chat(
                 user_conversations[conversation_id]["messages"].append(assistant_message)
                 user_conversations[conversation_id]["last_updated"] = datetime.now(timezone.utc)
 
-                # Persist conversations for Google-authenticated users
+                # Persist conversations for Google-authenticated users (non-blocking)
                 if session.get("auth_type") == "google" and session.get("email"):
-                    save_conversations(session["email"], user_conversations)
+                    asyncio.get_event_loop().run_in_executor(
+                        None, save_conversations, session["email"], user_conversations
+                    )
 
                 # Increment free turns counter if using server API key
                 if not session.get("has_own_api_key") and not session.get("is_whitelisted"):

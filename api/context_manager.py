@@ -44,6 +44,17 @@ KEEP_RECENT_MESSAGES = int(os.getenv("KEEP_RECENT_MESSAGES", "6"))
 SUMMARY_PREFIX = "[CONVERSATION SUMMARY]"
 
 
+def _to_dict(msg) -> Dict[str, str]:
+    """Normalize a message (Message object or dict) to a plain dict.
+
+    Handles both Pydantic Message objects (with .role/.content attributes)
+    and plain dicts loaded from Redis.
+    """
+    if isinstance(msg, dict):
+        return {"role": msg.get("role", "user"), "content": msg.get("content", "")}
+    return {"role": getattr(msg, "role", "user"), "content": getattr(msg, "content", "")}
+
+
 def _count_tokens(text: str, model: str = "gpt-4") -> int:
     """Count tokens in a text string using tiktoken."""
     try:
@@ -128,8 +139,8 @@ def compress_conversation(
         keep_recent = KEEP_RECENT_MESSAGES
 
     if len(messages) <= keep_recent + 1:
-        # Not enough messages to compress
-        return messages
+        # Not enough messages to compress — normalize to dicts for consistent return type
+        return [_to_dict(m) for m in messages]
 
     # Split: messages to summarize vs. messages to keep
     to_summarize = messages[:-keep_recent]
