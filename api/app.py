@@ -33,15 +33,17 @@ from dotenv import load_dotenv
 # that read config via os.getenv() at module level.
 load_dotenv()
 
+# Add current directory to Python path so Vercel can find sibling modules
+# (persistence, context_manager). Must happen BEFORE importing them.
+current_dir = os.path.dirname(os.path.abspath(__file__))
+if current_dir not in sys.path:
+    sys.path.insert(0, current_dir)
+
 from persistence import load_conversations, save_conversations
 from context_manager import (
     should_compress, compress_conversation, count_conversation_tokens,
     SUMMARY_PREFIX,
 )
-
-current_dir = os.path.dirname(os.path.abspath(__file__))
-if current_dir not in sys.path:
-    sys.path.insert(0, current_dir)
 
 # ============================================
 # Google OAuth Configuration
