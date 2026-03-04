@@ -1,3 +1,36 @@
+# 🗄️ Merge Instructions: Upstash Redis Persistence
+
+## What this branch does
+Adds Upstash Redis conversation persistence for Google-authenticated users. Chat history now survives across logout/login cycles and server restarts.
+
+## Prerequisites
+Before deploying, set up Upstash Redis:
+1. Create a free database at https://console.upstash.com/
+2. Set `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` env vars in your Vercel project settings (or `.env` for local dev)
+
+## Option A: GitHub PR (Web UI)
+1. Go to your repo on GitHub
+2. Click **"Compare & pull request"** for `feature/upstash-redis-persistence`
+3. Set base branch to `main`
+4. Review the changes, then **"Create pull request"**
+5. After review, click **"Merge pull request"**
+
+## Option B: GitHub CLI
+```bash
+# Push the branch
+git push origin feature/upstash-redis-persistence
+
+# Create a PR
+gh pr create --base main --head feature/upstash-redis-persistence \
+  --title "feat: Add Upstash Redis conversation persistence" \
+  --body "Adds lightweight conversation persistence for Google-authenticated users using Upstash Redis."
+
+# After review, merge
+gh pr merge --squash
+```
+
+---
+
 # 🚀 Merge Instructions: Google OAuth Authentication Feature
 
 Hey there! 👋 Ready to bring Google OAuth authentication to the main branch? This guide will walk you through merging PR #13 like a pro.

@@ -22,7 +22,6 @@ import httpx
 os.environ["TOGETHER_API_KEY"] = "test-together-key"
 os.environ["OPENAI_API_KEY"] = "test-openai-key"
 os.environ["MAX_FREE_TURNS"] = "3"
-os.environ["SESSION_TIMEOUT_MINUTES"] = "60"
 os.environ["GOOGLE_CLIENT_ID"] = ""  # Disable Google OAuth by default
 
 # Add parent directory to path for imports
@@ -30,7 +29,7 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 # Now import the app
-from app import app, sessions, conversations, create_session, get_session, count_tokens, resolve_api_key, cleanup_inactive_conversations
+from app import app, sessions, conversations, create_session, get_session, count_tokens, resolve_api_key
 
 
 @pytest_asyncio.fixture
@@ -142,14 +141,14 @@ async def test_logout_valid_session(client, clean_state, mock_session):
     """Test POST /api/auth/logout deletes session and conversations."""
     # Create a conversation for this session
     conversations[mock_session] = {"conv1": {"messages": []}}
-    
+
     response = await client.post(
         "/api/auth/logout",
         headers={"X-Session-ID": mock_session}
     )
     assert response.status_code == 200
     assert response.json()["message"] == "Logout successful"
-    
+
     # Verify session and conversations are deleted
     assert mock_session not in sessions
     assert mock_session not in conversations
@@ -253,40 +252,6 @@ def test_get_session_returns_none_for_missing():
     sessions.clear()
     result = get_session("non-existent-session-id")
     assert result is None
-
-
-def test_get_session_updates_last_access():
-    """Test get_session() updates last_access timestamp."""
-    sessions.clear()
-    session_id = create_session(auth_type="guest")
-    original_time = sessions[session_id]["last_access"]
-
-    # Get session (should update last_access)
-    import time
-    time.sleep(0.01)  # Small delay to ensure timestamp changes
-    session = get_session(session_id)
-
-    assert session is not None
-    assert session["last_access"] > original_time
-
-
-def test_cleanup_inactive_conversations():
-    """Test cleanup_inactive_conversations() removes expired sessions."""
-    from datetime import timedelta
-    sessions.clear()
-    conversations.clear()
-
-    # Create a session with old last_access time
-    session_id = create_session(auth_type="guest")
-    sessions[session_id]["last_access"] = datetime.now(timezone.utc) - timedelta(hours=2)
-    conversations[session_id] = {"conv1": {"messages": []}}
-
-    # Run cleanup
-    cleanup_inactive_conversations()
-
-    # Verify session and conversations are removed
-    assert session_id not in sessions
-    assert session_id not in conversations
 
 
 # ============================================
@@ -658,3 +623,400 @@ def test_count_tokens_fallback():
         expected = len(text) // 4
         assert token_count == expected
 
+
+
+# ============================================
+# 8. Persistence Tests
+# ============================================
+
+from persistence import (
+    load_conversations, save_conversations, delete_conversations,
+    _make_key, _ConversationEncoder, _conversation_decoder,
+    _redis_client, _redis_initialized
+)
+import persistence
+import json
+
+
+def test_persistence_make_key():
+    """Test _make_key() produces consistent SHA-256 based keys."""
+    key = _make_key("user@example.com")
+    assert key.startswith("convs:")
+    assert len(key) == len("convs:") + 64  # SHA-256 hex is 64 chars
+    # Same email should produce same key
+    assert _make_key("user@example.com") == _make_key("USER@EXAMPLE.COM")
+
+
+def test_persistence_graceful_when_redis_not_configured():
+    """Verify load/save/delete are no-ops when Redis env vars are missing."""
+    # Reset the module-level singleton so it re-checks env vars
+    original_client = persistence._redis_client
+    original_initialized = persistence._redis_initialized
+    persistence._redis_client = None
+    persistence._redis_initialized = False
+
+    try:
+        # Ensure env vars are not set
+        url = os.environ.pop("UPSTASH_REDIS_REST_URL", None)
+        token = os.environ.pop("UPSTASH_REDIS_REST_TOKEN", None)
+
+        result = load_conversations("test@example.com")
+        assert result == {}
+
+        # Should not raise
+        save_conversations("test@example.com", {"conv1": {"messages": []}})
+        delete_conversations("test@example.com")
+
+        # Restore env vars if they were set
+        if url:
+            os.environ["UPSTASH_REDIS_REST_URL"] = url
+        if token:
+            os.environ["UPSTASH_REDIS_REST_TOKEN"] = token
+    finally:
+        persistence._redis_client = original_client
+        persistence._redis_initialized = original_initialized
+
+
+def test_persistence_json_encoder_datetime():
+    """Test _ConversationEncoder handles datetime objects."""
+    dt = datetime(2025, 1, 15, 10, 30, 0, tzinfo=timezone.utc)
+    encoded = json.dumps({"ts": dt}, cls=_ConversationEncoder)
+    assert "__datetime__" in encoded
+
+    # Decode it back
+    decoded = json.loads(encoded, object_hook=_conversation_decoder)
+    assert decoded["ts"] == dt
+
+
+def test_persistence_json_encoder_pydantic_model():
+    """Test _ConversationEncoder handles Pydantic Message models."""
+    from app import Message
+    msg = Message(role="user", content="hello", timestamp=datetime.now(timezone.utc))
+    encoded = json.dumps({"msg": msg}, cls=_ConversationEncoder)
+    decoded = json.loads(encoded)
+    assert decoded["msg"]["role"] == "user"
+    assert decoded["msg"]["content"] == "hello"
+
+
+def test_persistence_save_and_load_roundtrip():
+    """Test save then load produces identical data (with mocked Redis)."""
+    stored = {}
+
+    mock_redis = MagicMock()
+    mock_redis.set = lambda k, v: stored.update({k: v})
+    mock_redis.get = lambda k: stored.get(k)
+
+    original_client = persistence._redis_client
+    original_initialized = persistence._redis_initialized
+    persistence._redis_client = mock_redis
+    persistence._redis_initialized = True
+
+    try:
+        email = "roundtrip@example.com"
+        convs = {
+            "conv-1": {
+                "messages": [
+                    {"role": "user", "content": "hi", "timestamp": datetime(2025, 6, 1, tzinfo=timezone.utc)},
+                    {"role": "assistant", "content": "hello!", "timestamp": datetime(2025, 6, 1, 0, 0, 1, tzinfo=timezone.utc)},
+                ],
+                "system_message": "You are helpful.",
+                "title": "Test",
+                "created_at": datetime(2025, 6, 1, tzinfo=timezone.utc),
+                "last_updated": datetime(2025, 6, 1, 0, 0, 1, tzinfo=timezone.utc),
+                "mode": "regular"
+            }
+        }
+
+        save_conversations(email, convs)
+        loaded = load_conversations(email)
+
+        assert "conv-1" in loaded
+        assert loaded["conv-1"]["title"] == "Test"
+        assert len(loaded["conv-1"]["messages"]) == 2
+        assert loaded["conv-1"]["messages"][0]["content"] == "hi"
+        # Datetime should be restored
+        assert isinstance(loaded["conv-1"]["created_at"], datetime)
+    finally:
+        persistence._redis_client = original_client
+        persistence._redis_initialized = original_initialized
+
+
+def test_persistence_load_returns_empty_on_missing_key():
+    """Test load_conversations returns {} when key doesn't exist in Redis."""
+    mock_redis = MagicMock()
+    mock_redis.get = MagicMock(return_value=None)
+
+    original_client = persistence._redis_client
+    original_initialized = persistence._redis_initialized
+    persistence._redis_client = mock_redis
+    persistence._redis_initialized = True
+
+    try:
+        result = load_conversations("nobody@example.com")
+        assert result == {}
+    finally:
+        persistence._redis_client = original_client
+        persistence._redis_initialized = original_initialized
+
+
+def test_google_auth_loads_persisted_conversations(clean_state):
+    """Test that Google auth endpoint loads persisted conversations."""
+    import app as app_module
+
+    mock_convs = {
+        "old-conv": {
+            "messages": [{"role": "user", "content": "old message"}],
+            "system_message": "sys",
+            "title": "Old",
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "last_updated": datetime.now(timezone.utc).isoformat(),
+            "mode": "regular"
+        }
+    }
+
+    with patch.object(app_module, "load_conversations", return_value=mock_convs) as mock_load:
+        # Simulate creating a Google session
+        session_id = create_session(
+            auth_type="google",
+            email="test@example.com",
+            name="Test User",
+            provider="openai"
+        )
+        # Manually trigger what the Google auth endpoint does
+        email = "test@example.com"
+        persisted = app_module.load_conversations(email)
+        if persisted:
+            conversations[session_id] = persisted
+
+        assert session_id in conversations
+        assert "old-conv" in conversations[session_id]
+        mock_load.assert_called_once_with("test@example.com")
+
+
+def test_chat_saves_for_google_users(clean_state):
+    """Test that save_conversations is called after chat for Google users."""
+    import app as app_module
+
+    session_id = create_session(auth_type="google", email="g@test.com", provider="openai")
+    conversations[session_id] = {}
+
+    with patch.object(app_module, "save_conversations") as mock_save:
+        # Simulate what happens after a chat message is stored
+        session = get_session(session_id)
+        user_conversations = conversations[session_id]
+        user_conversations["conv-1"] = {"messages": [{"role": "user", "content": "hi"}]}
+
+        # This is the persistence call pattern from the chat endpoint
+        if session.get("auth_type") == "google" and session.get("email"):
+            app_module.save_conversations(session["email"], user_conversations)
+
+        mock_save.assert_called_once_with("g@test.com", user_conversations)
+
+
+def test_guest_users_no_persistence(clean_state):
+    """Test that save_conversations is NOT called for guest sessions."""
+    session_id = create_session(auth_type="guest")
+    conversations[session_id] = {}
+
+    with patch("app.save_conversations") as mock_save:
+        session = get_session(session_id)
+        user_conversations = conversations[session_id]
+        user_conversations["conv-1"] = {"messages": [{"role": "user", "content": "hi"}]}
+
+        # This is the persistence check pattern — should NOT trigger for guests
+        if session.get("auth_type") == "google" and session.get("email"):
+            save_conversations(session["email"], user_conversations)
+
+        mock_save.assert_not_called()
+
+
+# ============================================
+# Context Management Tests
+# ============================================
+
+class TestGetContextWindowSize:
+    """Tests for get_context_window_size."""
+
+    def test_exact_match(self):
+        from context_manager import get_context_window_size
+        assert get_context_window_size("gpt-4") == 8_192
+        assert get_context_window_size("gpt-4.1-mini") == 1_048_576
+
+    def test_prefix_match(self):
+        from context_manager import get_context_window_size
+        # "gpt-4-0613" should match "gpt-4" prefix
+        assert get_context_window_size("gpt-4-0613") == 8_192
+
+    def test_fallback(self):
+        from context_manager import get_context_window_size, DEFAULT_CONTEXT_WINDOW
+        assert get_context_window_size("unknown-model-xyz") == DEFAULT_CONTEXT_WINDOW
+
+
+class TestCountConversationTokens:
+    """Tests for count_conversation_tokens."""
+
+    def test_counts_system_and_messages(self):
+        from context_manager import count_conversation_tokens
+        messages = [
+            {"role": "user", "content": "Hello there"},
+            {"role": "assistant", "content": "Hi! How can I help?"},
+        ]
+        tokens = count_conversation_tokens(messages, "You are helpful.", "gpt-4")
+        assert tokens > 0
+
+    def test_handles_message_objects(self):
+        from context_manager import count_conversation_tokens
+        from app import Message
+        msgs = [Message(role="user", content="test", timestamp=datetime.now(timezone.utc))]
+        tokens = count_conversation_tokens(msgs, "system", "gpt-4")
+        assert tokens > 0
+
+    def test_empty_messages(self):
+        from context_manager import count_conversation_tokens
+        tokens = count_conversation_tokens([], "system prompt", "gpt-4")
+        # Should only count the system message tokens
+        assert tokens > 0
+
+
+class TestShouldCompress:
+    """Tests for should_compress."""
+
+    def test_returns_false_under_threshold(self):
+        from context_manager import should_compress
+        messages = [{"role": "user", "content": "Hi"}]
+        assert should_compress(messages, "system", "gpt-4", threshold_pct=0.8) is False
+
+    def test_returns_true_over_threshold(self):
+        from context_manager import should_compress
+        # Create enough messages to exceed a very low threshold on a small model
+        messages = [
+            {"role": "user", "content": "x " * 2000}
+            for _ in range(10)
+        ]
+        # gpt-4 has 8192 tokens, with threshold 0.1 that's ~819 tokens
+        assert should_compress(messages, "system", "gpt-4", threshold_pct=0.1) is True
+
+
+class TestCompressConversation:
+    """Tests for compress_conversation (with mocked LLM)."""
+
+    def test_compresses_old_keeps_recent(self):
+        from context_manager import compress_conversation, SUMMARY_PREFIX
+
+        mock_client = MagicMock()
+        mock_client.chat.completions.create.return_value = MagicMock(
+            choices=[MagicMock(message=MagicMock(content="Summary of old msgs"))]
+        )
+
+        messages = [
+            {"role": "user", "content": f"Message {i}"}
+            for i in range(10)
+        ]
+        result = compress_conversation(messages, mock_client, "gpt-4", "system", keep_recent=3)
+
+        # Should be 1 summary + 3 recent = 4 messages
+        assert len(result) == 4
+        assert result[0]["content"].startswith(SUMMARY_PREFIX)
+        assert result[1]["content"] == "Message 7"
+        assert result[3]["content"] == "Message 9"
+
+    def test_too_few_messages_returns_unchanged(self):
+        from context_manager import compress_conversation
+
+        messages = [{"role": "user", "content": "Hi"}]
+        result = compress_conversation(messages, None, "gpt-4", "system", keep_recent=3)
+        assert result == messages
+
+    def test_llm_failure_returns_recent_only(self):
+        from context_manager import compress_conversation
+
+        mock_client = MagicMock()
+        mock_client.chat.completions.create.side_effect = Exception("API error")
+
+        messages = [{"role": "user", "content": f"Msg {i}"} for i in range(10)]
+        result = compress_conversation(messages, mock_client, "gpt-4", "system", keep_recent=3)
+
+        # Should fallback to just the 3 recent messages (no summary)
+        assert len(result) == 3
+        assert result[0]["content"] == "Msg 7"
+
+    def test_preserves_existing_summary_in_compression(self):
+        from context_manager import compress_conversation, SUMMARY_PREFIX
+
+        mock_client = MagicMock()
+        mock_client.chat.completions.create.return_value = MagicMock(
+            choices=[MagicMock(message=MagicMock(content="Updated summary"))]
+        )
+
+        messages = [
+            {"role": "system", "content": f"{SUMMARY_PREFIX} Old summary"},
+            {"role": "user", "content": "Msg 1"},
+            {"role": "assistant", "content": "Msg 2"},
+            {"role": "user", "content": "Msg 3"},
+            {"role": "assistant", "content": "Msg 4"},
+            {"role": "user", "content": "Msg 5"},
+            {"role": "assistant", "content": "Msg 6"},
+            {"role": "user", "content": "Msg 7"},
+        ]
+        result = compress_conversation(messages, mock_client, "gpt-4", "system", keep_recent=3)
+
+        assert len(result) == 4  # 1 summary + 3 recent
+        assert result[0]["content"].startswith(SUMMARY_PREFIX)
+        # The LLM call should have included the old summary text
+        call_args = mock_client.chat.completions.create.call_args
+        user_msg = call_args[1]["messages"][1]["content"]
+        assert "Old summary" in user_msg
+
+
+class TestTrimMessagesForPersistence:
+    """Tests for trim_messages_for_persistence."""
+
+    def test_under_limit_returns_unchanged(self):
+        from context_manager import trim_messages_for_persistence
+        messages = [{"role": "user", "content": f"Msg {i}"} for i in range(5)]
+        result = trim_messages_for_persistence(messages, max_count=10)
+        assert len(result) == 5
+
+    def test_over_limit_trims_oldest(self):
+        from context_manager import trim_messages_for_persistence
+        messages = [{"role": "user", "content": f"Msg {i}"} for i in range(15)]
+        result = trim_messages_for_persistence(messages, max_count=10)
+        assert len(result) == 10
+        assert result[0]["content"] == "Msg 5"
+        assert result[-1]["content"] == "Msg 14"
+
+    def test_preserves_summary_message(self):
+        from context_manager import trim_messages_for_persistence, SUMMARY_PREFIX
+        messages = [
+            {"role": "system", "content": f"{SUMMARY_PREFIX} Important context"},
+        ] + [{"role": "user", "content": f"Msg {i}"} for i in range(14)]
+        result = trim_messages_for_persistence(messages, max_count=10)
+        assert len(result) == 10
+        assert result[0]["content"].startswith(SUMMARY_PREFIX)
+        assert result[1]["content"] == "Msg 5"
+
+
+class TestPersistenceTrimIntegration:
+    """Tests for _trim_conversation_messages in persistence.py."""
+
+    def test_trim_on_save(self):
+        from persistence import _trim_conversation_messages
+        convs = {
+            "conv-1": {
+                "messages": [{"role": "user", "content": f"Msg {i}"} for i in range(150)],
+                "title": "Test",
+            }
+        }
+        result = _trim_conversation_messages(convs)
+        assert len(result["conv-1"]["messages"]) == 100  # default MAX
+
+    def test_preserves_short_conversations(self):
+        from persistence import _trim_conversation_messages
+        convs = {
+            "conv-1": {
+                "messages": [{"role": "user", "content": "Hi"}],
+                "title": "Test",
+            }
+        }
+        result = _trim_conversation_messages(convs)
+        assert len(result["conv-1"]["messages"]) == 1

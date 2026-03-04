@@ -1,4 +1,5 @@
 # Import required FastAPI components for building the API
+import asyncio
 import hashlib
 import json
 import os
@@ -6,10 +7,8 @@ import re
 # Add current directory to Python path for Vercel deployment
 import sys
 import tempfile
-import threading
-import time
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from fastapi import (FastAPI, File, Header, HTTPException, Request,
@@ -30,20 +29,19 @@ from google.auth.transport import requests as google_requests
 import tiktoken
 from dotenv import load_dotenv
 
-# Load environment variables from .env file
+# Load environment variables from .env file BEFORE importing modules
+# that read config via os.getenv() at module level.
 load_dotenv()
+
+from persistence import load_conversations, save_conversations
+from context_manager import (
+    should_compress, compress_conversation, count_conversation_tokens,
+    SUMMARY_PREFIX,
+)
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 if current_dir not in sys.path:
     sys.path.insert(0, current_dir)
-
-# ============================================
-# Configurable Timeout Settings
-# ============================================
-# Session timeout: How long before an inactive session is cleaned up (in minutes)
-SESSION_TIMEOUT_MINUTES = int(os.getenv("SESSION_TIMEOUT_MINUTES", "60"))
-# Cleanup interval: How often the cleanup scheduler runs (in seconds)
-CLEANUP_INTERVAL_SECONDS = int(os.getenv("CLEANUP_INTERVAL_SECONDS", "60"))
 
 # ============================================
 # Google OAuth Configuration
@@ -62,6 +60,9 @@ MAX_FREE_TURNS = int(os.getenv("MAX_FREE_TURNS", "3"))
 MAX_FREE_MESSAGE_TOKENS = int(os.getenv("MAX_FREE_MESSAGE_TOKENS", "500"))
 FREE_PROVIDER = os.getenv("FREE_PROVIDER", "together")
 FREE_MODEL = os.getenv("FREE_MODEL", "deepseek-ai/DeepSeek-V3.1")
+
+# Session expiry: sessions inactive for this many seconds are eligible for cleanup
+SESSION_TTL_SECONDS = int(os.getenv("SESSION_TTL_SECONDS", str(24 * 60 * 60)))  # 24 hours
 
 # Server-side API keys (for free tier)
 SERVER_OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
@@ -227,19 +228,30 @@ def create_session(
         "has_own_api_key": api_key is not None,
         "api_key": api_key,
         "provider": provider,
-        "last_access": datetime.now(timezone.utc)
+        "created_at": datetime.now(timezone.utc),
+        "last_access": datetime.now(timezone.utc),
     }
 
     return session_id
 
 def get_session(session_id: str) -> Optional[Dict[str, Any]]:
-    """Get session data for a session, return None if session doesn't exist"""
+    """Get session data for a session, return None if session doesn't exist or is expired."""
     if session_id not in sessions:
         return None
 
-    # Update session access time
-    sessions[session_id]["last_access"] = datetime.now(timezone.utc)
-    return sessions[session_id]
+    session = sessions[session_id]
+
+    # Check if session has expired
+    last_access = session.get("last_access")
+    if last_access and (datetime.now(timezone.utc) - last_access).total_seconds() > SESSION_TTL_SECONDS:
+        # Clean up expired session and its conversations
+        del sessions[session_id]
+        conversations.pop(session_id, None)
+        return None
+
+    # Update last access time
+    session["last_access"] = datetime.now(timezone.utc)
+    return session
 
 def count_tokens(text: str, model: str = "gpt-4") -> int:
     """Count the number of tokens in a text string.
@@ -321,45 +333,6 @@ def get_session_conversations(session_id: str) -> Dict[str, Dict[str, Any]]:
     if session_id not in conversations:
         conversations[session_id] = {}
     return conversations[session_id]
-
-def cleanup_inactive_conversations():
-    """Clean up conversations and sessions that have been inactive.
-
-    Timeout is configurable via SESSION_TIMEOUT_MINUTES env var (default: 60).
-    """
-    current_time = datetime.now(timezone.utc)
-    inactive_sessions = []
-    # Identify inactive sessions based on configurable timeout
-    for session_id, session_data in sessions.items():
-        if current_time - session_data["last_access"] > timedelta(minutes=SESSION_TIMEOUT_MINUTES):
-            inactive_sessions.append(session_id)
-    # Remove conversations and sessions for inactive session_ids
-    for session_id in inactive_sessions:
-        if session_id in conversations:
-            del conversations[session_id]
-        del sessions[session_id]
-        print(f"Cleaned up inactive session and its conversations: {session_id[:8]}...")
-
-def start_cleanup_scheduler():
-    """Start the background cleanup scheduler.
-
-    Interval is configurable via CLEANUP_INTERVAL_SECONDS env var (default: 60).
-    """
-    def cleanup_loop():
-        while True:
-            try:
-                cleanup_inactive_conversations()
-                time.sleep(CLEANUP_INTERVAL_SECONDS)
-            except Exception as e:
-                print(f"Error in cleanup scheduler: {e}")
-                time.sleep(CLEANUP_INTERVAL_SECONDS)
-
-    cleanup_thread = threading.Thread(target=cleanup_loop, daemon=True)
-    cleanup_thread.start()
-    print(f"Started conversation cleanup scheduler (session timeout: {SESSION_TIMEOUT_MINUTES}min, interval: {CLEANUP_INTERVAL_SECONDS}s)")
-
-# Start the cleanup scheduler when the module loads
-start_cleanup_scheduler()
 
 # Define the data model for chat requests using Pydantic
 # This ensures incoming request data is properly validated
@@ -792,6 +765,14 @@ async def google_auth(request: Request, auth_request: GoogleAuthRequest):
             session = get_session(session_id)
             is_whitelisted = session["is_whitelisted"]
 
+            # Load persisted conversations for Google-authenticated users (non-blocking)
+            if email:
+                persisted = await asyncio.get_event_loop().run_in_executor(
+                    None, load_conversations, email
+                )
+                if persisted:
+                    conversations[session_id] = persisted
+
             if is_whitelisted:
                 message = f"Welcome {name}! You have unlimited access."
                 free_turns_remaining = -1  # Unlimited
@@ -881,7 +862,15 @@ async def logout(
     if not session:
         raise HTTPException(status_code=401, detail="Invalid or expired session")
 
-    # Delete session and its conversations
+    # Persist conversations for Google users before clearing in-memory (non-blocking)
+    if session.get("auth_type") == "google" and session.get("email"):
+        user_convs = conversations.get(x_session_id, {})
+        if user_convs:
+            await asyncio.get_event_loop().run_in_executor(
+                None, save_conversations, session["email"], user_convs
+            )
+
+    # Delete session and its conversations from memory
     if x_session_id in conversations:
         del conversations[x_session_id]
     if x_session_id in sessions:
@@ -1103,21 +1092,44 @@ async def chat(
             user_conversations[conversation_id]["title"] = first_line[:50] + ("..." if len(first_line) > 50 else "")
         
         # Build the full conversation context for OpenAI
-        messages_for_openai = [
-            {"role": "system", "content": user_conversations[conversation_id]["system_message"]}
-        ]
-        
-        # Add conversation history (limit to last 20 messages to avoid token limits)
-        recent_messages = user_conversations[conversation_id]["messages"][-20:]
-        for msg in recent_messages:
-            # Map our roles to OpenAI's expected roles
-            # By using alternating user and assistant messages, 
-            # you capture the previous state of a conversation in one request to the model.
-            openai_role = "assistant" if msg.role == "assistant" else msg.role
-            messages_for_openai.append({
-                "role": openai_role,
-                "content": msg.content
-            })
+        conv_data = user_conversations[conversation_id]
+        system_msg = conv_data["system_message"]
+        all_messages = conv_data["messages"]
+
+        # Token-aware context management: compress if approaching context window
+        if should_compress(all_messages, system_msg, chat_request.model):
+            compressed = compress_conversation(
+                all_messages, client, chat_request.model, system_msg
+            )
+            # Build messages_for_openai from compressed result (already dicts)
+            messages_for_openai = [{"role": "system", "content": system_msg}]
+            for m in compressed:
+                openai_role = "assistant" if m.get("role") == "assistant" else m.get("role", "user")
+                messages_for_openai.append({"role": openai_role, "content": m.get("content", "")})
+
+            # Update in-memory messages with compressed version (convert to Message objects)
+            compressed_messages = []
+            for m in compressed:
+                compressed_messages.append(Message(
+                    role=m.get("role", "user"),
+                    content=m.get("content", ""),
+                    timestamp=datetime.now(timezone.utc),
+                ))
+            conv_data["messages"] = compressed_messages
+
+            # Persist compressed state for Google-authenticated users (non-blocking)
+            if session.get("auth_type") == "google" and session.get("email"):
+                asyncio.get_event_loop().run_in_executor(
+                    None, save_conversations, session["email"], user_conversations
+                )
+        else:
+            messages_for_openai = [{"role": "system", "content": system_msg}]
+            for msg in all_messages:
+                # Handle both Message objects and dicts (from Redis)
+                role = msg.role if hasattr(msg, "role") else msg.get("role", "user")
+                content = msg.content if hasattr(msg, "content") else msg.get("content", "")
+                openai_role = "assistant" if role == "assistant" else role
+                messages_for_openai.append({"role": openai_role, "content": content})
         
         # Create an async generator function for streaming responses
         async def generate():
@@ -1157,6 +1169,12 @@ async def chat(
                 )
                 user_conversations[conversation_id]["messages"].append(assistant_message)
                 user_conversations[conversation_id]["last_updated"] = datetime.now(timezone.utc)
+
+                # Persist conversations for Google-authenticated users (non-blocking)
+                if session.get("auth_type") == "google" and session.get("email"):
+                    asyncio.get_event_loop().run_in_executor(
+                        None, save_conversations, session["email"], user_conversations
+                    )
 
                 # Increment free turns counter if using server API key
                 if not session.get("has_own_api_key") and not session.get("is_whitelisted"):
@@ -1294,16 +1312,24 @@ async def delete_conversation(
     session_id = x_session_id
     
     # Validate session
-    if not get_session(session_id):
+    session = get_session(session_id)
+    if not session:
         raise HTTPException(status_code=401, detail="Invalid or expired session")
-    
+
     # Get session-specific conversations
     user_conversations = get_session_conversations(session_id)
-    
+
     if conversation_id not in user_conversations:
         raise HTTPException(status_code=404, detail="Conversation not found")
-    
+
     del user_conversations[conversation_id]
+
+    # Persist updated conversations for Google-authenticated users (non-blocking)
+    if session.get("auth_type") == "google" and session.get("email"):
+        await asyncio.get_event_loop().run_in_executor(
+            None, save_conversations, session["email"], user_conversations
+        )
+
     return {"message": "Conversation deleted successfully"}
 
 # Endpoint to clear all conversations for a specific user
@@ -1327,13 +1353,20 @@ async def clear_all_conversations(
     session_id = x_session_id
     
     # Validate session
-    if not get_session(session_id):
+    session = get_session(session_id)
+    if not session:
         raise HTTPException(status_code=401, detail="Invalid or expired session")
-    
+
     # Get session-specific conversations and clear them
     user_conversations = get_session_conversations(session_id)
     user_conversations.clear()
-    
+
+    # Persist cleared state for Google-authenticated users (non-blocking)
+    if session.get("auth_type") == "google" and session.get("email"):
+        await asyncio.get_event_loop().run_in_executor(
+            None, save_conversations, session["email"], user_conversations
+        )
+
     return {"message": "All conversations cleared successfully"}
 
 # Document Upload endpoint
@@ -1634,6 +1667,12 @@ async def rag_query(
         )
         user_conversations[conversation_id]["messages"].append(assistant_message)
         user_conversations[conversation_id]["last_updated"] = datetime.now(timezone.utc)
+
+        # Persist conversations for Google-authenticated users (non-blocking)
+        if session.get("auth_type") == "google" and session.get("email"):
+            await asyncio.get_event_loop().run_in_executor(
+                None, save_conversations, session["email"], user_conversations
+            )
 
         # Increment free turns counter if using server API key
         if not session.get("has_own_api_key") and not session.get("is_whitelisted"):

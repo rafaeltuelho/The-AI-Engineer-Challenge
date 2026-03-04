@@ -28,6 +28,8 @@ dependencies = [
     "httpcore>=1.0.9",
     "requests>=2.32.5",
     "python-dotenv>=1.1.1",
+    # Conversation persistence (Upstash Redis - HTTP-based, serverless-friendly)
+    "upstash-redis>=1.1.0",
     # RAG/Vector database dependencies
     "qdrant-client>=1.7.0",
 ]
