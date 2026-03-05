@@ -39,7 +39,7 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 if current_dir not in sys.path:
     sys.path.insert(0, current_dir)
 
-from persistence import load_conversations, save_conversations
+from persistence import load_conversations, save_conversations, save_session, load_session, delete_session
 from context_manager import (
     should_compress, compress_conversation, count_conversation_tokens,
     SUMMARY_PREFIX,
@@ -63,8 +63,7 @@ MAX_FREE_MESSAGE_TOKENS = int(os.getenv("MAX_FREE_MESSAGE_TOKENS", "500"))
 FREE_PROVIDER = os.getenv("FREE_PROVIDER", "together")
 FREE_MODEL = os.getenv("FREE_MODEL", "deepseek-ai/DeepSeek-V3.1")
 
-# Session expiry: sessions inactive for this many seconds are eligible for cleanup
-SESSION_TTL_SECONDS = int(os.getenv("SESSION_TTL_SECONDS", str(24 * 60 * 60)))  # 24 hours
+
 
 # Server-side API keys (for free tier)
 SERVER_OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
@@ -186,9 +185,9 @@ conversations: Dict[str, Dict[str, Dict[str, Any]]] = {}
 #   "is_whitelisted": bool,
 #   "free_turns_used": int,
 #   "has_own_api_key": bool,
-#   "api_key": Optional[str],  # Only for api_key auth_type
+#   "api_key": Optional[str],  # Only for api_key auth_type (not persisted to Redis)
 #   "provider": str,
-#   "last_access": datetime
+#   "created_at": datetime
 # }}
 sessions: Dict[str, Dict[str, Any]] = {}
 
@@ -231,29 +230,38 @@ def create_session(
         "api_key": api_key,
         "provider": provider,
         "created_at": datetime.now(timezone.utc),
-        "last_access": datetime.now(timezone.utc),
     }
+
+    # Persist session to Redis (best-effort, non-blocking)
+    try:
+        save_session(session_id, sessions[session_id])
+    except Exception:
+        # Silently ignore persistence errors - session is still valid in memory
+        pass
 
     return session_id
 
 def get_session(session_id: str) -> Optional[Dict[str, Any]]:
-    """Get session data for a session, return None if session doesn't exist or is expired."""
-    if session_id not in sessions:
-        return None
+    """Get session data for a session, return None if session doesn't exist.
 
-    session = sessions[session_id]
+    Checks in-memory cache first, then falls back to Redis if not found.
+    """
+    # Check in-memory cache first
+    if session_id in sessions:
+        return sessions[session_id]
 
-    # Check if session has expired
-    last_access = session.get("last_access")
-    if last_access and (datetime.now(timezone.utc) - last_access).total_seconds() > SESSION_TTL_SECONDS:
-        # Clean up expired session and its conversations
-        del sessions[session_id]
-        conversations.pop(session_id, None)
-        return None
+    # Fall back to Redis
+    try:
+        session_data = load_session(session_id)
+        if session_data:
+            # Populate in-memory cache
+            sessions[session_id] = session_data
+            return session_data
+    except Exception:
+        # Silently ignore Redis errors - session might still be in memory
+        pass
 
-    # Update last access time
-    session["last_access"] = datetime.now(timezone.utc)
-    return session
+    return None
 
 def count_tokens(text: str, model: str = "gpt-4") -> int:
     """Count the number of tokens in a text string.
@@ -878,6 +886,13 @@ async def logout(
     if x_session_id in sessions:
         del sessions[x_session_id]
 
+    # Delete session from Redis (best-effort)
+    try:
+        delete_session(x_session_id)
+    except Exception:
+        # Silently ignore persistence errors
+        pass
+
     return {"message": "Logout successful"}
 
 def _fetch_suggestions() -> List[str]:
@@ -1182,6 +1197,11 @@ async def chat(
                 if not session.get("has_own_api_key") and not session.get("is_whitelisted"):
                     session["free_turns_used"] += 1
                     print(f"Free turn used: {session['free_turns_used']}/{MAX_FREE_TURNS} for session {session_id[:8]}...")
+                    # Persist updated session to Redis (best-effort)
+                    try:
+                        save_session(session_id, session)
+                    except Exception:
+                        pass
 
             except Exception as e:
                 # Remove the user message if the API call failed
@@ -1680,6 +1700,11 @@ async def rag_query(
         if not session.get("has_own_api_key") and not session.get("is_whitelisted"):
             session["free_turns_used"] += 1
             print(f"Free turn used (RAG): {session['free_turns_used']}/{MAX_FREE_TURNS} for session {session_id[:8]}...")
+            # Persist updated session to Redis (best-effort)
+            try:
+                save_session(session_id, session)
+            except Exception:
+                pass
 
         # Calculate free turns remaining
         if session.get("is_whitelisted"):

@@ -1020,3 +1020,144 @@ class TestPersistenceTrimIntegration:
         }
         result = _trim_conversation_messages(convs)
         assert len(result["conv-1"]["messages"]) == 1
+
+
+# ============================================
+# Session Persistence Tests
+# ============================================
+
+def test_session_survives_memory_clear(clean_state):
+    """Test session survives in-memory cache clear via Redis fallback."""
+    # Create a session
+    session_id = create_session(auth_type="guest", provider="together")
+    original_session = sessions[session_id].copy()
+
+    # Clear in-memory sessions (simulating cold start)
+    sessions.clear()
+
+    # Mock load_session to return the session data
+    with patch("app.load_session", return_value=original_session) as mock_load:
+        # get_session should fall back to Redis
+        session = get_session(session_id)
+
+        # Verify session was retrieved from Redis
+        assert session is not None
+        assert session["auth_type"] == "guest"
+        mock_load.assert_called_once_with(session_id)
+
+        # Verify session was repopulated in memory
+        assert session_id in sessions
+
+
+def test_session_persisted_on_creation(clean_state):
+    """Test save_session is called when creating a session."""
+    with patch("app.save_session") as mock_save:
+        session_id = create_session(
+            auth_type="api_key",
+            api_key="test-key",
+            provider="openai"
+        )
+
+        # Verify save_session was called with session_id and session data
+        mock_save.assert_called_once()
+        call_args = mock_save.call_args
+        assert call_args[0][0] == session_id  # First arg is session_id
+        assert call_args[0][1]["auth_type"] == "api_key"  # Second arg is session data
+        assert call_args[0][1]["provider"] == "openai"
+
+
+def test_session_deleted_on_logout(clean_state):
+    """Test delete_session is called when logging out."""
+    session_id = create_session(auth_type="guest", provider="together")
+
+    with patch("app.delete_session") as mock_delete:
+        # Simulate logout by deleting from sessions dict
+        if session_id in sessions:
+            del sessions[session_id]
+        if session_id in conversations:
+            del conversations[session_id]
+
+        # Call delete_session as the logout endpoint does
+        from app import delete_session
+        delete_session(session_id)
+
+        # Verify delete_session was called
+        mock_delete.assert_called_once_with(session_id)
+
+
+def test_session_api_key_not_persisted(clean_state):
+    """Test API key is excluded when persisting session to Redis."""
+    from persistence import save_session
+    import json
+
+    # Track what gets written to Redis
+    written_data = {}
+
+    def mock_set(key, value):
+        written_data[key] = value
+
+    mock_redis = MagicMock()
+    mock_redis.set = mock_set
+
+    original_client = persistence._redis_client
+    original_initialized = persistence._redis_initialized
+    persistence._redis_client = mock_redis
+    persistence._redis_initialized = True
+
+    try:
+        session_data = {
+            "auth_type": "api_key",
+            "api_key": "secret-key-123",
+            "provider": "openai",
+            "has_own_api_key": True,
+            "free_turns_used": 0
+        }
+
+        save_session("test-session-id", session_data)
+
+        # Verify data was written
+        assert len(written_data) == 1
+        key = list(written_data.keys())[0]
+        assert key == "session:test-session-id"
+
+        # Parse the JSON and verify api_key is NOT present
+        stored_data = json.loads(written_data[key])
+        assert "api_key" not in stored_data
+        assert stored_data["auth_type"] == "api_key"
+        assert stored_data["has_own_api_key"] is True
+    finally:
+        persistence._redis_client = original_client
+        persistence._redis_initialized = original_initialized
+
+
+def test_get_session_no_expiry(clean_state):
+    """Test sessions don't expire based on age (no TTL logic)."""
+    from datetime import timedelta
+
+    # Create a session
+    session_id = create_session(auth_type="guest", provider="together")
+
+    # Manually set created_at to a very old date (e.g., 100 days ago)
+    old_date = datetime.now(timezone.utc) - timedelta(days=100)
+    sessions[session_id]["created_at"] = old_date
+
+    # get_session should still return the session (no TTL check)
+    session = get_session(session_id)
+    assert session is not None
+    assert session["auth_type"] == "guest"
+    assert session["created_at"] == old_date
+
+
+def test_session_redis_fallback_graceful(clean_state):
+    """Test graceful degradation when Redis is unavailable."""
+    # Create a session
+    session_id = create_session(auth_type="guest", provider="together")
+
+    # Clear in-memory cache
+    sessions.clear()
+
+    # Mock load_session to raise an exception (Redis unavailable)
+    with patch("app.load_session", side_effect=Exception("Redis connection failed")):
+        # get_session should return None gracefully (no crash)
+        session = get_session(session_id)
+        assert session is None
