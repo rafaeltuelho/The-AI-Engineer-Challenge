@@ -339,9 +339,29 @@ def resolve_api_key(session_id: str, user_api_key: Optional[str] = None, provide
         return SERVER_OPENAI_API_KEY, resolved_provider
 
 def get_session_conversations(session_id: str) -> Dict[str, Dict[str, Any]]:
-    """Get conversations scoped to a specific session."""
+    """Get conversations scoped to a specific session.
+
+    Lazily rehydrates persisted conversations for Google-authenticated sessions
+    when the in-memory cache is missing but a valid session exists.
+    """
+    # Check in-memory cache first
     if session_id not in conversations:
-        conversations[session_id] = {}
+        # Resolve the session to check if we should rehydrate from persistence
+        session = get_session(session_id)
+
+        # For Google-authenticated sessions with an email, try to load persisted conversations
+        if session and session.get("auth_type") == "google" and session.get("email"):
+            try:
+                email = session["email"]
+                persisted_convs = load_conversations(email)
+                conversations[session_id] = persisted_convs
+            except Exception:
+                # Best-effort: fall back to empty dict on any error
+                conversations[session_id] = {}
+        else:
+            # Guest sessions or sessions without email use in-memory-only state
+            conversations[session_id] = {}
+
     return conversations[session_id]
 
 # Define the data model for chat requests using Pydantic
