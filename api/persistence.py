@@ -177,3 +177,63 @@ def delete_conversations(email: str) -> None:
     except Exception as e:
         logger.warning(f"Failed to delete conversations from Redis: {e}")
 
+
+def save_session(session_id: str, session_data: dict) -> None:
+    """Save session to Redis as JSON (best-effort).
+
+    Excludes the `api_key` field for security. Uses key format `session:{session_id}`.
+    Logs errors but never raises — in-memory data is the source of truth.
+    """
+    redis = _get_redis_client()
+    if not redis:
+        return
+
+    try:
+        key = f"session:{session_id}"
+        # Create shallow copy excluding api_key for security
+        session_copy = {k: v for k, v in session_data.items() if k != "api_key"}
+        data = json.dumps(session_copy, cls=_ConversationEncoder)
+        redis.set(key, data)
+    except Exception as e:
+        logger.warning(f"Failed to save session to Redis: {e}")
+
+
+def load_session(session_id: str) -> Optional[dict]:
+    """Load session from Redis by session ID.
+
+    Returns None if not found or Redis not configured.
+    Restores api_key as None in the returned dict.
+    """
+    redis = _get_redis_client()
+    if not redis:
+        return None
+
+    try:
+        key = f"session:{session_id}"
+        data = redis.get(key)
+        if data is None:
+            return None
+        # upstash-redis returns strings directly
+        if isinstance(data, str):
+            session_data = json.loads(data, object_hook=_conversation_decoder)
+            # Restore api_key as None (never persisted for security)
+            session_data["api_key"] = None
+            return session_data
+        return None
+    except Exception as e:
+        logger.warning(f"Failed to load session from Redis: {e}")
+        return None
+
+
+def delete_session(session_id: str) -> None:
+    """Delete a session from Redis (best-effort)."""
+    redis = _get_redis_client()
+    if not redis:
+        return
+
+    try:
+        key = f"session:{session_id}"
+        redis.delete(key)
+    except Exception as e:
+        logger.warning(f"Failed to delete session from Redis: {e}")
+
