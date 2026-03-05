@@ -793,6 +793,66 @@ def test_google_auth_loads_persisted_conversations(clean_state):
         mock_load.assert_called_once_with("test@example.com")
 
 
+def test_lazy_conversation_rehydration_for_google_sessions(clean_state):
+    """Test that get_session_conversations lazily rehydrates from Redis for Google sessions."""
+    from app import get_session_conversations
+    import app as app_module
+
+    # Create a Google session with persisted conversations
+    session_id = create_session(
+        auth_type="google",
+        email="user@example.com",
+        name="Test User",
+        provider="openai"
+    )
+
+    # Clear the in-memory conversation cache to simulate cross-instance scenario
+    conversations.clear()
+
+    # Mock persisted conversations
+    mock_convs = {
+        "conv-123": {
+            "messages": [{"role": "user", "content": "persisted message"}],
+            "title": "Persisted Conv",
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "last_updated": datetime.now(timezone.utc).isoformat(),
+        }
+    }
+
+    with patch.object(app_module, "load_conversations", return_value=mock_convs) as mock_load:
+        # Call get_session_conversations - should trigger lazy rehydration
+        user_convs = get_session_conversations(session_id)
+
+        # Verify conversations were loaded from persistence
+        assert "conv-123" in user_convs
+        assert user_convs["conv-123"]["title"] == "Persisted Conv"
+        mock_load.assert_called_once_with("user@example.com")
+
+        # Verify in-memory cache was populated
+        assert session_id in conversations
+        assert conversations[session_id] == mock_convs
+
+
+def test_lazy_rehydration_guest_sessions_use_empty_dict(clean_state):
+    """Test that guest sessions get empty dict, not lazy rehydration."""
+    from app import get_session_conversations
+    import app as app_module
+
+    # Create a guest session
+    session_id = create_session(auth_type="guest", provider="openai")
+
+    # Clear the in-memory conversation cache
+    conversations.clear()
+
+    with patch.object(app_module, "load_conversations") as mock_load:
+        # Call get_session_conversations for guest session
+        user_convs = get_session_conversations(session_id)
+
+        # Should return empty dict without calling load_conversations
+        assert user_convs == {}
+        mock_load.assert_not_called()
+
+
 def test_chat_saves_for_google_users(clean_state):
     """Test that save_conversations is called after chat for Google users."""
     import app as app_module
