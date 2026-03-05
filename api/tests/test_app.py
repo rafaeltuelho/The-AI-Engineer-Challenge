@@ -1221,3 +1221,179 @@ def test_session_redis_fallback_graceful(clean_state):
         # get_session should return None gracefully (no crash)
         session = get_session(session_id)
         assert session is None
+
+
+# ============================================
+# Cross-Instance Conversation Restore Tests
+# ============================================
+
+@pytest.mark.asyncio
+async def test_conversation_list_restore_after_cache_clear_google_session(client, clean_state):
+    """Test conversation list can be restored after clearing in-memory cache for Google session."""
+    import app as app_module
+
+    # Create a Google session
+    session_id = create_session(
+        auth_type="google",
+        email="user@example.com",
+        name="Test User",
+        provider="openai"
+    )
+
+    # Clear the in-memory conversation cache to simulate cross-instance scenario
+    conversations.clear()
+
+    # Mock persisted conversations
+    mock_convs = {
+        "conv-123": {
+            "messages": [{"role": "user", "content": "persisted message"}],
+            "title": "Persisted Conv",
+            "system_message": "You are helpful",
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "last_updated": datetime.now(timezone.utc).isoformat(),
+            "mode": "regular"
+        },
+        "conv-456": {
+            "messages": [{"role": "user", "content": "another message"}],
+            "title": "Another Conv",
+            "system_message": "You are helpful",
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "last_updated": datetime.now(timezone.utc).isoformat(),
+            "mode": "regular"
+        }
+    }
+
+    with patch.object(app_module, "load_conversations", return_value=mock_convs) as mock_load:
+        # GET /api/conversations should trigger lazy rehydration
+        response = await client.get(
+            "/api/conversations",
+            headers={"X-Session-ID": session_id}
+        )
+
+        # Verify conversations were restored
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data) == 2
+
+        # Verify conversation IDs are present
+        conv_ids = {conv["conversation_id"] for conv in data}
+        assert "conv-123" in conv_ids
+        assert "conv-456" in conv_ids
+
+        # Verify load_conversations was called with the correct email
+        mock_load.assert_called_once_with("user@example.com")
+
+
+@pytest.mark.asyncio
+async def test_get_conversation_after_cache_clear_google_session(client, clean_state):
+    """Test GET /api/conversations/{id} returns 200 after clearing in-memory cache for Google session."""
+    import app as app_module
+
+    # Create a Google session
+    session_id = create_session(
+        auth_type="google",
+        email="user@example.com",
+        name="Test User",
+        provider="openai"
+    )
+
+    # Clear the in-memory conversation cache to simulate cross-instance scenario
+    conversations.clear()
+
+    # Mock persisted conversations
+    mock_convs = {
+        "conv-789": {
+            "messages": [
+                {"role": "user", "content": "Hello", "timestamp": datetime.now(timezone.utc).isoformat()},
+                {"role": "assistant", "content": "Hi there!", "timestamp": datetime.now(timezone.utc).isoformat()}
+            ],
+            "title": "Test Conversation",
+            "system_message": "You are helpful",
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "last_updated": datetime.now(timezone.utc).isoformat(),
+            "mode": "regular"
+        }
+    }
+
+    with patch.object(app_module, "load_conversations", return_value=mock_convs) as mock_load:
+        # GET /api/conversations/conv-789 should trigger lazy rehydration
+        response = await client.get(
+            "/api/conversations/conv-789",
+            headers={"X-Session-ID": session_id}
+        )
+
+        # Verify conversation was restored and returned
+        assert response.status_code == 200
+        data = response.json()
+        assert data["conversation_id"] == "conv-789"
+        assert data["title"] == "Test Conversation"
+        assert len(data["messages"]) == 2
+
+        # Verify load_conversations was called
+        mock_load.assert_called_once_with("user@example.com")
+
+
+@pytest.mark.asyncio
+async def test_unknown_conversation_returns_404_after_rehydration(client, clean_state):
+    """Test unknown conversation IDs still return 404 after rehydration."""
+    import app as app_module
+
+    # Create a Google session
+    session_id = create_session(
+        auth_type="google",
+        email="user@example.com",
+        name="Test User",
+        provider="openai"
+    )
+
+    # Clear the in-memory conversation cache
+    conversations.clear()
+
+    # Mock persisted conversations (not including the requested ID)
+    mock_convs = {
+        "conv-existing": {
+            "messages": [],
+            "title": "Existing Conv",
+            "system_message": "System",
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "last_updated": datetime.now(timezone.utc).isoformat(),
+            "mode": "regular"
+        }
+    }
+
+    with patch.object(app_module, "load_conversations", return_value=mock_convs):
+        # Request a conversation ID that doesn't exist
+        response = await client.get(
+            "/api/conversations/conv-nonexistent",
+            headers={"X-Session-ID": session_id}
+        )
+
+        # Should return 404 even after rehydration
+        assert response.status_code == 404
+        assert "not found" in response.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_guest_session_no_persistence_load_after_cache_clear(client, clean_state):
+    """Test guest sessions do NOT load persisted conversations from Redis when memory is cleared."""
+    import app as app_module
+
+    # Create a guest session
+    session_id = create_session(auth_type="guest", provider="together")
+
+    # Clear the in-memory conversation cache
+    conversations.clear()
+
+    with patch.object(app_module, "load_conversations") as mock_load:
+        # GET /api/conversations for guest session
+        response = await client.get(
+            "/api/conversations",
+            headers={"X-Session-ID": session_id}
+        )
+
+        # Should return empty list without calling load_conversations
+        assert response.status_code == 200
+        assert response.json() == []
+
+        # Verify load_conversations was NOT called for guest session
+        mock_load.assert_not_called()
