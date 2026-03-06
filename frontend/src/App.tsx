@@ -32,7 +32,10 @@ function App() {
     'Qwen/Qwen3-Next-80B-A3B-Thinking': 'Qwen 3 Next 80B A3B Thinking'
   }
 
-  // Fetch app config (suggestions) on mount
+  // State for max image size from backend config
+  const [maxImageSizeMB, setMaxImageSizeMB] = useState<number>(3) // Default 3 MB
+
+  // Fetch app config (suggestions and max image size) on mount
   useEffect(() => {
     const fetchAppConfig = async () => {
       try {
@@ -41,6 +44,9 @@ function App() {
           const data = await response.json()
           if (data.suggestions && Array.isArray(data.suggestions)) {
             setWelcomeSuggestions(data.suggestions)
+          }
+          if (data.max_image_size_mb !== undefined) {
+            setMaxImageSizeMB(data.max_image_size_mb)
           }
         }
       } catch (error) {
@@ -184,6 +190,7 @@ function App() {
           hasFreeTurns={hasFreeTurns}
           hasOwnApiKey={!!hasOwnKey}
           welcomeSuggestions={welcomeSuggestions}
+          maxImageSizeMB={maxImageSizeMB}
         />
       </main>
     </div>

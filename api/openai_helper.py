@@ -39,35 +39,47 @@ def create_openai_client(api_key: str, provider: str) -> OpenAI:
     return OpenAI(**client_kwargs)
 
 
-def _messages_to_responses_input(messages: List[Dict[str, str]]) -> str:
+def _messages_to_responses_input(messages: List[Dict[str, str]], image_data_url: Optional[str] = None) -> Union[str, List[Dict[str, Any]]]:
     """
     Convert Chat Completions messages format to Responses API input format.
 
-    The Responses API expects a single input string, so we concatenate the messages.
-    For multi-turn conversations, we format them as a conversation history.
+    The Responses API expects either a single input string or a list of content parts
+    for multimodal input (text + image).
 
     Args:
         messages: List of message dicts with 'role' and 'content'
+        image_data_url: Optional base64 data URL for image attachment (only for current user turn)
 
     Returns:
-        Formatted input string for Responses API
+        Formatted input string for text-only, or list of content parts for multimodal
     """
+    # Build text input from messages
     if len(messages) == 1:
-        return messages[0]["content"]
+        text_content = messages[0]["content"]
+    else:
+        # For multi-turn conversations, format as conversation history
+        formatted_parts = []
+        for msg in messages:
+            role = msg["role"]
+            content = msg["content"]
+            if role == "system":
+                formatted_parts.append(f"System: {content}")
+            elif role == "user":
+                formatted_parts.append(f"User: {content}")
+            elif role == "assistant":
+                formatted_parts.append(f"Assistant: {content}")
+        text_content = "\n\n".join(formatted_parts)
 
-    # For multi-turn conversations, format as conversation history
-    formatted_parts = []
-    for msg in messages:
-        role = msg["role"]
-        content = msg["content"]
-        if role == "system":
-            formatted_parts.append(f"System: {content}")
-        elif role == "user":
-            formatted_parts.append(f"User: {content}")
-        elif role == "assistant":
-            formatted_parts.append(f"Assistant: {content}")
+    # If no image, return text only
+    if image_data_url is None:
+        return text_content
 
-    return "\n\n".join(formatted_parts)
+    # For multimodal input, return list of content parts
+    # Responses API format: [{"type": "input_text", "text": "..."}, {"type": "input_image", "image_url": "..."}]
+    return [
+        {"type": "input_text", "text": text_content},
+        {"type": "input_image", "image_url": image_data_url}
+    ]
 
 
 def create_openai_request(
@@ -76,6 +88,7 @@ def create_openai_request(
     model: str,
     messages: List[Dict[str, str]],
     stream: bool = False,
+    image_data_url: Optional[str] = None,
     **kwargs
 ) -> Union[Any, Iterator[Any]]:
     """
@@ -90,6 +103,7 @@ def create_openai_request(
         model: Model name
         messages: List of message dicts with 'role' and 'content'
         stream: Whether to stream the response
+        image_data_url: Optional base64 data URL for image attachment (OpenAI GPT models only)
         **kwargs: Additional parameters (e.g., response_format, temperature)
 
     Returns:
@@ -99,13 +113,13 @@ def create_openai_request(
 
     # For OpenAI GPT-5 models, use Responses API with web search tool
     if _supports_web_search(provider, model):
-        # Convert messages to Responses API input format
-        input_text = _messages_to_responses_input(messages)
+        # Convert messages to Responses API input format (with optional image)
+        input_data = _messages_to_responses_input(messages, image_data_url)
 
         # Build Responses API request parameters
         request_params = {
             "model": model,
-            "input": input_text,
+            "input": input_data,
             "tools": [{"type": "web_search"}],
             "stream": stream,
             **kwargs
@@ -115,6 +129,7 @@ def create_openai_request(
         return client.responses.create(**request_params)
     else:
         # For Together.ai and other models, use Chat Completions API
+        # Note: Image attachments are not supported for Together.ai
         request_params = {
             "model": model,
             "messages": messages,

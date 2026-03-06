@@ -35,6 +35,7 @@ interface ChatInterfaceProps {
   hasFreeTurns: boolean
   hasOwnApiKey: boolean
   welcomeSuggestions?: string[]
+  maxImageSizeMB: number
 }
 
 // Default developer messages for each chat mode (pure function, extracted outside component)
@@ -116,7 +117,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   onFreeTurnsUpdate,
   hasFreeTurns,
   hasOwnApiKey,
-  welcomeSuggestions = []
+  welcomeSuggestions = [],
+  maxImageSizeMB
 }) => {
   const [messages, setMessages] = useState<Message[]>([])
   const [inputMessage, setInputMessage] = useState('')
@@ -136,7 +138,14 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const [documentSuggestedQuestions, setDocumentSuggestedQuestions] = useState<string[]>([])
   const [documentSummary, setDocumentSummary] = useState<string | null>(null)
   const [isMobile, setIsMobile] = useState(false)
+
+  // Image attachment state
+  const [attachedImage, setAttachedImage] = useState<{ file: File; dataUrl: string } | null>(null)
+  const [imageError, setImageError] = useState<string | null>(null)
+  const [isDraggingImage, setIsDraggingImage] = useState(false)
+
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const imageInputRef = useRef<HTMLInputElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
 
 
@@ -462,9 +471,12 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
     setMessages(prev => [...prev, userMessage])
     const currentMessage = messageToSubmit
+    const currentImage = attachedImage
     setInputMessage('')
+    setAttachedImage(null) // Clear attached image after capturing it
+    setImageError(null)
     setIsLoading(true)
-    
+
     // Mark that conversation has started after first user message
     if (!hasConversationStarted) {
       setHasConversationStarted(true)
@@ -474,7 +486,28 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       // Determine which endpoint to use based on chat mode
       const isRagMode = chatMode === 'rag' || chatMode === 'topic-explorer'
       const endpoint = isRagMode ? '/api/rag-query' : '/api/chat'
-      
+
+      // Build request body
+      const requestBody = isRagMode ? {
+        question: currentMessage,
+        developer_message: developerMessage,
+        k: 3,
+        model: selectedModel,
+        mode: chatMode,
+        provider: selectedProvider
+      } : {
+        conversation_id: conversationId,
+        developer_message: developerMessage,
+        user_message: currentMessage,
+        model: selectedModel,
+        api_key: apiKey || undefined,
+        provider: selectedProvider,
+        // Include image_data only for OpenAI GPT models in regular chat mode
+        ...(currentImage && selectedProvider === 'openai' && chatMode === 'regular' ? {
+          image_data: currentImage.dataUrl
+        } : {})
+      }
+
       const response = await fetch(endpoint, {
         method: 'POST',
         headers: {
@@ -483,21 +516,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           ...(apiKey ? { 'X-API-Key': apiKey } : {}),
           ...(isRagMode && conversationId ? { 'X-Conversation-ID': conversationId } : {})
         },
-        body: JSON.stringify(isRagMode ? {
-          question: currentMessage,
-          developer_message: developerMessage,
-          k: 3,
-          model: selectedModel,
-          mode: chatMode,
-          provider: selectedProvider
-        } : {
-          conversation_id: conversationId,
-          developer_message: developerMessage,
-          user_message: currentMessage,
-          model: selectedModel,
-          api_key: apiKey || undefined,
-          provider: selectedProvider
-        })
+        body: JSON.stringify(requestBody)
       })
 
       if (!response.ok) {
@@ -832,6 +851,75 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     }
   }
 
+  // Image attachment handlers
+  const handleImageSelect = async (file: File) => {
+    setImageError(null)
+
+    // Validate file type
+    const supportedTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'image/gif']
+    if (!supportedTypes.includes(file.type)) {
+      setImageError('Please select a PNG, JPEG, WEBP, or GIF image')
+      return
+    }
+
+    // Validate file size
+    const maxSizeBytes = maxImageSizeMB * 1024 * 1024
+    if (file.size > maxSizeBytes) {
+      setImageError(`Image size must be less than ${maxImageSizeMB} MB`)
+      return
+    }
+
+    // Convert to data URL
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      const dataUrl = e.target?.result as string
+      setAttachedImage({ file, dataUrl })
+    }
+    reader.onerror = () => {
+      setImageError('Failed to read image file')
+    }
+    reader.readAsDataURL(file)
+  }
+
+  const handleImageInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files
+    if (files && files.length > 0) {
+      handleImageSelect(files[0])
+    }
+  }
+
+  const handleImageDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDraggingImage(false)
+
+    const files = Array.from(e.dataTransfer.files)
+    const imageFile = files.find(file => file.type.startsWith('image/'))
+
+    if (imageFile) {
+      handleImageSelect(imageFile)
+    } else {
+      setImageError('Please drop an image file')
+    }
+  }
+
+  const handleImageDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDraggingImage(true)
+  }
+
+  const handleImageDragLeave = (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDraggingImage(false)
+  }
+
+  const removeAttachedImage = () => {
+    setAttachedImage(null)
+    setImageError(null)
+    if (imageInputRef.current) {
+      imageInputRef.current.value = ''
+    }
+  }
+
   const renderMessageContent = (message: Message) => {
     if (message.role === 'assistant') {
       return <MarkdownRenderer content={message.content} chatMode={chatMode} />
@@ -1144,7 +1232,30 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         )}
 
         <form onSubmit={handleSubmit} className="input-form">
-          <div className="input-container">
+          {/* Image preview */}
+          {attachedImage && (
+            <div className="image-preview-container">
+              <div className="image-preview">
+                <img src={attachedImage.dataUrl} alt="Attached" />
+                <button
+                  type="button"
+                  className="remove-image-btn"
+                  onClick={removeAttachedImage}
+                  title="Remove image"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+              <span className="image-filename">{attachedImage.file.name}</span>
+            </div>
+          )}
+
+          <div
+            className={`input-container ${isDraggingImage ? 'dragging-image' : ''}`}
+            onDrop={handleImageDrop}
+            onDragOver={handleImageDragOver}
+            onDragLeave={handleImageDragLeave}
+          >
             <button
               type="button"
               className="pdf-upload-button"
@@ -1154,6 +1265,18 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             >
               <Upload size={20} />
             </button>
+            {/* Image attachment button - only show for OpenAI in regular chat mode */}
+            {selectedProvider === 'openai' && chatMode === 'regular' && (
+              <button
+                type="button"
+                className="image-upload-button"
+                onClick={() => imageInputRef.current?.click()}
+                disabled={isLoading || (!isWhitelisted && !hasOwnApiKey && !hasFreeTurns) || !!attachedImage}
+                title="Attach Image (PNG, JPEG, WEBP, GIF)"
+              >
+                <FileText size={20} />
+              </button>
+            )}
             <textarea
               ref={textareaRef}
               value={inputMessage}
@@ -1162,6 +1285,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
               placeholder={
                 !isWhitelisted && !hasOwnApiKey && !hasFreeTurns
                   ? "Free messages exhausted. Add your API key in Settings to continue."
+                  : isDraggingImage
+                  ? "Drop image here..."
                   : ""
               }
               className="message-input"
@@ -1183,10 +1308,27 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
               style={{ display: 'none' }}
               disabled={isPdfUploading}
             />
+            <input
+              ref={imageInputRef}
+              type="file"
+              accept="image/png,image/jpeg,image/jpg,image/webp,image/gif"
+              onChange={handleImageInputChange}
+              style={{ display: 'none' }}
+            />
           </div>
           <div className="input-disclaimer">
             AI can make mistakes. Consider checking important info.
           </div>
+
+          {imageError && (
+            <div className="upload-message error">
+              <X size={16} />
+              <span>{imageError}</span>
+              <button onClick={() => setImageError(null)}>
+                <X size={14} />
+              </button>
+            </div>
+          )}
 
           {pdfUploadError && (
             <div className="upload-message error">

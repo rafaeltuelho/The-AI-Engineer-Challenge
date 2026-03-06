@@ -18,7 +18,7 @@ from fastapi.responses import StreamingResponse
 # Import OpenAI client for interacting with OpenAI's API
 from openai import OpenAI
 # Import Pydantic for data validation and settings management
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, field_validator, model_validator
 # Import slowapi for rate limiting
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -64,7 +64,10 @@ MAX_FREE_MESSAGE_TOKENS = int(os.getenv("MAX_FREE_MESSAGE_TOKENS", "500"))
 FREE_PROVIDER = os.getenv("FREE_PROVIDER", "together")
 FREE_MODEL = os.getenv("FREE_MODEL", "deepseek-ai/DeepSeek-V3.1")
 
-
+# ============================================
+# Image Upload Configuration
+# ============================================
+MAX_IMAGE_SIZE_MB = float(os.getenv("MAX_IMAGE_SIZE_MB", "3"))
 
 # Server-side API keys (for free tier)
 SERVER_OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
@@ -365,6 +368,48 @@ def get_session_conversations(session_id: str) -> Dict[str, Dict[str, Any]]:
 
     return conversations[session_id]
 
+# Image attachment model for chat requests
+class ImageAttachment(BaseModel):
+    mime_type: str  # MIME type (e.g., "image/png", "image/jpeg")
+    data_url: str   # Base64 data URL (e.g., "data:image/png;base64,...")
+    filename: Optional[str] = None  # Optional filename for reference
+
+    @field_validator('mime_type')
+    @classmethod
+    def validate_mime_type(cls, v):
+        """Validate image MIME type"""
+        supported_types = ["image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif"]
+        if v.lower() not in supported_types:
+            raise ValueError(f'Unsupported image type: {v}. Supported types: {", ".join(supported_types)}')
+        return v.lower()
+
+    @field_validator('data_url')
+    @classmethod
+    def validate_data_url(cls, v):
+        """Validate data URL format and size"""
+        if not v.startswith('data:image/'):
+            raise ValueError('Image data must be a data URL starting with "data:image/"')
+
+        # Extract base64 data and estimate size
+        # data URL format: data:image/png;base64,<base64-data>
+        if ';base64,' not in v:
+            raise ValueError('Image data URL must contain base64 encoding')
+
+        base64_data = v.split(';base64,', 1)[1]
+        # Base64 encoding increases size by ~33%, so decode to get actual size
+        import base64
+        try:
+            decoded = base64.b64decode(base64_data)
+            size_mb = len(decoded) / (1024 * 1024)
+            if size_mb > MAX_IMAGE_SIZE_MB:
+                raise ValueError(f'Image size ({size_mb:.2f} MB) exceeds maximum allowed size ({MAX_IMAGE_SIZE_MB} MB)')
+        except Exception as e:
+            if "exceeds maximum" in str(e):
+                raise
+            raise ValueError(f'Invalid base64 data: {str(e)}')
+
+        return v
+
 # Define the data model for chat requests using Pydantic
 # This ensures incoming request data is properly validated
 class ChatRequest(BaseModel):
@@ -374,6 +419,7 @@ class ChatRequest(BaseModel):
     model: Optional[str] = "gpt-5-mini"  # Optional model selection with default
     api_key: Optional[str] = None  # API key for authentication (optional, can use session's key or server key)
     provider: Optional[str] = "openai"  # Provider selection: "openai" or "together"
+    image_attachment: Optional[ImageAttachment] = None  # Optional image attachment for OpenAI GPT models
 
     @field_validator('api_key')
     @classmethod
@@ -465,18 +511,33 @@ class ChatRequest(BaseModel):
         """Validate conversation ID format"""
         if v is None:
             return v
-        
+
         if not isinstance(v, str):
             raise ValueError('Conversation ID must be a string')
-        
+
         if len(v) > 100:
             raise ValueError('Conversation ID is too long')
-        
+
         # Allow alphanumeric, hyphens, and underscores
         if not re.match(r'^[A-Za-z0-9_-]+$', v):
             raise ValueError('Conversation ID contains invalid characters')
-        
+
         return v
+
+    @model_validator(mode='after')
+    def validate_image_attachment(self):
+        """Validate that image attachments are only used with OpenAI GPT models"""
+        if self.image_attachment is not None:
+            # Only allow image attachments for OpenAI provider
+            if self.provider != "openai":
+                raise ValueError('Image attachments are only supported with OpenAI provider')
+
+            # Only allow for GPT models (GPT-5 family)
+            openai_models = ["gpt-5", "gpt-5-mini", "gpt-5-nano"]
+            if self.model not in openai_models:
+                raise ValueError(f'Image attachments are only supported with OpenAI GPT models: {", ".join(openai_models)}')
+
+        return self
 
 class Message(BaseModel):
     role: str  # "system", "user", or "assistant"
@@ -566,6 +627,7 @@ class AuthConfigResponse(BaseModel):
 
 class AppConfigResponse(BaseModel):
     suggestions: List[str]
+    max_image_size_mb: float
 
 class DocumentUploadResponse(BaseModel):
     document_id: str
@@ -1043,7 +1105,10 @@ async def get_auth_config(request: Request):
 @limiter.limit("30/minute")
 async def get_app_config(request: Request):
     suggestions = _fetch_suggestions()
-    return AppConfigResponse(suggestions=suggestions)
+    return AppConfigResponse(
+        suggestions=suggestions,
+        max_image_size_mb=MAX_IMAGE_SIZE_MB
+    )
 
 # Define the main chat endpoint that handles POST requests
 @app.post(
@@ -1170,6 +1235,11 @@ async def chat(
         # Create an async generator function for streaming responses
         async def generate():
             try:
+                # Extract image data URL if present
+                image_data_url = None
+                if chat_request.image_attachment:
+                    image_data_url = chat_request.image_attachment.data_url
+
                 # Create a streaming chat completion request using the helper
                 # This automatically enables web search for GPT-5 models via Responses API
                 stream = create_openai_request(
@@ -1177,7 +1247,8 @@ async def chat(
                     provider=chat_request.provider,
                     model=chat_request.model,
                     messages=messages_for_openai,
-                    stream=True  # Enable streaming response
+                    stream=True,  # Enable streaming response
+                    image_data_url=image_data_url
                 )
 
                 # Collect the full response for storage

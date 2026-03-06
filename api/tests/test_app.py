@@ -1671,3 +1671,178 @@ def test_chatmodel_uses_helper_for_gpt5():
         assert call_kwargs["provider"] == "openai"
         assert call_kwargs["model"] == "gpt-5-mini"
         assert call_kwargs["stream"] is False
+
+
+# ============================================
+# Image Attachment Tests
+# ============================================
+
+@pytest.mark.asyncio
+async def test_config_endpoint_includes_max_image_size(client, clean_state):
+    """Test that /api/config endpoint includes max_image_size_mb."""
+    response = await client.get("/api/config")
+    assert response.status_code == 200
+    data = response.json()
+    assert "max_image_size_mb" in data
+    assert data["max_image_size_mb"] == 3.0  # Default value
+
+
+def test_image_attachment_validation_mime_type():
+    """Test ImageAttachment validates MIME types."""
+    from app import ImageAttachment
+    import base64
+
+    # Create a small test image (1x1 PNG)
+    small_png = base64.b64encode(b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde').decode()
+    valid_data_url = f"data:image/png;base64,{small_png}"
+
+    # Valid MIME types should work
+    for mime_type in ["image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif"]:
+        attachment = ImageAttachment(mime_type=mime_type, data_url=valid_data_url)
+        assert attachment.mime_type == mime_type.lower()
+
+    # Invalid MIME type should fail
+    with pytest.raises(ValueError, match="Unsupported image type"):
+        ImageAttachment(mime_type="image/bmp", data_url=valid_data_url)
+
+
+def test_image_attachment_validation_size():
+    """Test ImageAttachment validates file size."""
+    from app import ImageAttachment
+    import base64
+
+    # Create a small valid image
+    small_png = base64.b64encode(b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde').decode()
+    valid_data_url = f"data:image/png;base64,{small_png}"
+
+    # Small image should work
+    attachment = ImageAttachment(mime_type="image/png", data_url=valid_data_url)
+    assert attachment.data_url == valid_data_url
+
+    # Create an oversized image (> 3 MB)
+    # 3 MB = 3 * 1024 * 1024 bytes = 3,145,728 bytes
+    large_data = b'x' * (4 * 1024 * 1024)  # 4 MB
+    large_base64 = base64.b64encode(large_data).decode()
+    large_data_url = f"data:image/png;base64,{large_base64}"
+
+    # Oversized image should fail
+    with pytest.raises(ValueError, match="exceeds maximum allowed size"):
+        ImageAttachment(mime_type="image/png", data_url=large_data_url)
+
+
+def test_chat_request_image_attachment_provider_validation():
+    """Test ChatRequest validates image attachments are only for OpenAI."""
+    from app import ChatRequest, ImageAttachment
+    import base64
+
+    # Create a small test image
+    small_png = base64.b64encode(b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde').decode()
+    valid_data_url = f"data:image/png;base64,{small_png}"
+    attachment = ImageAttachment(mime_type="image/png", data_url=valid_data_url)
+
+    # OpenAI provider should work
+    request = ChatRequest(
+        user_message="Test",
+        developer_message="System",
+        provider="openai",
+        model="gpt-5-mini",
+        image_attachment=attachment
+    )
+    assert request.image_attachment is not None
+
+    # Together.ai provider should fail
+    with pytest.raises(ValueError, match="only supported with OpenAI provider"):
+        ChatRequest(
+            user_message="Test",
+            developer_message="System",
+            provider="together",
+            model="meta-llama/Llama-3.3-70B-Instruct-Turbo",
+            image_attachment=attachment
+        )
+
+
+def test_chat_request_image_attachment_model_validation():
+    """Test ChatRequest validates image attachments are only for GPT models."""
+    from app import ChatRequest, ImageAttachment
+    import base64
+
+    # Create a small test image
+    small_png = base64.b64encode(b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde').decode()
+    valid_data_url = f"data:image/png;base64,{small_png}"
+    attachment = ImageAttachment(mime_type="image/png", data_url=valid_data_url)
+
+    # GPT-5 models should work
+    for model in ["gpt-5", "gpt-5-mini", "gpt-5-nano"]:
+        request = ChatRequest(
+            user_message="Test",
+            developer_message="System",
+            provider="openai",
+            model=model,
+            image_attachment=attachment
+        )
+        assert request.image_attachment is not None
+
+
+@pytest.mark.asyncio
+async def test_chat_with_image_attachment(client, clean_state, mock_session):
+    """Test chat endpoint accepts and processes image attachments."""
+    import base64
+
+    # Create a small test image
+    small_png = base64.b64encode(b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde').decode()
+    valid_data_url = f"data:image/png;base64,{small_png}"
+
+    # Mock the create_openai_request to capture parameters
+    with patch('app.create_openai_request') as mock_helper:
+        # Configure mock to return a mock streaming response
+        mock_stream = MagicMock()
+        mock_stream.__iter__ = Mock(return_value=iter([
+            MagicMock(type='response.output_text.delta', delta="Test response with image")
+        ]))
+        mock_helper.return_value = mock_stream
+
+        # Send chat request with image attachment
+        response = await client.post(
+            "/api/chat",
+            json={
+                "user_message": "What's in this image?",
+                "developer_message": "You are a helpful assistant.",
+                "model": "gpt-5-mini",
+                "provider": "openai",
+                "image_attachment": {
+                    "mime_type": "image/png",
+                    "data_url": valid_data_url,
+                    "filename": "test.png"
+                }
+            },
+            headers={"X-Session-ID": mock_session}
+        )
+
+        assert response.status_code == 200
+
+        # Verify helper was called with image_data_url
+        assert mock_helper.called
+        call_kwargs = mock_helper.call_args[1]
+        assert call_kwargs["image_data_url"] == valid_data_url
+
+
+def test_openai_helper_multimodal_input():
+    """Test openai_helper supports multimodal input."""
+    from openai_helper import _messages_to_responses_input
+
+    messages = [{"role": "user", "content": "What's in this image?"}]
+    image_url = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+
+    # Without image, should return text only
+    result = _messages_to_responses_input(messages)
+    assert isinstance(result, str)
+    assert result == "What's in this image?"
+
+    # With image, should return list of content parts
+    result = _messages_to_responses_input(messages, image_url)
+    assert isinstance(result, list)
+    assert len(result) == 2
+    assert result[0]["type"] == "input_text"
+    assert result[0]["text"] == "What's in this image?"
+    assert result[1]["type"] == "input_image"
+    assert result[1]["image_url"] == image_url
