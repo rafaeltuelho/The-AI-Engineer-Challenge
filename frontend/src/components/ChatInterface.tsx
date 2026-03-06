@@ -920,6 +920,28 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     }
   }
 
+  // Handle clipboard paste for images
+  const handlePaste = (e: React.ClipboardEvent) => {
+    // Only handle paste for OpenAI in regular chat mode
+    if (selectedProvider !== 'openai' || chatMode !== 'regular') return
+
+    const items = e.clipboardData?.items
+    if (!items) return
+
+    // Look for image items in clipboard
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i]
+      if (item.type.startsWith('image/')) {
+        e.preventDefault() // Prevent default paste behavior for images
+        const file = item.getAsFile()
+        if (file) {
+          handleImageSelect(file)
+        }
+        break
+      }
+    }
+  }
+
   const renderMessageContent = (message: Message) => {
     if (message.role === 'assistant') {
       return <MarkdownRenderer content={message.content} chatMode={chatMode} />
@@ -1282,6 +1304,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
               value={inputMessage}
               onChange={(e) => setInputMessage(e.target.value)}
               onKeyDown={handleKeyDown}
+              onPaste={handlePaste}
               placeholder={
                 !isWhitelisted && !hasOwnApiKey && !hasFreeTurns
                   ? "Free messages exhausted. Add your API key in Settings to continue."

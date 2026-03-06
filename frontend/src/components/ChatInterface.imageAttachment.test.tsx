@@ -145,5 +145,68 @@ describe('ChatInterface - Image Attachment', () => {
       expect(screen.getByText('test.png')).toBeInTheDocument()
     }, { timeout: 2000 })
   })
+
+  it('handles clipboard paste for images', async () => {
+    render(<ChatInterface {...defaultProps} />)
+
+    const textarea = screen.getByRole('textbox')
+
+    // Create a mock clipboard event with an image
+    const mockFile = new File(['fake png content'], 'pasted.png', { type: 'image/png' })
+    const mockDataTransferItem = {
+      type: 'image/png',
+      getAsFile: () => mockFile,
+    }
+
+    const mockClipboardData = {
+      items: [mockDataTransferItem],
+    }
+
+    // Mock FileReader
+    const mockFileReader = {
+      readAsDataURL: vi.fn(function(this: any) {
+        setTimeout(() => {
+          if (this.onload) {
+            this.onload({ target: { result: 'data:image/png;base64,pasteddata' } })
+          }
+        }, 0)
+      }),
+      onload: null as any,
+      onerror: null as any,
+    }
+
+    global.FileReader = vi.fn(function(this: any) {
+      return mockFileReader
+    }) as any
+
+    // Simulate paste event
+    fireEvent.paste(textarea, { clipboardData: mockClipboardData })
+
+    await waitFor(() => {
+      expect(screen.getByText('pasted.png')).toBeInTheDocument()
+    }, { timeout: 2000 })
+  })
+
+  it('ignores paste for non-OpenAI providers', () => {
+    render(<ChatInterface {...defaultProps} selectedProvider="together" />)
+
+    const textarea = screen.getByRole('textbox')
+
+    const mockFile = new File(['fake png content'], 'pasted.png', { type: 'image/png' })
+    const mockDataTransferItem = {
+      type: 'image/png',
+      getAsFile: () => mockFile,
+    }
+
+    const mockClipboardData = {
+      items: [mockDataTransferItem],
+    }
+
+    // Simulate paste event
+    fireEvent.paste(textarea, { clipboardData: mockClipboardData })
+
+    // Should not show image preview for Together.ai
+    expect(screen.queryByText('pasted.png')).not.toBeInTheDocument()
+  })
 })
 
