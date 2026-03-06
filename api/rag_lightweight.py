@@ -460,7 +460,7 @@ class RAGSystem:
         except Exception as e:
             raise Exception(f"Error searching chunks: {str(e)}")
     
-    async def query_documents(self, query: str, k: int = 3, mode: str = "rag", model_name: str = "gpt-4o-mini", system_message: Optional[str] = None) -> str:
+    async def query_documents(self, query: str, k: int = 3, mode: str = "rag", model_name: str = "gpt-5-mini", system_message: Optional[str] = None) -> str:
         """
         Query documents using RAG approach.
 
@@ -538,7 +538,7 @@ class RAGSystem:
             kwargs = {}
             if mode == "topic-explorer":
                 # Support JSON mode for OpenAI models and Together.ai models
-                openai_json_models = ['gpt-4.1', 'gpt-4o', 'gpt-4o-mini', 'gpt-5', 'gpt-5-mini', 'gpt-5-nano']
+                openai_json_models = ['gpt-5', 'gpt-5-mini', 'gpt-5-nano']
                 together_json_models = [
                     'deepseek-ai/DeepSeek-R1', 'deepseek-ai/DeepSeek-V3', 'deepseek-ai/DeepSeek-V3.1',
                     'meta-llama/Llama-3.3-70B-Instruct-Turbo',
@@ -554,7 +554,7 @@ class RAGSystem:
         except Exception as e:
             raise Exception(f"Error querying documents: {str(e)}")
     
-    def query(self, query: str, k: int = 3, mode: str = "rag", model_name: str = "gpt-4o-mini", system_message: Optional[str] = None) -> str:
+    def query(self, query: str, k: int = 3, mode: str = "rag", model_name: str = "gpt-5-mini", system_message: Optional[str] = None) -> str:
         """
         Synchronous version of Query.
         
@@ -632,7 +632,7 @@ class RAGSystem:
             kwargs = {}
             if mode == "topic-explorer":
                 # Support JSON mode for OpenAI models and Together.ai models
-                openai_json_models = ['gpt-4.1', 'gpt-4o', 'gpt-4o-mini', 'gpt-5', 'gpt-5-mini', 'gpt-5-nano']
+                openai_json_models = ['gpt-5', 'gpt-5-mini', 'gpt-5-nano']
                 together_json_models = [
                     'deepseek-ai/DeepSeek-R1', 'deepseek-ai/DeepSeek-V3', 'deepseek-ai/DeepSeek-V3.1',
                     'meta-llama/Llama-3.3-70B-Instruct-Turbo',

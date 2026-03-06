@@ -17,15 +17,7 @@ function App() {
   const [welcomeSuggestions, setWelcomeSuggestions] = useState<string[]>([])
 
   const modelDescriptions = {
-    // OpenAI models
-    'gpt-4': 'Standard GPT-4 model',
-    'gpt-4-mini': 'Compact GPT-4 variant',
-    'gpt-4-turbo': 'Enhanced GPT-4 with improved performance',
-    'gpt-4o': 'Latest GPT-4 optimized model',
-    'gpt-4o-mini': 'Lightweight version of GPT-4o',
-    'gpt-4.1': 'Standard GPT-4.1 model',
-    'gpt-4.1-mini': 'Compact GPT-4.1 variant',
-    'gpt-4.1-nano': 'Ultra-lightweight GPT-4.1',
+    // OpenAI models - GPT-5 only
     'gpt-5': 'Latest GPT-5 model',
     'gpt-5-mini': 'Compact GPT-5 variant',
     'gpt-5-nano': 'Ultra-lightweight GPT-5 (default)',
@@ -40,7 +32,10 @@ function App() {
     'Qwen/Qwen3-Next-80B-A3B-Thinking': 'Qwen 3 Next 80B A3B Thinking'
   }
 
-  // Fetch app config (suggestions) on mount
+  // State for max image size from backend config
+  const [maxImageSizeMB, setMaxImageSizeMB] = useState<number>(3) // Default 3 MB
+
+  // Fetch app config (suggestions and max image size) on mount
   useEffect(() => {
     const fetchAppConfig = async () => {
       try {
@@ -49,6 +44,9 @@ function App() {
           const data = await response.json()
           if (data.suggestions && Array.isArray(data.suggestions)) {
             setWelcomeSuggestions(data.suggestions)
+          }
+          if (data.max_image_size_mb !== undefined) {
+            setMaxImageSizeMB(data.max_image_size_mb)
           }
         }
       } catch (error) {
@@ -192,6 +190,7 @@ function App() {
           hasFreeTurns={hasFreeTurns}
           hasOwnApiKey={!!hasOwnKey}
           welcomeSuggestions={welcomeSuggestions}
+          maxImageSizeMB={maxImageSizeMB}
         />
       </main>
     </div>

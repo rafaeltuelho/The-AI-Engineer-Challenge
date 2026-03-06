@@ -1,9 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react'
-import { Send, MessageSquare, User, Bot, Trash2, Settings, ArrowDown, X, FileText, Upload, Compass } from 'lucide-react'
+import { Send, MessageSquare, User, Bot, Trash2, Settings, ArrowDown, X, FileText, Upload, Compass, Image } from 'lucide-react'
 import MarkdownRenderer from './MarkdownRenderer'
 import SuggestedQuestions from './SuggestedQuestions'
 import SettingsModal from './SettingsModal'
 import { extractSuggestedQuestions, type ExtractedContent } from '../utils/suggestedQuestionsExtractor'
+import { formatBackendError } from '../utils/errorFormatter'
 import './ChatInterface.css'
 
 interface Message {
@@ -35,6 +36,7 @@ interface ChatInterfaceProps {
   hasFreeTurns: boolean
   hasOwnApiKey: boolean
   welcomeSuggestions?: string[]
+  maxImageSizeMB: number
 }
 
 // Default developer messages for each chat mode (pure function, extracted outside component)
@@ -116,7 +118,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   onFreeTurnsUpdate,
   hasFreeTurns,
   hasOwnApiKey,
-  welcomeSuggestions = []
+  welcomeSuggestions = [],
+  maxImageSizeMB
 }) => {
   const [messages, setMessages] = useState<Message[]>([])
   const [inputMessage, setInputMessage] = useState('')
@@ -124,6 +127,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const [isLoading, setIsLoading] = useState(false)
   const [conversationId, setConversationId] = useState<string | null>(null)
   const [conversations, setConversations] = useState<any[]>([])
+  const [loadingConversationId, setLoadingConversationId] = useState<string | null>(null)
 
   const [pdfUploadError, setPdfUploadError] = useState<string | null>(null)
   const [pdfUploadSuccess, setPdfUploadSuccess] = useState<string | null>(null)
@@ -135,15 +139,21 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const [documentSuggestedQuestions, setDocumentSuggestedQuestions] = useState<string[]>([])
   const [documentSummary, setDocumentSummary] = useState<string | null>(null)
   const [isMobile, setIsMobile] = useState(false)
+
+  // Image attachment state
+  const [attachedImage, setAttachedImage] = useState<{ file: File; dataUrl: string } | null>(null)
+  const [imageError, setImageError] = useState<string | null>(null)
+  const [isDraggingImage, setIsDraggingImage] = useState(false)
+
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const imageInputRef = useRef<HTMLInputElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
 
 
   // Filter available models based on chat mode and provider
   // const getAvailableModels = () => {
   //   const openaiModels = [
-  //     'gpt-4', 'gpt-4-mini', 'gpt-4-turbo', 'gpt-4o', 'gpt-4o-mini',
-  //     'gpt-4.1', 'gpt-4.1-mini', 'gpt-4.1-nano', 'gpt-5', 'gpt-5-mini', 'gpt-5-nano'
+  //     'gpt-5', 'gpt-5-mini', 'gpt-5-nano'
   //   ]
   //
   //   const togetherModels = [
@@ -161,13 +171,13 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   //     if (selectedProvider === 'together') {
   //       return ['deepseek-ai/DeepSeek-V3', 'deepseek-ai/DeepSeek-R1','meta-llama/Llama-3.3-70B-Instruct-Turbo']
   //     } else {
-  //       return ['gpt-4.1', 'gpt-4o', 'gpt-5']
+  //       return ['gpt-5']
   //     }
   //   }
   //
   //   return availableModels
   // }
-  
+
   // const availableModels = getAvailableModels()
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -329,6 +339,14 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   }
 
   const loadConversation = async (convId: string) => {
+    // Prevent loading if already active or currently loading
+    if (conversationId === convId || loadingConversationId === convId) {
+      return
+    }
+
+    // Set loading state
+    setLoadingConversationId(convId)
+
     try {
       const response = await fetch(`/api/conversations/${convId}`, {
         headers: {
@@ -405,6 +423,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       }
     } catch (error) {
       console.error('Error loading conversation:', error)
+    } finally {
+      // Clear loading state
+      setLoadingConversationId(null)
     }
   }
 
@@ -451,9 +472,12 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
     setMessages(prev => [...prev, userMessage])
     const currentMessage = messageToSubmit
+    const currentImage = attachedImage
     setInputMessage('')
+    setAttachedImage(null) // Clear attached image after capturing it
+    setImageError(null)
     setIsLoading(true)
-    
+
     // Mark that conversation has started after first user message
     if (!hasConversationStarted) {
       setHasConversationStarted(true)
@@ -463,7 +487,32 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       // Determine which endpoint to use based on chat mode
       const isRagMode = chatMode === 'rag' || chatMode === 'topic-explorer'
       const endpoint = isRagMode ? '/api/rag-query' : '/api/chat'
-      
+
+      // Build request body
+      const requestBody = isRagMode ? {
+        question: currentMessage,
+        developer_message: developerMessage,
+        k: 3,
+        model: selectedModel,
+        mode: chatMode,
+        provider: selectedProvider
+      } : {
+        conversation_id: conversationId,
+        developer_message: developerMessage,
+        user_message: currentMessage,
+        model: selectedModel,
+        api_key: apiKey || undefined,
+        provider: selectedProvider,
+        // Include image_attachment only for OpenAI GPT models in regular chat mode
+        ...(currentImage && selectedProvider === 'openai' && chatMode === 'regular' ? {
+          image_attachment: {
+            mime_type: currentImage.file.type,
+            data_url: currentImage.dataUrl,
+            filename: currentImage.file.name
+          }
+        } : {})
+      }
+
       const response = await fetch(endpoint, {
         method: 'POST',
         headers: {
@@ -472,21 +521,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           ...(apiKey ? { 'X-API-Key': apiKey } : {}),
           ...(isRagMode && conversationId ? { 'X-Conversation-ID': conversationId } : {})
         },
-        body: JSON.stringify(isRagMode ? {
-          question: currentMessage,
-          developer_message: developerMessage,
-          k: 3,
-          model: selectedModel,
-          mode: chatMode,
-          provider: selectedProvider
-        } : {
-          conversation_id: conversationId,
-          developer_message: developerMessage,
-          user_message: currentMessage,
-          model: selectedModel,
-          api_key: apiKey || undefined,
-          provider: selectedProvider
-        })
+        body: JSON.stringify(requestBody)
       })
 
       if (!response.ok) {
@@ -494,11 +529,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         let errorDetail = `HTTP error! status: ${response.status}`
         try {
           const errorData = await response.json()
+          console.error('Backend error response:', errorData) // Log full error for debugging
           if (errorData.detail) {
-            // FastAPI's detail can be a string, array, or object (e.g. validation errors)
-            errorDetail = typeof errorData.detail === 'string'
-              ? errorData.detail
-              : JSON.stringify(errorData.detail)
+            // Use formatter to convert structured errors to human-friendly messages
+            errorDetail = formatBackendError(errorData.detail)
           }
         } catch {
           // If JSON parsing fails, use the default HTTP status message
@@ -821,6 +855,97 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     }
   }
 
+  // Image attachment handlers
+  const handleImageSelect = async (file: File) => {
+    setImageError(null)
+
+    // Validate file type
+    const supportedTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'image/gif']
+    if (!supportedTypes.includes(file.type)) {
+      setImageError('Please select a PNG, JPEG, WEBP, or GIF image')
+      return
+    }
+
+    // Validate file size
+    const maxSizeBytes = maxImageSizeMB * 1024 * 1024
+    if (file.size > maxSizeBytes) {
+      setImageError(`Image size must be less than ${maxImageSizeMB} MB`)
+      return
+    }
+
+    // Convert to data URL
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      const dataUrl = e.target?.result as string
+      setAttachedImage({ file, dataUrl })
+    }
+    reader.onerror = () => {
+      setImageError('Failed to read image file')
+    }
+    reader.readAsDataURL(file)
+  }
+
+  const handleImageInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files
+    if (files && files.length > 0) {
+      handleImageSelect(files[0])
+    }
+  }
+
+  const handleImageDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDraggingImage(false)
+
+    const files = Array.from(e.dataTransfer.files)
+    const imageFile = files.find(file => file.type.startsWith('image/'))
+
+    if (imageFile) {
+      handleImageSelect(imageFile)
+    } else {
+      setImageError('Please drop an image file')
+    }
+  }
+
+  const handleImageDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDraggingImage(true)
+  }
+
+  const handleImageDragLeave = (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDraggingImage(false)
+  }
+
+  const removeAttachedImage = () => {
+    setAttachedImage(null)
+    setImageError(null)
+    if (imageInputRef.current) {
+      imageInputRef.current.value = ''
+    }
+  }
+
+  // Handle clipboard paste for images
+  const handlePaste = (e: React.ClipboardEvent) => {
+    // Only handle paste for OpenAI in regular chat mode
+    if (selectedProvider !== 'openai' || chatMode !== 'regular') return
+
+    const items = e.clipboardData?.items
+    if (!items) return
+
+    // Look for image items in clipboard
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i]
+      if (item.type.startsWith('image/')) {
+        e.preventDefault() // Prevent default paste behavior for images
+        const file = item.getAsFile()
+        if (file) {
+          handleImageSelect(file)
+        }
+        break
+      }
+    }
+  }
+
   const renderMessageContent = (message: Message) => {
     if (message.role === 'assistant') {
       return <MarkdownRenderer content={message.content} chatMode={chatMode} />
@@ -878,18 +1003,29 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
               ) : (
                 conversations.map((conv) => {
                   const isActive = conversationId === conv.conversation_id
+                  const isLoading = loadingConversationId === conv.conversation_id
                   const modeLabel = conv.mode === 'rag' ? '📄' : conv.mode === 'topic-explorer' ? '📚' : '💬'
 
                   return (
                     <div
                       key={conv.conversation_id}
-                      className={`conversation-item ${isActive ? 'active' : ''}`}
+                      className={`conversation-item ${isActive ? 'active' : ''} ${isLoading ? 'loading' : ''}`}
                       onClick={() => loadConversation(conv.conversation_id)}
+                      style={{ cursor: isLoading ? 'wait' : 'pointer' }}
                     >
                       <span className="conversation-mode-icon">{modeLabel}</span>
                       <div className="conversation-title">
                         {conv.title || conv.system_message.substring(0, 30)}
                       </div>
+                      {isLoading && (
+                        <div className="conversation-loading-indicator">
+                          <div className="typing-indicator">
+                            <span></span>
+                            <span></span>
+                            <span></span>
+                          </div>
+                        </div>
+                      )}
                       <button
                         className="delete-conversation-btn"
                         onClick={(e) => {
@@ -951,6 +1087,20 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           ref={messagesContainerRef}
           onScroll={handleScroll}
         >
+          {/* Show loading indicator when loading a conversation */}
+          {loadingConversationId && messages.length === 0 && (
+            <div className="conversation-loading-screen">
+              <div className="loading-message">
+                <div className="typing-indicator">
+                  <span></span>
+                  <span></span>
+                  <span></span>
+                </div>
+                <p>Loading conversation...</p>
+              </div>
+            </div>
+          )}
+
           {/* Show document summary and suggested questions when available - always visible */}
           {documentSummary && documentSuggestedQuestions.length > 0 && (
             <div className="document-summary-section">
@@ -965,8 +1115,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
               </div>
             </div>
           )}
-          
-          {messages.length === 0 ? (
+
+          {!loadingConversationId && messages.length === 0 ? (
             <div className="welcome-screen">
               <h1 className="welcome-heading">What can I help with?</h1>
 
@@ -1108,7 +1258,30 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         )}
 
         <form onSubmit={handleSubmit} className="input-form">
-          <div className="input-container">
+          {/* Image preview */}
+          {attachedImage && (
+            <div className="image-preview-container">
+              <div className="image-preview">
+                <img src={attachedImage.dataUrl} alt="Attached" />
+                <button
+                  type="button"
+                  className="remove-image-btn"
+                  onClick={removeAttachedImage}
+                  title="Remove image"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+              <span className="image-filename">{attachedImage.file.name}</span>
+            </div>
+          )}
+
+          <div
+            className={`input-container ${isDraggingImage ? 'dragging-image' : ''}`}
+            onDrop={handleImageDrop}
+            onDragOver={handleImageDragOver}
+            onDragLeave={handleImageDragLeave}
+          >
             <button
               type="button"
               className="pdf-upload-button"
@@ -1118,14 +1291,29 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             >
               <Upload size={20} />
             </button>
+            {/* Image attachment button - only show for OpenAI in regular chat mode */}
+            {selectedProvider === 'openai' && chatMode === 'regular' && (
+              <button
+                type="button"
+                className="image-upload-button"
+                onClick={() => imageInputRef.current?.click()}
+                disabled={isLoading || (!isWhitelisted && !hasOwnApiKey && !hasFreeTurns) || !!attachedImage}
+                title="Attach Image (PNG, JPEG, WEBP, GIF)"
+              >
+                <Image size={20} />
+              </button>
+            )}
             <textarea
               ref={textareaRef}
               value={inputMessage}
               onChange={(e) => setInputMessage(e.target.value)}
               onKeyDown={handleKeyDown}
+              onPaste={handlePaste}
               placeholder={
                 !isWhitelisted && !hasOwnApiKey && !hasFreeTurns
                   ? "Free messages exhausted. Add your API key in Settings to continue."
+                  : isDraggingImage
+                  ? "Drop image here..."
                   : ""
               }
               className="message-input"
@@ -1147,10 +1335,27 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
               style={{ display: 'none' }}
               disabled={isPdfUploading}
             />
+            <input
+              ref={imageInputRef}
+              type="file"
+              accept="image/png,image/jpeg,image/jpg,image/webp,image/gif"
+              onChange={handleImageInputChange}
+              style={{ display: 'none' }}
+            />
           </div>
           <div className="input-disclaimer">
             AI can make mistakes. Consider checking important info.
           </div>
+
+          {imageError && (
+            <div className="upload-message error">
+              <X size={16} />
+              <span>{imageError}</span>
+              <button onClick={() => setImageError(null)}>
+                <X size={14} />
+              </button>
+            </div>
+          )}
 
           {pdfUploadError && (
             <div className="upload-message error">

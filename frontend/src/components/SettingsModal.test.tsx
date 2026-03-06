@@ -10,13 +10,14 @@ describe('SettingsModal', () => {
     setApiKey: vi.fn(),
     selectedProvider: 'openai',
     setSelectedProvider: vi.fn(),
-    selectedModel: 'gpt-4',
+    selectedModel: 'gpt-5-nano',
     setSelectedModel: vi.fn(),
     developerMessage: '',
     setDeveloperMessage: vi.fn(),
     modelDescriptions: {
-      'gpt-4': 'GPT-4',
-      'gpt-3.5-turbo': 'GPT-3.5 Turbo',
+      'gpt-5': 'Latest GPT-5 model',
+      'gpt-5-mini': 'Compact GPT-5 variant',
+      'gpt-5-nano': 'Ultra-lightweight GPT-5 (default)',
       'deepseek-ai/DeepSeek-V3.1': 'DeepSeek V3.1',
     },
     isWhitelisted: false,
@@ -170,9 +171,9 @@ describe('SettingsModal', () => {
 
     const selects = screen.getAllByRole('combobox')
     const modelSelect = selects[1]
-    fireEvent.change(modelSelect, { target: { value: 'gpt-3.5-turbo' } })
+    fireEvent.change(modelSelect, { target: { value: 'gpt-5-mini' } })
 
-    expect(setSelectedModel).toHaveBeenCalledWith('gpt-3.5-turbo')
+    expect(setSelectedModel).toHaveBeenCalledWith('gpt-5-mini')
   })
 
   it('calls setDeveloperMessage when system message textarea changes', () => {

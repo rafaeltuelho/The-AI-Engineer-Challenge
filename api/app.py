@@ -18,7 +18,7 @@ from fastapi.responses import StreamingResponse
 # Import OpenAI client for interacting with OpenAI's API
 from openai import OpenAI
 # Import Pydantic for data validation and settings management
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, field_validator, model_validator
 # Import slowapi for rate limiting
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -44,6 +44,7 @@ from context_manager import (
     should_compress, compress_conversation, count_conversation_tokens,
     SUMMARY_PREFIX,
 )
+from openai_helper import create_openai_request
 
 # ============================================
 # Google OAuth Configuration
@@ -63,7 +64,10 @@ MAX_FREE_MESSAGE_TOKENS = int(os.getenv("MAX_FREE_MESSAGE_TOKENS", "500"))
 FREE_PROVIDER = os.getenv("FREE_PROVIDER", "together")
 FREE_MODEL = os.getenv("FREE_MODEL", "deepseek-ai/DeepSeek-V3.1")
 
-
+# ============================================
+# Image Upload Configuration
+# ============================================
+MAX_IMAGE_SIZE_MB = float(os.getenv("MAX_IMAGE_SIZE_MB", "3"))
 
 # Server-side API keys (for free tier)
 SERVER_OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
@@ -263,12 +267,12 @@ def get_session(session_id: str) -> Optional[Dict[str, Any]]:
 
     return None
 
-def count_tokens(text: str, model: str = "gpt-4") -> int:
+def count_tokens(text: str, model: str = "gpt-5") -> int:
     """Count the number of tokens in a text string.
 
     Args:
         text: The text to count tokens for
-        model: The model to use for tokenization (default: "gpt-4")
+        model: The model to use for tokenization (default: "gpt-5")
 
     Returns:
         Number of tokens in the text
@@ -364,15 +368,58 @@ def get_session_conversations(session_id: str) -> Dict[str, Dict[str, Any]]:
 
     return conversations[session_id]
 
+# Image attachment model for chat requests
+class ImageAttachment(BaseModel):
+    mime_type: str  # MIME type (e.g., "image/png", "image/jpeg")
+    data_url: str   # Base64 data URL (e.g., "data:image/png;base64,...")
+    filename: Optional[str] = None  # Optional filename for reference
+
+    @field_validator('mime_type')
+    @classmethod
+    def validate_mime_type(cls, v):
+        """Validate image MIME type"""
+        supported_types = ["image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif"]
+        if v.lower() not in supported_types:
+            raise ValueError(f'Unsupported image type: {v}. Supported types: {", ".join(supported_types)}')
+        return v.lower()
+
+    @field_validator('data_url')
+    @classmethod
+    def validate_data_url(cls, v):
+        """Validate data URL format and size"""
+        if not v.startswith('data:image/'):
+            raise ValueError('Image data must be a data URL starting with "data:image/"')
+
+        # Extract base64 data and estimate size
+        # data URL format: data:image/png;base64,<base64-data>
+        if ';base64,' not in v:
+            raise ValueError('Image data URL must contain base64 encoding')
+
+        base64_data = v.split(';base64,', 1)[1]
+        # Base64 encoding increases size by ~33%, so decode to get actual size
+        import base64
+        try:
+            decoded = base64.b64decode(base64_data)
+            size_mb = len(decoded) / (1024 * 1024)
+            if size_mb > MAX_IMAGE_SIZE_MB:
+                raise ValueError(f'Image size ({size_mb:.2f} MB) exceeds maximum allowed size ({MAX_IMAGE_SIZE_MB} MB)')
+        except Exception as e:
+            if "exceeds maximum" in str(e):
+                raise
+            raise ValueError(f'Invalid base64 data: {str(e)}')
+
+        return v
+
 # Define the data model for chat requests using Pydantic
 # This ensures incoming request data is properly validated
 class ChatRequest(BaseModel):
     conversation_id: Optional[str] = None  # ID to continue existing conversation
     developer_message: str  # Message from the developer/system
     user_message: str      # Message from the user
-    model: Optional[str] = "gpt-4.1-mini"  # Optional model selection with default
+    model: Optional[str] = "gpt-5-mini"  # Optional model selection with default
     api_key: Optional[str] = None  # API key for authentication (optional, can use session's key or server key)
     provider: Optional[str] = "openai"  # Provider selection: "openai" or "together"
+    image_attachment: Optional[ImageAttachment] = None  # Optional image attachment for OpenAI GPT models
 
     @field_validator('api_key')
     @classmethod
@@ -436,27 +483,26 @@ class ChatRequest(BaseModel):
     def validate_model(cls, v):
         """Validate model selection"""
         if not v:
-            return "gpt-4.1-mini"  # Default model
-        
-        # List of allowed models for OpenAI
+            return "gpt-5-mini"  # Default model
+
+        # List of allowed models for OpenAI (GPT-5 family only)
         openai_models = [
-            "gpt-4", "gpt-4-mini", "gpt-4-turbo", "gpt-4o", "gpt-4o-mini",
-            "gpt-4.1", "gpt-4.1-mini", "gpt-4.1-nano", "gpt-5", "gpt-5-mini", "gpt-5-nano"
+            "gpt-5", "gpt-5-mini", "gpt-5-nano"
         ]
-        
+
         # List of allowed models for Together.ai
         together_models = [
             "deepseek-ai/DeepSeek-R1", "deepseek-ai/DeepSeek-V3.1", "deepseek-ai/DeepSeek-V3",
-            "meta-llama/Llama-3.3-70B-Instruct-Turbo", 
+            "meta-llama/Llama-3.3-70B-Instruct-Turbo",
             "openai/gpt-oss-20b", "openai/gpt-oss-120b", "moonshotai/Kimi-K2-Instruct-0905",
             "Qwen/Qwen3-Next-80B-A3B-Thinking"
         ]
-        
+
         all_models = openai_models + together_models
-        
+
         if v not in all_models:
             raise ValueError(f'Invalid model: {v}. Allowed models: {", ".join(all_models)}')
-        
+
         return v
     
     @field_validator('conversation_id')
@@ -465,18 +511,33 @@ class ChatRequest(BaseModel):
         """Validate conversation ID format"""
         if v is None:
             return v
-        
+
         if not isinstance(v, str):
             raise ValueError('Conversation ID must be a string')
-        
+
         if len(v) > 100:
             raise ValueError('Conversation ID is too long')
-        
+
         # Allow alphanumeric, hyphens, and underscores
         if not re.match(r'^[A-Za-z0-9_-]+$', v):
             raise ValueError('Conversation ID contains invalid characters')
-        
+
         return v
+
+    @model_validator(mode='after')
+    def validate_image_attachment(self):
+        """Validate that image attachments are only used with OpenAI GPT models"""
+        if self.image_attachment is not None:
+            # Only allow image attachments for OpenAI provider
+            if self.provider != "openai":
+                raise ValueError('Image attachments are only supported with OpenAI provider')
+
+            # Only allow for GPT models (GPT-5 family)
+            openai_models = ["gpt-5", "gpt-5-mini", "gpt-5-nano"]
+            if self.model not in openai_models:
+                raise ValueError(f'Image attachments are only supported with OpenAI GPT models: {", ".join(openai_models)}')
+
+        return self
 
 class Message(BaseModel):
     role: str  # "system", "user", or "assistant"
@@ -566,6 +627,7 @@ class AuthConfigResponse(BaseModel):
 
 class AppConfigResponse(BaseModel):
     suggestions: List[str]
+    max_image_size_mb: float
 
 class DocumentUploadResponse(BaseModel):
     document_id: str
@@ -580,7 +642,7 @@ class RAGQueryRequest(BaseModel):
     question: str
     developer_message: str  # System message from the developer/UI
     k: Optional[int] = 5  # Number of relevant chunks to retrieve
-    model: Optional[str] = "gpt-4.1"  # Model selection for RAG queries
+    model: Optional[str] = "gpt-5"  # Model selection for RAG queries
     mode: Optional[str] = "rag"  # RAG mode: "rag" or "topic-explorer"
     provider: Optional[str] = "openai"  # Provider selection: "openai" or "together"
     
@@ -631,14 +693,13 @@ class RAGQueryRequest(BaseModel):
     def validate_model(cls, v):
         """Validate model selection"""
         if not v:
-            return "gpt-4.1-mini"  # Default model
-        
-        # List of allowed models for OpenAI
+            return "gpt-5-mini"  # Default model
+
+        # List of allowed models for OpenAI (GPT-5 family only)
         openai_models = [
-            "gpt-4", "gpt-4-mini", "gpt-4-turbo", "gpt-4o", "gpt-4o-mini",
-            "gpt-4.1", "gpt-4.1-mini", "gpt-4.1-nano", "gpt-5", "gpt-5-mini", "gpt-5-nano"
+            "gpt-5", "gpt-5-mini", "gpt-5-nano"
         ]
-        
+
         # List of allowed models for Together.ai
         together_models = [
             "deepseek-ai/DeepSeek-R1", "deepseek-ai/DeepSeek-V3.1", "deepseek-ai/DeepSeek-V3",
@@ -646,12 +707,12 @@ class RAGQueryRequest(BaseModel):
             "openai/gpt-oss-20b", "openai/gpt-oss-120b", "moonshotai/Kimi-K2-Instruct-0905",
             "Qwen/Qwen3-Next-80B-A3B-Thinking"
         ]
-        
+
         all_models = openai_models + together_models
-        
+
         if v not in all_models:
             raise ValueError(f'Invalid model: {v}. Allowed models: {", ".join(all_models)}')
-        
+
         return v
     
     @field_validator('provider')
@@ -948,7 +1009,7 @@ def _fetch_suggestions() -> List[str]:
             model = "deepseek-ai/DeepSeek-V3.1"
         else:
             base_url = "https://api.openai.com/v1"
-            model = "gpt-4o-mini"
+            model = "gpt-5-mini"
 
         # Create OpenAI client
         client = OpenAI(api_key=api_key, base_url=base_url)
@@ -1044,7 +1105,10 @@ async def get_auth_config(request: Request):
 @limiter.limit("30/minute")
 async def get_app_config(request: Request):
     suggestions = _fetch_suggestions()
-    return AppConfigResponse(suggestions=suggestions)
+    return AppConfigResponse(
+        suggestions=suggestions,
+        max_image_size_mb=MAX_IMAGE_SIZE_MB
+    )
 
 # Define the main chat endpoint that handles POST requests
 @app.post(
@@ -1171,29 +1235,54 @@ async def chat(
         # Create an async generator function for streaming responses
         async def generate():
             try:
-                # Create a streaming chat completion request
-                stream = client.chat.completions.create(
+                # Extract image data URL if present
+                image_data_url = None
+                if chat_request.image_attachment:
+                    image_data_url = chat_request.image_attachment.data_url
+
+                # Create a streaming chat completion request using the helper
+                # This automatically enables web search for GPT-5 models via Responses API
+                stream = create_openai_request(
+                    api_key=api_key,
+                    provider=chat_request.provider,
                     model=chat_request.model,
                     messages=messages_for_openai,
-                    stream=True  # Enable streaming response
+                    stream=True,  # Enable streaming response
+                    image_data_url=image_data_url
                 )
-                
+
                 # Collect the full response for storage
                 full_response = ""
-                
+
+                # Determine if this is a Responses API stream (GPT-5 with web search)
+                # or Chat Completions API stream (Together.ai or other models)
+                is_responses_api = chat_request.provider == "openai" and chat_request.model in ["gpt-5", "gpt-5-mini", "gpt-5-nano"]
+
                 # Yield each chunk of the response as it becomes available
                 for chunk in stream:
                     # Some providers may send chunks without choices or content (e.g., role updates or keep-alives)
                     try:
-                        choices = getattr(chunk, "choices", None)
-                        if not choices or len(choices) == 0:
-                            continue
-                        choice0 = choices[0]
-                        delta = getattr(choice0, "delta", None)
-                        content = getattr(delta, "content", None) if delta is not None else None
-                        if content:
-                            full_response += content
-                            yield content
+                        if is_responses_api:
+                            # Responses API streaming format
+                            # Events have 'type' field and text deltas are in 'delta' attribute
+                            event_type = getattr(chunk, 'type', None)
+                            if event_type == 'response.output_text.delta':
+                                # Text delta events have the incremental text in 'delta' attribute
+                                delta = getattr(chunk, 'delta', None)
+                                if delta:
+                                    full_response += delta
+                                    yield delta
+                        else:
+                            # Chat Completions API streaming format
+                            choices = getattr(chunk, "choices", None)
+                            if not choices or len(choices) == 0:
+                                continue
+                            choice0 = choices[0]
+                            delta = getattr(choice0, "delta", None)
+                            content = getattr(delta, "content", None) if delta is not None else None
+                            if content:
+                                full_response += content
+                                yield content
                     except Exception:
                         # Be tolerant to provider-specific streaming variations
                         continue
@@ -1527,7 +1616,7 @@ async def upload_document(
                 kwargs["response_format"] = {"type": "json_object"}
                 chat_model = ChatOpenAI(api_key=api_key, provider=provider)
                 response = chat_model.run(
-                    model_name="gpt-4.1-mini" if provider == "openai" else "deepseek-ai/DeepSeek-V3.1",
+                    model_name="gpt-5-mini" if provider == "openai" else "deepseek-ai/DeepSeek-V3.1",
                     messages=[
                         {"role": "system", "content": system_message},
                         {"role": "user", "content": user_message}

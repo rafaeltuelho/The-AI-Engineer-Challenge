@@ -347,6 +347,17 @@
   padding-left: 10px;
 }
 
+.conversation-item.loading {
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+.conversation-loading-indicator {
+  display: flex;
+  align-items: center;
+  margin-left: auto;
+}
+
 .conversation-mode-icon {
   font-size: 0.875rem;
   flex-shrink: 0;
@@ -525,6 +536,25 @@
   border-radius: var(--radius-full);
   border: 2px solid transparent;
   background-clip: content-box;
+}
+
+/* Conversation Loading Screen */
+.conversation-loading-screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  padding: 48px 24px;
+}
+
+.loading-message {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  color: var(--text-secondary);
+  font-size: 0.875rem;
 }
 
 /* Welcome Screen (Empty State) */
@@ -987,6 +1017,121 @@
 .pdf-upload-button:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+.image-upload-button {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 8px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  position: relative;
+}
+
+.image-upload-button:hover:not(:disabled) {
+  color: var(--text-primary);
+  background: var(--bg-tertiary);
+}
+
+.image-upload-button:hover:not(:disabled)::after {
+  content: 'Attach Image';
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  white-space: nowrap;
+  margin-bottom: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  border: 1px solid var(--border-color);
+  pointer-events: none;
+  z-index: 1000;
+  animation: tooltipFadeIn 0.15s ease-out;
+}
+
+@keyframes tooltipFadeIn {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+.image-upload-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.input-container.dragging-image {
+  border-color: var(--accent-primary);
+  background: rgba(16, 163, 127, 0.05);
+}
+
+.image-preview-container {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  background: var(--bg-secondary);
+  border-radius: 8px;
+  margin-bottom: 8px;
+}
+
+.image-preview {
+  position: relative;
+  width: 60px;
+  height: 60px;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid var(--border-primary);
+}
+
+.image-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.remove-image-btn {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  background: rgba(0, 0, 0, 0.7);
+  border: none;
+  color: white;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s;
+}
+
+.remove-image-btn:hover {
+  background: rgba(0, 0, 0, 0.9);
+}
+
+.image-filename {
+  flex: 1;
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .upload-message {

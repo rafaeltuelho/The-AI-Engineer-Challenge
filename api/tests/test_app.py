@@ -347,12 +347,12 @@ def test_chat_request_valid():
     request = ChatRequest(
         user_message="Hello",
         developer_message="You are a helpful assistant",
-        model="gpt-4.1-mini",
+        model="gpt-5-mini",
         provider="openai"
     )
     assert request.user_message == "Hello"
     assert request.developer_message == "You are a helpful assistant"
-    assert request.model == "gpt-4.1-mini"
+    assert request.model == "gpt-5-mini"
     assert request.provider == "openai"
 
 
@@ -454,7 +454,7 @@ def test_rag_query_request_valid():
         question="What is this about?",
         developer_message="System message",
         k=5,
-        model="gpt-4.1",
+        model="gpt-5",
         provider="openai"
     )
     assert request.question == "What is this about?"
@@ -607,16 +607,18 @@ async def test_clear_all_conversations(client, clean_state, mock_session):
 @pytest.mark.asyncio
 async def test_chat_endpoint_forwards_selected_model_to_provider(client, clean_state, mock_session):
     """Test POST /api/chat forwards the requested model unchanged to the provider SDK."""
-    import app as app_module
+    from openai_helper import create_openai_client
 
+    # For GPT-5 models, we now use Responses API which has a different streaming format
+    # Events have 'type' field and text deltas are in 'delta' attribute
     stream_chunk = MagicMock()
-    stream_chunk.model = "gpt-5"
-    stream_chunk.choices = [MagicMock(delta=MagicMock(content="Hello from GPT-5"))]
+    stream_chunk.type = "response.output_text.delta"
+    stream_chunk.delta = "Hello from GPT-5"
 
     mock_client = MagicMock()
-    mock_client.chat.completions.create.return_value = iter([stream_chunk])
+    mock_client.responses.create.return_value = iter([stream_chunk])
 
-    with patch.object(app_module, "OpenAI", return_value=mock_client):
+    with patch("openai_helper.create_openai_client", return_value=mock_client):
         response = await client.post(
             "/api/chat",
             headers={"X-Session-ID": mock_session},
@@ -633,18 +635,20 @@ async def test_chat_endpoint_forwards_selected_model_to_provider(client, clean_s
     assert response.headers["x-conversation-id"]
     assert response.headers["x-free-turns-remaining"] == "3"
 
-    mock_client.chat.completions.create.assert_called_once()
-    call_kwargs = mock_client.chat.completions.create.call_args.kwargs
+    # Verify Responses API was called (not Chat Completions API)
+    mock_client.responses.create.assert_called_once()
+    call_kwargs = mock_client.responses.create.call_args.kwargs
     assert call_kwargs["model"] == "gpt-5"
     assert call_kwargs["stream"] is True
-    assert call_kwargs["messages"][0] == {
-        "role": "system",
-        "content": "You are a helpful assistant."
-    }
-    assert call_kwargs["messages"][1] == {
-        "role": "user",
-        "content": "Say hello"
-    }
+    # Verify web_search tool is added for GPT-5 models
+    assert "tools" in call_kwargs
+    assert call_kwargs["tools"] == [{"type": "web_search"}]
+    # Verify input contains the messages
+    assert "input" in call_kwargs
+    assert "You are a helpful assistant" in call_kwargs["input"]
+    assert "Say hello" in call_kwargs["input"]
+    # Verify Chat Completions API was NOT called
+    assert not mock_client.chat.completions.create.called
 
 
 # ============================================
@@ -706,7 +710,7 @@ async def test_rag_query_endpoint_forwards_selected_model_to_rag_system(client, 
 def test_count_tokens_with_known_text():
     """Test count_tokens() with known text."""
     text = "Hello, world!"
-    token_count = count_tokens(text, model="gpt-4")
+    token_count = count_tokens(text, model="gpt-5")
     # Should return a reasonable token count (not exact, but > 0)
     assert token_count > 0
     assert token_count < 100  # Should be small for short text
@@ -998,13 +1002,13 @@ class TestGetContextWindowSize:
 
     def test_exact_match(self):
         from context_manager import get_context_window_size
-        assert get_context_window_size("gpt-4") == 8_192
-        assert get_context_window_size("gpt-4.1-mini") == 1_048_576
+        assert get_context_window_size("gpt-5") == 1_048_576
+        assert get_context_window_size("gpt-5-mini") == 1_048_576
 
     def test_prefix_match(self):
         from context_manager import get_context_window_size
-        # "gpt-4-0613" should match "gpt-4" prefix
-        assert get_context_window_size("gpt-4-0613") == 8_192
+        # "gpt-5-preview" should match "gpt-5" prefix
+        assert get_context_window_size("gpt-5-preview") == 1_048_576
 
     def test_fallback(self):
         from context_manager import get_context_window_size, DEFAULT_CONTEXT_WINDOW
@@ -1020,19 +1024,19 @@ class TestCountConversationTokens:
             {"role": "user", "content": "Hello there"},
             {"role": "assistant", "content": "Hi! How can I help?"},
         ]
-        tokens = count_conversation_tokens(messages, "You are helpful.", "gpt-4")
+        tokens = count_conversation_tokens(messages, "You are helpful.", "gpt-5")
         assert tokens > 0
 
     def test_handles_message_objects(self):
         from context_manager import count_conversation_tokens
         from app import Message
         msgs = [Message(role="user", content="test", timestamp=datetime.now(timezone.utc))]
-        tokens = count_conversation_tokens(msgs, "system", "gpt-4")
+        tokens = count_conversation_tokens(msgs, "system", "gpt-5")
         assert tokens > 0
 
     def test_empty_messages(self):
         from context_manager import count_conversation_tokens
-        tokens = count_conversation_tokens([], "system prompt", "gpt-4")
+        tokens = count_conversation_tokens([], "system prompt", "gpt-5")
         # Should only count the system message tokens
         assert tokens > 0
 
@@ -1043,17 +1047,17 @@ class TestShouldCompress:
     def test_returns_false_under_threshold(self):
         from context_manager import should_compress
         messages = [{"role": "user", "content": "Hi"}]
-        assert should_compress(messages, "system", "gpt-4", threshold_pct=0.8) is False
+        assert should_compress(messages, "system", "gpt-5", threshold_pct=0.8) is False
 
     def test_returns_true_over_threshold(self):
         from context_manager import should_compress
-        # Create enough messages to exceed a very low threshold on a small model
+        # Create enough messages to exceed a very low threshold
         messages = [
             {"role": "user", "content": "x " * 2000}
             for _ in range(10)
         ]
-        # gpt-4 has 8192 tokens, with threshold 0.1 that's ~819 tokens
-        assert should_compress(messages, "system", "gpt-4", threshold_pct=0.1) is True
+        # gpt-5 has 1M tokens, with threshold 0.00001 that's ~10 tokens
+        assert should_compress(messages, "system", "gpt-5", threshold_pct=0.00001) is True
 
 
 class TestCompressConversation:
@@ -1071,7 +1075,7 @@ class TestCompressConversation:
             {"role": "user", "content": f"Message {i}"}
             for i in range(10)
         ]
-        result = compress_conversation(messages, mock_client, "gpt-4", "system", keep_recent=3)
+        result = compress_conversation(messages, mock_client, "gpt-5", "system", keep_recent=3)
 
         # Should be 1 summary + 3 recent = 4 messages
         assert len(result) == 4
@@ -1083,7 +1087,7 @@ class TestCompressConversation:
         from context_manager import compress_conversation
 
         messages = [{"role": "user", "content": "Hi"}]
-        result = compress_conversation(messages, None, "gpt-4", "system", keep_recent=3)
+        result = compress_conversation(messages, None, "gpt-5", "system", keep_recent=3)
         assert result == messages
 
     def test_llm_failure_returns_recent_only(self):
@@ -1093,7 +1097,7 @@ class TestCompressConversation:
         mock_client.chat.completions.create.side_effect = Exception("API error")
 
         messages = [{"role": "user", "content": f"Msg {i}"} for i in range(10)]
-        result = compress_conversation(messages, mock_client, "gpt-4", "system", keep_recent=3)
+        result = compress_conversation(messages, mock_client, "gpt-5", "system", keep_recent=3)
 
         # Should fallback to just the 3 recent messages (no summary)
         assert len(result) == 3
@@ -1117,7 +1121,7 @@ class TestCompressConversation:
             {"role": "assistant", "content": "Msg 6"},
             {"role": "user", "content": "Msg 7"},
         ]
-        result = compress_conversation(messages, mock_client, "gpt-4", "system", keep_recent=3)
+        result = compress_conversation(messages, mock_client, "gpt-5", "system", keep_recent=3)
 
         assert len(result) == 4  # 1 summary + 3 recent
         assert result[0]["content"].startswith(SUMMARY_PREFIX)
@@ -1496,3 +1500,358 @@ async def test_guest_session_no_persistence_load_after_cache_clear(client, clean
 
         # Verify load_conversations was NOT called for guest session
         mock_load.assert_not_called()
+
+
+# ============================================
+# 15. OpenAI Helper Integration Tests
+# ============================================
+
+@pytest.mark.asyncio
+async def test_chat_with_gpt5_enables_web_search(client, clean_state):
+    """Test that chat requests with GPT-5 models enable web search via Responses API."""
+    import app as app_module
+    from openai_helper import create_openai_request
+
+    # Create a session with OpenAI API key
+    session_id = create_session(auth_type="api_key", api_key="test-openai-key", provider="openai")
+
+    # Mock the create_openai_request to capture parameters
+    with patch('app.create_openai_request') as mock_helper:
+        # Configure mock to return a Responses API streaming response
+        # (GPT-5 models use Responses API format with type and delta)
+        mock_event = MagicMock()
+        mock_event.type = "response.output_text.delta"
+        mock_event.delta = "Test response"
+
+        mock_stream = MagicMock()
+        mock_stream.__iter__ = Mock(return_value=iter([mock_event]))
+        mock_helper.return_value = mock_stream
+
+        # Send chat request with GPT-5 model
+        response = await client.post(
+            "/api/chat",
+            json={
+                "user_message": "What is the weather today?",
+                "developer_message": "You are a helpful assistant.",
+                "model": "gpt-5",
+                "provider": "openai"
+            },
+            headers={"X-Session-ID": session_id}
+        )
+
+        # Verify the helper was called
+        assert mock_helper.called
+        call_kwargs = mock_helper.call_args[1]
+
+        # Verify correct parameters
+        assert call_kwargs["provider"] == "openai"
+        assert call_kwargs["model"] == "gpt-5"
+        assert call_kwargs["stream"] is True
+        assert call_kwargs["api_key"] == "test-openai-key"
+
+
+@pytest.mark.asyncio
+async def test_chat_with_together_no_web_search(client, clean_state):
+    """Test that Together.ai requests do not get web search parameter."""
+    import app as app_module
+
+    # Create a session with Together API key
+    session_id = create_session(auth_type="api_key", api_key="test-together-key", provider="together")
+
+    # Mock the create_openai_request to capture parameters
+    with patch('app.create_openai_request') as mock_helper:
+        # Configure mock to return a mock streaming response
+        mock_stream = MagicMock()
+        mock_stream.__iter__ = Mock(return_value=iter([
+            MagicMock(choices=[MagicMock(delta=MagicMock(content="Test response"))])
+        ]))
+        mock_helper.return_value = mock_stream
+
+        # Send chat request with Together.ai model
+        response = await client.post(
+            "/api/chat",
+            json={
+                "user_message": "Hello",
+                "developer_message": "You are a helpful assistant.",
+                "model": "meta-llama/Llama-3.3-70B-Instruct-Turbo",
+                "provider": "together"
+            },
+            headers={"X-Session-ID": session_id}
+        )
+
+        # Verify the helper was called with Together provider
+        assert mock_helper.called
+        call_kwargs = mock_helper.call_args[1]
+        assert call_kwargs["provider"] == "together"
+
+
+def test_openai_helper_adds_web_search_for_gpt5():
+    """Test that the helper uses Responses API with web_search tool for GPT-5 models."""
+    from openai_helper import create_openai_request
+
+    # Mock the OpenAI client
+    with patch('openai_helper.OpenAI') as mock_openai_class:
+        mock_client = MagicMock()
+        mock_openai_class.return_value = mock_client
+        mock_client.responses.create.return_value = MagicMock(
+            output_text="Test response"
+        )
+
+        # Call helper with GPT-5 model
+        create_openai_request(
+            api_key="test-key",
+            provider="openai",
+            model="gpt-5",
+            messages=[{"role": "user", "content": "test"}],
+            stream=False
+        )
+
+        # Verify Responses API was called with web_search tool
+        assert mock_client.responses.create.called
+        call_kwargs = mock_client.responses.create.call_args[1]
+        assert "tools" in call_kwargs
+        assert call_kwargs["tools"] == [{"type": "web_search"}]
+        assert "input" in call_kwargs
+        # Verify Chat Completions API was NOT called
+        assert not mock_client.chat.completions.create.called
+
+
+def test_openai_helper_no_web_search_for_together():
+    """Test that the helper uses Chat Completions API without web_search for Together.ai."""
+    from openai_helper import create_openai_request
+
+    # Mock the OpenAI client
+    with patch('openai_helper.OpenAI') as mock_openai_class:
+        mock_client = MagicMock()
+        mock_openai_class.return_value = mock_client
+        mock_client.chat.completions.create.return_value = MagicMock(
+            choices=[MagicMock(message=MagicMock(content="Test response"))]
+        )
+
+        # Call helper with Together.ai
+        create_openai_request(
+            api_key="test-key",
+            provider="together",
+            model="meta-llama/Llama-3.3-70B-Instruct-Turbo",
+            messages=[{"role": "user", "content": "test"}],
+            stream=False
+        )
+
+        # Verify Chat Completions API was called
+        assert mock_client.chat.completions.create.called
+        call_kwargs = mock_client.chat.completions.create.call_args[1]
+        # Verify web_search and tools were NOT added
+        assert "web_search" not in call_kwargs
+        assert "web_search_options" not in call_kwargs
+        assert "tools" not in call_kwargs
+        # Verify Responses API was NOT called
+        assert not mock_client.responses.create.called
+
+
+def test_chatmodel_uses_helper_for_gpt5():
+    """Test that ChatOpenAI class uses helper and enables web search for GPT-5."""
+    from aimakerspace.openai_utils.chatmodel import ChatOpenAI
+
+    # Mock the helper
+    with patch('aimakerspace.openai_utils.chatmodel.create_openai_request') as mock_helper:
+        mock_helper.return_value = MagicMock(
+            choices=[MagicMock(message=MagicMock(content="Test response"))]
+        )
+
+        # Create ChatOpenAI instance and call run
+        chat = ChatOpenAI(api_key="test-key", provider="openai")
+        result = chat.run(
+            messages=[{"role": "user", "content": "test"}],
+            model_name="gpt-5-mini"
+        )
+
+        # Verify helper was called with correct parameters
+        assert mock_helper.called
+        call_kwargs = mock_helper.call_args[1]
+        assert call_kwargs["provider"] == "openai"
+        assert call_kwargs["model"] == "gpt-5-mini"
+        assert call_kwargs["stream"] is False
+
+
+# ============================================
+# Image Attachment Tests
+# ============================================
+
+@pytest.mark.asyncio
+async def test_config_endpoint_includes_max_image_size(client, clean_state):
+    """Test that /api/config endpoint includes max_image_size_mb."""
+    response = await client.get("/api/config")
+    assert response.status_code == 200
+    data = response.json()
+    assert "max_image_size_mb" in data
+    assert data["max_image_size_mb"] == 3.0  # Default value
+
+
+def test_image_attachment_validation_mime_type():
+    """Test ImageAttachment validates MIME types."""
+    from app import ImageAttachment
+    import base64
+
+    # Create a small test image (1x1 PNG)
+    small_png = base64.b64encode(b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde').decode()
+    valid_data_url = f"data:image/png;base64,{small_png}"
+
+    # Valid MIME types should work
+    for mime_type in ["image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif"]:
+        attachment = ImageAttachment(mime_type=mime_type, data_url=valid_data_url)
+        assert attachment.mime_type == mime_type.lower()
+
+    # Invalid MIME type should fail
+    with pytest.raises(ValueError, match="Unsupported image type"):
+        ImageAttachment(mime_type="image/bmp", data_url=valid_data_url)
+
+
+def test_image_attachment_validation_size():
+    """Test ImageAttachment validates file size."""
+    from app import ImageAttachment
+    import base64
+
+    # Create a small valid image
+    small_png = base64.b64encode(b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde').decode()
+    valid_data_url = f"data:image/png;base64,{small_png}"
+
+    # Small image should work
+    attachment = ImageAttachment(mime_type="image/png", data_url=valid_data_url)
+    assert attachment.data_url == valid_data_url
+
+    # Create an oversized image (> 3 MB)
+    # 3 MB = 3 * 1024 * 1024 bytes = 3,145,728 bytes
+    large_data = b'x' * (4 * 1024 * 1024)  # 4 MB
+    large_base64 = base64.b64encode(large_data).decode()
+    large_data_url = f"data:image/png;base64,{large_base64}"
+
+    # Oversized image should fail
+    with pytest.raises(ValueError, match="exceeds maximum allowed size"):
+        ImageAttachment(mime_type="image/png", data_url=large_data_url)
+
+
+def test_chat_request_image_attachment_provider_validation():
+    """Test ChatRequest validates image attachments are only for OpenAI."""
+    from app import ChatRequest, ImageAttachment
+    import base64
+
+    # Create a small test image
+    small_png = base64.b64encode(b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde').decode()
+    valid_data_url = f"data:image/png;base64,{small_png}"
+    attachment = ImageAttachment(mime_type="image/png", data_url=valid_data_url)
+
+    # OpenAI provider should work
+    request = ChatRequest(
+        user_message="Test",
+        developer_message="System",
+        provider="openai",
+        model="gpt-5-mini",
+        image_attachment=attachment
+    )
+    assert request.image_attachment is not None
+
+    # Together.ai provider should fail
+    with pytest.raises(ValueError, match="only supported with OpenAI provider"):
+        ChatRequest(
+            user_message="Test",
+            developer_message="System",
+            provider="together",
+            model="meta-llama/Llama-3.3-70B-Instruct-Turbo",
+            image_attachment=attachment
+        )
+
+
+def test_chat_request_image_attachment_model_validation():
+    """Test ChatRequest validates image attachments are only for GPT models."""
+    from app import ChatRequest, ImageAttachment
+    import base64
+
+    # Create a small test image
+    small_png = base64.b64encode(b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde').decode()
+    valid_data_url = f"data:image/png;base64,{small_png}"
+    attachment = ImageAttachment(mime_type="image/png", data_url=valid_data_url)
+
+    # GPT-5 models should work
+    for model in ["gpt-5", "gpt-5-mini", "gpt-5-nano"]:
+        request = ChatRequest(
+            user_message="Test",
+            developer_message="System",
+            provider="openai",
+            model=model,
+            image_attachment=attachment
+        )
+        assert request.image_attachment is not None
+
+
+@pytest.mark.asyncio
+async def test_chat_with_image_attachment(client, clean_state, mock_session):
+    """Test chat endpoint accepts and processes image attachments."""
+    import base64
+
+    # Create a small test image
+    small_png = base64.b64encode(b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde').decode()
+    valid_data_url = f"data:image/png;base64,{small_png}"
+
+    # Mock the create_openai_request to capture parameters
+    with patch('app.create_openai_request') as mock_helper:
+        # Configure mock to return a mock streaming response
+        mock_stream = MagicMock()
+        mock_stream.__iter__ = Mock(return_value=iter([
+            MagicMock(type='response.output_text.delta', delta="Test response with image")
+        ]))
+        mock_helper.return_value = mock_stream
+
+        # Send chat request with image attachment
+        response = await client.post(
+            "/api/chat",
+            json={
+                "user_message": "What's in this image?",
+                "developer_message": "You are a helpful assistant.",
+                "model": "gpt-5-mini",
+                "provider": "openai",
+                "image_attachment": {
+                    "mime_type": "image/png",
+                    "data_url": valid_data_url,
+                    "filename": "test.png"
+                }
+            },
+            headers={"X-Session-ID": mock_session}
+        )
+
+        assert response.status_code == 200
+
+        # Verify helper was called with image_data_url
+        assert mock_helper.called
+        call_kwargs = mock_helper.call_args[1]
+        assert call_kwargs["image_data_url"] == valid_data_url
+
+
+def test_openai_helper_multimodal_input():
+    """Test openai_helper supports multimodal input with correct Responses API format."""
+    from openai_helper import _messages_to_responses_input
+
+    messages = [{"role": "user", "content": "What's in this image?"}]
+    image_url = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+
+    # Without image, should return text only
+    result = _messages_to_responses_input(messages)
+    assert isinstance(result, str)
+    assert result == "What's in this image?"
+
+    # With image, should return list of message objects (Responses API format)
+    result = _messages_to_responses_input(messages, image_url)
+    assert isinstance(result, list)
+    assert len(result) == 1  # One message object
+
+    # Verify message structure
+    message = result[0]
+    assert message["role"] == "user"
+    assert "content" in message
+    assert isinstance(message["content"], list)
+    assert len(message["content"]) == 2
+
+    # Verify content parts
+    assert message["content"][0]["type"] == "input_text"
+    assert message["content"][0]["text"] == "What's in this image?"
+    assert message["content"][1]["type"] == "input_image"
+    assert message["content"][1]["image_url"] == image_url

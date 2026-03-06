@@ -15,7 +15,7 @@ services:
       - MAX_FREE_TURNS=${MAX_FREE_TURNS:-10}
       - MAX_FREE_MESSAGE_TOKENS=${MAX_FREE_MESSAGE_TOKENS:-1000}
       - FREE_PROVIDER=${FREE_PROVIDER:-openai}
-      - FREE_MODEL=${FREE_MODEL:-gpt-4.1-mini}
+      - FREE_MODEL=${FREE_MODEL:-gpt-5-mini}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - TOGETHER_API_KEY=${TOGETHER_API_KEY:-}
     healthcheck:

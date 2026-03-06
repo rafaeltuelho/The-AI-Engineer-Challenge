@@ -40,7 +40,7 @@ describe('AuthContext', () => {
         google_auth_enabled: true,
         google_client_id: 'test-client-id',
         max_free_turns: 5,
-        free_model: 'gpt-4',
+        free_model: 'gpt-5-nano',
         free_provider: 'openai',
       }),
     })
@@ -54,7 +54,7 @@ describe('AuthContext', () => {
         googleAuthEnabled: true,
         googleClientId: 'test-client-id',
         maxFreeTurns: 5,
-        freeModel: 'gpt-4',
+        freeModel: 'gpt-5-nano',
         freeProvider: 'openai',
       })
     })

@@ -10,7 +10,7 @@ describe('Header', () => {
   const defaultProps = {
     theme: 'light' as const,
     onThemeChange: vi.fn(),
-    selectedModel: 'gpt-4',
+    selectedModel: 'gpt-5-nano',
     selectedProvider: 'openai',
     onSettingsClick: vi.fn(),
     isSidebarOpen: true,
@@ -105,9 +105,9 @@ describe('Header', () => {
   })
 
   it('shows model name and provider', () => {
-    render(<Header {...defaultProps} selectedModel="gpt-4-turbo" selectedProvider="OpenAI" />)
+    render(<Header {...defaultProps} selectedModel="gpt-5-mini" selectedProvider="OpenAI" />)
 
-    expect(screen.getByText('gpt-4-turbo')).toBeInTheDocument()
+    expect(screen.getByText('gpt-5-mini')).toBeInTheDocument()
     expect(screen.getByText('OpenAI')).toBeInTheDocument()
   })
 

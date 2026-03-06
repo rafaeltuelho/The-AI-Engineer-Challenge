@@ -1,49 +1,15 @@
-# 🗄️ Merge Instructions: Upstash Redis Persistence
+# 🚀 Merge Instructions: Loading UX & GPT-5 Model Support
 
-## What this branch does
-Adds Upstash Redis conversation persistence for Google-authenticated users. Chat history now survives across logout/login cycles and server restarts.
-
-## Prerequisites
-Before deploying, set up Upstash Redis:
-1. Create a free database at https://console.upstash.com/
-2. Set `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` env vars in your Vercel project settings (or `.env` for local dev)
-
-## Option A: GitHub PR (Web UI)
-1. Go to your repo on GitHub
-2. Click **"Compare & pull request"** for `feature/upstash-redis-persistence`
-3. Set base branch to `main`
-4. Review the changes, then **"Create pull request"**
-5. After review, click **"Merge pull request"**
-
-## Option B: GitHub CLI
-```bash
-# Push the branch
-git push origin feature/upstash-redis-persistence
-
-# Create a PR
-gh pr create --base main --head feature/upstash-redis-persistence \
-  --title "feat: Add Upstash Redis conversation persistence" \
-  --body "Adds lightweight conversation persistence for Google-authenticated users using Upstash Redis."
-
-# After review, merge
-gh pr merge --squash
-```
-
----
-
-# 🚀 Merge Instructions: Google OAuth Authentication Feature
-
-Hey there! 👋 Ready to bring Google OAuth authentication to the main branch? This guide will walk you through merging PR #13 like a pro.
+Hey there! 👋 Ready to bring improved loading states and GPT-5 web search to the main branch? This guide will walk you through merging the `improve-loading-&-models` branch like a pro.
 
 ## 🎯 What You're Merging
 
-This PR adds optional Google OAuth authentication with:
-- 🔐 Google Sign-In (optional, configurable)
-- 🎟️ Free chat turns for guests and non-whitelisted users
-- ✅ Email whitelisting for unlimited access
-- 🔒 Secure API key handling (no localStorage, no query params)
+This branch adds three key improvements:
+- ⏳ **Better Loading UX**: Smooth conversation loading states with visual feedback
+- 🤖 **GPT-5-Only Model Picker**: Streamlined OpenAI model selection (GPT-5 models only)
+- 🔍 **GPT-5 Web Search**: Backend support for web search with GPT-5 models via OpenAI helper
 
-**PR Link**: https://github.com/rafaeltuelho/The-AI-Engineer-Challenge/pull/13
+**Branch**: `improve-loading-&-models`
 
 ---
 
@@ -51,33 +17,18 @@ This PR adds optional Google OAuth authentication with:
 
 Before you merge, make sure you've got these environment variables ready:
 
-### Required for Free Tier
+### Required for OpenAI GPT-5 Support
 ```bash
-TOGETHER_API_KEY=your_together_api_key_here
+OPENAI_API_KEY=your_openai_api_key_here
 ```
 
-### Optional (but recommended for Google OAuth)
-```bash
-GOOGLE_CLIENT_ID=your_google_oauth_client_id.apps.googleusercontent.com
-WHITELISTED_EMAILS=admin@example.com,vip@example.com
-```
-
-### Optional Customization
-```bash
-FREE_PROVIDER=together                    # Default: together
-FREE_MODEL=deepseek-ai/DeepSeek-V3.1     # Default: deepseek-ai/DeepSeek-V3.1
-MAX_FREE_TURNS=3                          # Default: 3
-MAX_FREE_MESSAGE_TOKENS=500               # Default: 500
-```
-
-> **Note**: If you don't set `GOOGLE_CLIENT_ID`, the Google Sign-In button won't appear, and users will only see "Continue as Guest".
+> **Note**: GPT-5 models require an OpenAI API key. The web search feature is automatically enabled for GPT-5 models.
 
 ### Testing Steps (Recommended)
-1. **Test Guest Flow**: Start the app without `GOOGLE_CLIENT_ID` and verify guest sessions work
-2. **Test Google OAuth**: Add `GOOGLE_CLIENT_ID` and test Google Sign-In
-3. **Test Whitelisting**: Add your email to `WHITELISTED_EMAILS` and verify unlimited access
-4. **Test Free Turns**: As a guest, verify you get exactly `MAX_FREE_TURNS` free messages
-5. **Test API Key Fallback**: Exhaust free turns and verify the API key prompt appears
+1. **Test Loading States**: Start a conversation and verify smooth loading indicators appear
+2. **Test GPT-5 Model Picker**: Check that only GPT-5 models appear in the OpenAI model selector
+3. **Test Web Search**: Use a GPT-5 model and verify web search results are integrated into responses
+4. **Test Backend Integration**: Verify the OpenAI helper correctly handles both chat and RAG flows
 
 ---
 
@@ -85,32 +36,41 @@ MAX_FREE_MESSAGE_TOKENS=500               # Default: 500
 
 Perfect for visual folks who like buttons! 🖱️
 
-1. **Navigate to the PR**
-   Go to: https://github.com/rafaeltuelho/The-AI-Engineer-Challenge/pull/13
+1. **Navigate to Your Repo**
+   Go to: https://github.com/rafaeltuelho/The-AI-Engineer-Challenge
 
-2. **Review the Changes**
+2. **Create a Pull Request**
+   - Click **"Compare & pull request"** for `improve-loading-&-models`
+   - Set base branch to `main`
+   - Review the changes (frontend loading UX, GPT-5 model picker, backend web search)
+   - Click **"Create pull request"**
+
+3. **Review the Changes**
    - Click the "Files changed" tab
-   - Review the 18 changed files (+1629 additions, -208 deletions)
-   - Check out the new auth components, backend endpoints, and security improvements
+   - Key files to review:
+     - `frontend/src/components/ChatInterface.tsx` — Loading states
+     - `frontend/src/App.tsx` — GPT-5-only model picker
+     - `api/openai_helper.py` — Web search support
+     - `api/app.py` — Integration into chat/RAG flows
 
-3. **Run CI Checks** (if configured)
+4. **Run CI Checks** (if configured)
    - Wait for any automated tests to pass ✅
    - If tests fail, address issues before merging
 
-4. **Merge the PR**
+5. **Merge the PR**
    - Scroll to the bottom of the PR page
    - Click the big green **"Merge pull request"** button
    - Choose your merge strategy:
      - **Create a merge commit** (recommended) — Preserves full history
-     - **Squash and merge** — Combines all 6 commits into one
+     - **Squash and merge** — Combines all commits into one
      - **Rebase and merge** — Replays commits on top of main
    - Click **"Confirm merge"**
 
-5. **Delete the Branch** (optional but tidy)
-   - After merging, GitHub will offer to delete `add-google-oauth-authentication`
+6. **Delete the Branch** (optional but tidy)
+   - After merging, GitHub will offer to delete `improve-loading-&-models`
    - Click **"Delete branch"** to keep your repo clean
 
-6. **Pull the Latest Main**
+7. **Pull the Latest Main**
    ```bash
    git checkout main
    git pull origin main
@@ -145,33 +105,50 @@ winget install GitHub.cli
 gh auth login
 ```
 
-### Merge the PR
+### Create and Merge the PR
 
-#### Option A: Auto-Merge (Quick & Easy)
+#### Option A: Create PR and Auto-Merge
 ```bash
-# Merge PR #13 with a merge commit
-gh pr merge 13 --merge --delete-branch
+# Push the branch (if not already pushed)
+git push origin improve-loading-\&-models
 
-# Or squash all commits into one
-gh pr merge 13 --squash --delete-branch
+# Create a PR
+gh pr create --base main --head improve-loading-\&-models \
+  --title "feat: Improve loading UX and add GPT-5 web search support" \
+  --body "Adds improved conversation loading states, GPT-5-only model picker, and backend web search support for GPT-5 models."
+
+# After review, merge with squash
+gh pr merge --squash --delete-branch
+
+# Or merge with a merge commit
+gh pr merge --merge --delete-branch
 
 # Or rebase onto main
-gh pr merge 13 --rebase --delete-branch
+gh pr merge --rebase --delete-branch
 ```
 
 #### Option B: Review First, Then Merge
 ```bash
-# View PR details
-gh pr view 13
+# Push the branch
+git push origin improve-loading-\&-models
 
-# Check out the PR locally to test
-gh pr checkout 13
+# Create a PR
+gh pr create --base main --head improve-loading-\&-models \
+  --title "feat: Improve loading UX and add GPT-5 web search support" \
+  --body "Adds improved conversation loading states, GPT-5-only model picker, and backend web search support for GPT-5 models."
+
+# View PR details
+gh pr view
+
+# Check out the PR locally to test (if needed)
+gh pr checkout
 
 # Run tests, verify functionality
-npm run dev  # or whatever your test command is
+npm run dev  # Test frontend
+cd api && python -m pytest  # Test backend
 
 # If everything looks good, merge it
-gh pr merge 13 --merge --delete-branch
+gh pr merge --squash --delete-branch
 ```
 
 ### Pull the Latest Main
@@ -189,40 +166,40 @@ If you checked out the feature branch locally, clean it up:
 
 ```bash
 # Delete local branch
-git branch -d add-google-oauth-authentication
+git branch -d improve-loading-\&-models
 
 # If it complains, force delete
-git branch -D add-google-oauth-authentication
+git branch -D improve-loading-\&-models
 
 # Prune remote-tracking branches
 git fetch --prune
 ```
 
 ### Verify Deployment
-After merging, verify the feature works in your deployment environment:
+After merging, verify the features work in your deployment environment:
 
 1. **Set environment variables** in your hosting platform (Vercel, Heroku, etc.)
+   - Make sure `OPENAI_API_KEY` is set for GPT-5 support
 2. **Redeploy** if necessary
-3. **Test the auth flow** in production:
-   - Guest sign-in
-   - Google OAuth (if enabled)
-   - Free turns mechanism
-   - API key fallback
+3. **Test the new features** in production:
+   - Conversation loading states
+   - GPT-5 model selection
+   - Web search integration with GPT-5 models
 
 ---
 
 ## 🎉 You're Done!
 
-Congrats! You've successfully merged the Google OAuth authentication feature. Your app now has:
-- ✅ Optional Google Sign-In
-- ✅ Free chat turns for guests
-- ✅ Email whitelisting
-- ✅ Secure API key handling
+Congrats! You've successfully merged the loading UX and GPT-5 improvements. Your app now has:
+- ✅ Smooth conversation loading states
+- ✅ Streamlined GPT-5-only model picker
+- ✅ Web search support for GPT-5 models
+- ✅ Improved backend OpenAI integration
 
 ### Need Help?
-- **PR Issues**: Comment on PR #13
-- **Merge Conflicts**: Reach out to the PR author
-- **Environment Setup**: Check the PR description for detailed env var docs
+- **Merge Conflicts**: Check the PR for conflict resolution guidance
+- **Environment Setup**: Make sure `OPENAI_API_KEY` is configured
+- **Feature Issues**: Review the commit history for implementation details
 
 ---
 
