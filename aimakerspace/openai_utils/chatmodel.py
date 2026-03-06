@@ -78,7 +78,9 @@ class ChatOpenAI:
         # For OpenAI GPT-5 models, enable web search
         GPT5_WEB_SEARCH_MODELS = ["gpt-5", "gpt-5-mini", "gpt-5-nano"]
         if self.provider == "openai" and model_name in GPT5_WEB_SEARCH_MODELS:
-            request_params["web_search"] = {"enabled": True}
+            request_params["web_search_options"] = {
+                "search_context_size": "medium"
+            }
 
         response = await client.chat.completions.create(**request_params)
 

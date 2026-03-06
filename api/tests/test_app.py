@@ -607,7 +607,7 @@ async def test_clear_all_conversations(client, clean_state, mock_session):
 @pytest.mark.asyncio
 async def test_chat_endpoint_forwards_selected_model_to_provider(client, clean_state, mock_session):
     """Test POST /api/chat forwards the requested model unchanged to the provider SDK."""
-    import app as app_module
+    from openai_helper import create_openai_client
 
     stream_chunk = MagicMock()
     stream_chunk.model = "gpt-5"
@@ -616,7 +616,7 @@ async def test_chat_endpoint_forwards_selected_model_to_provider(client, clean_s
     mock_client = MagicMock()
     mock_client.chat.completions.create.return_value = iter([stream_chunk])
 
-    with patch.object(app_module, "OpenAI", return_value=mock_client):
+    with patch("openai_helper.create_openai_client", return_value=mock_client):
         response = await client.post(
             "/api/chat",
             headers={"X-Session-ID": mock_session},
@@ -637,6 +637,9 @@ async def test_chat_endpoint_forwards_selected_model_to_provider(client, clean_s
     call_kwargs = mock_client.chat.completions.create.call_args.kwargs
     assert call_kwargs["model"] == "gpt-5"
     assert call_kwargs["stream"] is True
+    # Verify web_search_options is added for GPT-5 models
+    assert "web_search_options" in call_kwargs
+    assert call_kwargs["web_search_options"]["search_context_size"] == "medium"
     assert call_kwargs["messages"][0] == {
         "role": "system",
         "content": "You are a helpful assistant."
@@ -1579,7 +1582,7 @@ async def test_chat_with_together_no_web_search(client, clean_state):
 
 
 def test_openai_helper_adds_web_search_for_gpt5():
-    """Test that the helper adds web_search parameter for GPT-5 models."""
+    """Test that the helper adds web_search_options parameter for GPT-5 models."""
     from openai_helper import create_openai_request
 
     # Mock the OpenAI client
@@ -1599,10 +1602,10 @@ def test_openai_helper_adds_web_search_for_gpt5():
             stream=False
         )
 
-        # Verify web_search was added
+        # Verify web_search_options was added
         call_kwargs = mock_client.chat.completions.create.call_args[1]
-        assert "web_search" in call_kwargs
-        assert call_kwargs["web_search"] == {"enabled": True}
+        assert "web_search_options" in call_kwargs
+        assert call_kwargs["web_search_options"]["search_context_size"] == "medium"
 
 
 def test_openai_helper_no_web_search_for_together():

@@ -460,7 +460,7 @@ class RAGSystem:
         except Exception as e:
             raise Exception(f"Error searching chunks: {str(e)}")
     
-    async def query_documents(self, query: str, k: int = 3, mode: str = "rag", model_name: str = "gpt-4o-mini", system_message: Optional[str] = None) -> str:
+    async def query_documents(self, query: str, k: int = 3, mode: str = "rag", model_name: str = "gpt-5-mini", system_message: Optional[str] = None) -> str:
         """
         Query documents using RAG approach.
 
@@ -554,7 +554,7 @@ class RAGSystem:
         except Exception as e:
             raise Exception(f"Error querying documents: {str(e)}")
     
-    def query(self, query: str, k: int = 3, mode: str = "rag", model_name: str = "gpt-4o-mini", system_message: Optional[str] = None) -> str:
+    def query(self, query: str, k: int = 3, mode: str = "rag", model_name: str = "gpt-5-mini", system_message: Optional[str] = None) -> str:
         """
         Synchronous version of Query.
         

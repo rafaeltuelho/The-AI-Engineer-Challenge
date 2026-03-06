@@ -76,7 +76,9 @@ def create_openai_request(
 
     # For OpenAI GPT-5 models, enable web search
     if _supports_web_search(provider, model):
-        request_params["web_search"] = {"enabled": True}
+        request_params["web_search_options"] = {
+            "search_context_size": "medium"
+        }
 
     # Use Chat Completions API for all requests
     return client.chat.completions.create(**request_params)
