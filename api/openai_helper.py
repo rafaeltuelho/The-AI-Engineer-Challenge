@@ -43,15 +43,16 @@ def _messages_to_responses_input(messages: List[Dict[str, str]], image_data_url:
     """
     Convert Chat Completions messages format to Responses API input format.
 
-    The Responses API expects either a single input string or a list of content parts
-    for multimodal input (text + image).
+    The Responses API expects either:
+    - A single input string for text-only
+    - An array of message objects with 'role' and 'content' for multimodal input
 
     Args:
         messages: List of message dicts with 'role' and 'content'
         image_data_url: Optional base64 data URL for image attachment (only for current user turn)
 
     Returns:
-        Formatted input string for text-only, or list of content parts for multimodal
+        Formatted input string for text-only, or list of message objects for multimodal
     """
     # Build text input from messages
     if len(messages) == 1:
@@ -74,11 +75,16 @@ def _messages_to_responses_input(messages: List[Dict[str, str]], image_data_url:
     if image_data_url is None:
         return text_content
 
-    # For multimodal input, return list of content parts
-    # Responses API format: [{"type": "input_text", "text": "..."}, {"type": "input_image", "image_url": "..."}]
+    # For multimodal input, wrap content parts in a message object with role
+    # Responses API format: [{"role": "user", "content": [{"type": "input_text", ...}, {"type": "input_image", ...}]}]
     return [
-        {"type": "input_text", "text": text_content},
-        {"type": "input_image", "image_url": image_data_url}
+        {
+            "role": "user",
+            "content": [
+                {"type": "input_text", "text": text_content},
+                {"type": "input_image", "image_url": image_data_url}
+            ]
+        }
     ]
 
 

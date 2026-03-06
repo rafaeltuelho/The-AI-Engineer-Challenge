@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react'
-import { Send, MessageSquare, User, Bot, Trash2, Settings, ArrowDown, X, FileText, Upload, Compass } from 'lucide-react'
+import { Send, MessageSquare, User, Bot, Trash2, Settings, ArrowDown, X, FileText, Upload, Compass, Image } from 'lucide-react'
 import MarkdownRenderer from './MarkdownRenderer'
 import SuggestedQuestions from './SuggestedQuestions'
 import SettingsModal from './SettingsModal'
@@ -1300,7 +1300,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                 disabled={isLoading || (!isWhitelisted && !hasOwnApiKey && !hasFreeTurns) || !!attachedImage}
                 title="Attach Image (PNG, JPEG, WEBP, GIF)"
               >
-                <FileText size={20} />
+                <Image size={20} />
               </button>
             )}
             <textarea

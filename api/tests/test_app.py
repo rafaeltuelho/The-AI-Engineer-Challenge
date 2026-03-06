@@ -1827,7 +1827,7 @@ async def test_chat_with_image_attachment(client, clean_state, mock_session):
 
 
 def test_openai_helper_multimodal_input():
-    """Test openai_helper supports multimodal input."""
+    """Test openai_helper supports multimodal input with correct Responses API format."""
     from openai_helper import _messages_to_responses_input
 
     messages = [{"role": "user", "content": "What's in this image?"}]
@@ -1838,11 +1838,20 @@ def test_openai_helper_multimodal_input():
     assert isinstance(result, str)
     assert result == "What's in this image?"
 
-    # With image, should return list of content parts
+    # With image, should return list of message objects (Responses API format)
     result = _messages_to_responses_input(messages, image_url)
     assert isinstance(result, list)
-    assert len(result) == 2
-    assert result[0]["type"] == "input_text"
-    assert result[0]["text"] == "What's in this image?"
-    assert result[1]["type"] == "input_image"
-    assert result[1]["image_url"] == image_url
+    assert len(result) == 1  # One message object
+
+    # Verify message structure
+    message = result[0]
+    assert message["role"] == "user"
+    assert "content" in message
+    assert isinstance(message["content"], list)
+    assert len(message["content"]) == 2
+
+    # Verify content parts
+    assert message["content"][0]["type"] == "input_text"
+    assert message["content"][0]["text"] == "What's in this image?"
+    assert message["content"][1]["type"] == "input_image"
+    assert message["content"][1]["image_url"] == image_url

@@ -15,6 +15,7 @@ vi.mock('lucide-react', () => ({
   FileText: () => <div>FileText</div>,
   Upload: () => <div>Upload</div>,
   Compass: () => <div>Compass</div>,
+  Image: () => <div>Image</div>,
 }))
 
 // Mock MarkdownRenderer
