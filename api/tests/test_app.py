@@ -601,7 +601,106 @@ async def test_clear_all_conversations(client, clean_state, mock_session):
 
 
 # ============================================
-# 7. Token Counting Tests
+# 7. Chat Endpoint Model Forwarding Tests
+# ============================================
+
+@pytest.mark.asyncio
+async def test_chat_endpoint_forwards_selected_model_to_provider(client, clean_state, mock_session):
+    """Test POST /api/chat forwards the requested model unchanged to the provider SDK."""
+    import app as app_module
+
+    stream_chunk = MagicMock()
+    stream_chunk.model = "gpt-5"
+    stream_chunk.choices = [MagicMock(delta=MagicMock(content="Hello from GPT-5"))]
+
+    mock_client = MagicMock()
+    mock_client.chat.completions.create.return_value = iter([stream_chunk])
+
+    with patch.object(app_module, "OpenAI", return_value=mock_client):
+        response = await client.post(
+            "/api/chat",
+            headers={"X-Session-ID": mock_session},
+            json={
+                "developer_message": "You are a helpful assistant.",
+                "user_message": "Say hello",
+                "model": "gpt-5",
+                "provider": "openai"
+            }
+        )
+
+    assert response.status_code == 200
+    assert response.text == "Hello from GPT-5"
+    assert response.headers["x-conversation-id"]
+    assert response.headers["x-free-turns-remaining"] == "3"
+
+    mock_client.chat.completions.create.assert_called_once()
+    call_kwargs = mock_client.chat.completions.create.call_args.kwargs
+    assert call_kwargs["model"] == "gpt-5"
+    assert call_kwargs["stream"] is True
+    assert call_kwargs["messages"][0] == {
+        "role": "system",
+        "content": "You are a helpful assistant."
+    }
+    assert call_kwargs["messages"][1] == {
+        "role": "user",
+        "content": "Say hello"
+    }
+
+
+# ============================================
+# 8. RAG Endpoint Model Forwarding Tests
+# ============================================
+
+@pytest.mark.asyncio
+async def test_rag_query_endpoint_forwards_selected_model_to_rag_system(client, clean_state, mock_session):
+    """Test POST /api/rag-query forwards the requested model unchanged to the RAG system."""
+    import app as app_module
+
+    mock_rag_system = MagicMock()
+    mock_rag_system.query.return_value = "RAG answer from GPT-5"
+    mock_rag_system.get_document_info.return_value = {"documents": [{"name": "doc.pdf"}]}
+    mock_rag_system.search_relevant_chunks.return_value = [{"id": "c1"}, {"id": "c2"}]
+
+    with patch.object(app_module, "RAG_ENABLED", True), patch.object(
+        app_module,
+        "get_or_create_rag_system",
+        return_value=mock_rag_system
+    ) as mock_get_rag_system:
+        response = await client.post(
+            "/api/rag-query",
+            headers={"X-Session-ID": mock_session},
+            json={
+                "question": "Summarize the document",
+                "developer_message": "Answer using the uploaded docs.",
+                "k": 3,
+                "model": "gpt-5",
+                "mode": "rag",
+                "provider": "openai"
+            }
+        )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "answer": "RAG answer from GPT-5",
+        "relevant_chunks_count": 2,
+        "document_info": {"documents": [{"name": "doc.pdf"}]}
+    }
+    assert response.headers["x-conversation-id"]
+    assert response.headers["x-free-turns-remaining"] == "3"
+
+    mock_get_rag_system.assert_called_once_with(mock_session, "test-api-key", "openai")
+    mock_rag_system.query.assert_called_once_with(
+        "Summarize the document",
+        k=3,
+        mode="rag",
+        model_name="gpt-5",
+        system_message="Answer using the uploaded docs."
+    )
+    mock_rag_system.search_relevant_chunks.assert_called_once_with("Summarize the document", k=3)
+
+
+# ============================================
+# 9. Token Counting Tests
 # ============================================
 
 def test_count_tokens_with_known_text():
