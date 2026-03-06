@@ -347,12 +347,12 @@ def test_chat_request_valid():
     request = ChatRequest(
         user_message="Hello",
         developer_message="You are a helpful assistant",
-        model="gpt-4.1-mini",
+        model="gpt-5-mini",
         provider="openai"
     )
     assert request.user_message == "Hello"
     assert request.developer_message == "You are a helpful assistant"
-    assert request.model == "gpt-4.1-mini"
+    assert request.model == "gpt-5-mini"
     assert request.provider == "openai"
 
 
@@ -454,7 +454,7 @@ def test_rag_query_request_valid():
         question="What is this about?",
         developer_message="System message",
         k=5,
-        model="gpt-4.1",
+        model="gpt-5",
         provider="openai"
     )
     assert request.question == "What is this about?"
@@ -706,7 +706,7 @@ async def test_rag_query_endpoint_forwards_selected_model_to_rag_system(client, 
 def test_count_tokens_with_known_text():
     """Test count_tokens() with known text."""
     text = "Hello, world!"
-    token_count = count_tokens(text, model="gpt-4")
+    token_count = count_tokens(text, model="gpt-5")
     # Should return a reasonable token count (not exact, but > 0)
     assert token_count > 0
     assert token_count < 100  # Should be small for short text
@@ -998,13 +998,13 @@ class TestGetContextWindowSize:
 
     def test_exact_match(self):
         from context_manager import get_context_window_size
-        assert get_context_window_size("gpt-4") == 8_192
-        assert get_context_window_size("gpt-4.1-mini") == 1_048_576
+        assert get_context_window_size("gpt-5") == 1_048_576
+        assert get_context_window_size("gpt-5-mini") == 1_048_576
 
     def test_prefix_match(self):
         from context_manager import get_context_window_size
-        # "gpt-4-0613" should match "gpt-4" prefix
-        assert get_context_window_size("gpt-4-0613") == 8_192
+        # "gpt-5-preview" should match "gpt-5" prefix
+        assert get_context_window_size("gpt-5-preview") == 1_048_576
 
     def test_fallback(self):
         from context_manager import get_context_window_size, DEFAULT_CONTEXT_WINDOW
@@ -1020,19 +1020,19 @@ class TestCountConversationTokens:
             {"role": "user", "content": "Hello there"},
             {"role": "assistant", "content": "Hi! How can I help?"},
         ]
-        tokens = count_conversation_tokens(messages, "You are helpful.", "gpt-4")
+        tokens = count_conversation_tokens(messages, "You are helpful.", "gpt-5")
         assert tokens > 0
 
     def test_handles_message_objects(self):
         from context_manager import count_conversation_tokens
         from app import Message
         msgs = [Message(role="user", content="test", timestamp=datetime.now(timezone.utc))]
-        tokens = count_conversation_tokens(msgs, "system", "gpt-4")
+        tokens = count_conversation_tokens(msgs, "system", "gpt-5")
         assert tokens > 0
 
     def test_empty_messages(self):
         from context_manager import count_conversation_tokens
-        tokens = count_conversation_tokens([], "system prompt", "gpt-4")
+        tokens = count_conversation_tokens([], "system prompt", "gpt-5")
         # Should only count the system message tokens
         assert tokens > 0
 
@@ -1043,17 +1043,17 @@ class TestShouldCompress:
     def test_returns_false_under_threshold(self):
         from context_manager import should_compress
         messages = [{"role": "user", "content": "Hi"}]
-        assert should_compress(messages, "system", "gpt-4", threshold_pct=0.8) is False
+        assert should_compress(messages, "system", "gpt-5", threshold_pct=0.8) is False
 
     def test_returns_true_over_threshold(self):
         from context_manager import should_compress
-        # Create enough messages to exceed a very low threshold on a small model
+        # Create enough messages to exceed a very low threshold
         messages = [
             {"role": "user", "content": "x " * 2000}
             for _ in range(10)
         ]
-        # gpt-4 has 8192 tokens, with threshold 0.1 that's ~819 tokens
-        assert should_compress(messages, "system", "gpt-4", threshold_pct=0.1) is True
+        # gpt-5 has 1M tokens, with threshold 0.00001 that's ~10 tokens
+        assert should_compress(messages, "system", "gpt-5", threshold_pct=0.00001) is True
 
 
 class TestCompressConversation:
@@ -1071,7 +1071,7 @@ class TestCompressConversation:
             {"role": "user", "content": f"Message {i}"}
             for i in range(10)
         ]
-        result = compress_conversation(messages, mock_client, "gpt-4", "system", keep_recent=3)
+        result = compress_conversation(messages, mock_client, "gpt-5", "system", keep_recent=3)
 
         # Should be 1 summary + 3 recent = 4 messages
         assert len(result) == 4
@@ -1083,7 +1083,7 @@ class TestCompressConversation:
         from context_manager import compress_conversation
 
         messages = [{"role": "user", "content": "Hi"}]
-        result = compress_conversation(messages, None, "gpt-4", "system", keep_recent=3)
+        result = compress_conversation(messages, None, "gpt-5", "system", keep_recent=3)
         assert result == messages
 
     def test_llm_failure_returns_recent_only(self):
@@ -1093,7 +1093,7 @@ class TestCompressConversation:
         mock_client.chat.completions.create.side_effect = Exception("API error")
 
         messages = [{"role": "user", "content": f"Msg {i}"} for i in range(10)]
-        result = compress_conversation(messages, mock_client, "gpt-4", "system", keep_recent=3)
+        result = compress_conversation(messages, mock_client, "gpt-5", "system", keep_recent=3)
 
         # Should fallback to just the 3 recent messages (no summary)
         assert len(result) == 3
@@ -1117,7 +1117,7 @@ class TestCompressConversation:
             {"role": "assistant", "content": "Msg 6"},
             {"role": "user", "content": "Msg 7"},
         ]
-        result = compress_conversation(messages, mock_client, "gpt-4", "system", keep_recent=3)
+        result = compress_conversation(messages, mock_client, "gpt-5", "system", keep_recent=3)
 
         assert len(result) == 4  # 1 summary + 3 recent
         assert result[0]["content"].startswith(SUMMARY_PREFIX)

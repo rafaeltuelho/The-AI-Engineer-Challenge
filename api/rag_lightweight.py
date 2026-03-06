@@ -538,7 +538,7 @@ class RAGSystem:
             kwargs = {}
             if mode == "topic-explorer":
                 # Support JSON mode for OpenAI models and Together.ai models
-                openai_json_models = ['gpt-4.1', 'gpt-4o', 'gpt-4o-mini', 'gpt-5', 'gpt-5-mini', 'gpt-5-nano']
+                openai_json_models = ['gpt-5', 'gpt-5-mini', 'gpt-5-nano']
                 together_json_models = [
                     'deepseek-ai/DeepSeek-R1', 'deepseek-ai/DeepSeek-V3', 'deepseek-ai/DeepSeek-V3.1',
                     'meta-llama/Llama-3.3-70B-Instruct-Turbo',
@@ -632,7 +632,7 @@ class RAGSystem:
             kwargs = {}
             if mode == "topic-explorer":
                 # Support JSON mode for OpenAI models and Together.ai models
-                openai_json_models = ['gpt-4.1', 'gpt-4o', 'gpt-4o-mini', 'gpt-5', 'gpt-5-mini', 'gpt-5-nano']
+                openai_json_models = ['gpt-5', 'gpt-5-mini', 'gpt-5-nano']
                 together_json_models = [
                     'deepseek-ai/DeepSeek-R1', 'deepseek-ai/DeepSeek-V3', 'deepseek-ai/DeepSeek-V3.1',
                     'meta-llama/Llama-3.3-70B-Instruct-Turbo',

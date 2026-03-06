@@ -13,19 +13,10 @@ from typing import Any, Dict, List, Optional
 # Model Context Window Sizes (tokens)
 # ============================================
 MODEL_CONTEXT_WINDOWS: Dict[str, int] = {
-    # GPT-4.1 family (1M context)
-    "gpt-4.1": 1_048_576,
-    "gpt-4.1-mini": 1_048_576,
-    "gpt-4.1-nano": 1_048_576,
-    # GPT-4 family
-    "gpt-4": 8_192,
-    "gpt-4-turbo": 128_000,
-    "gpt-4-turbo-preview": 128_000,
-    "gpt-4o": 128_000,
-    "gpt-4o-mini": 128_000,
-    # GPT-3.5 family
-    "gpt-3.5-turbo": 16_385,
-    "gpt-3.5-turbo-16k": 16_385,
+    # GPT-5 family (1M context)
+    "gpt-5": 1_048_576,
+    "gpt-5-mini": 1_048_576,
+    "gpt-5-nano": 1_048_576,
     # Together.ai / DeepSeek models
     "deepseek-ai/DeepSeek-V3.1": 65_536,
     "deepseek-ai/DeepSeek-V3": 65_536,
@@ -55,7 +46,7 @@ def _to_dict(msg) -> Dict[str, str]:
     return {"role": getattr(msg, "role", "user"), "content": getattr(msg, "content", "")}
 
 
-def _count_tokens(text: str, model: str = "gpt-4") -> int:
+def _count_tokens(text: str, model: str = "gpt-5") -> int:
     """Count tokens in a text string using tiktoken."""
     try:
         encoding = tiktoken.encoding_for_model(model)

@@ -263,12 +263,12 @@ def get_session(session_id: str) -> Optional[Dict[str, Any]]:
 
     return None
 
-def count_tokens(text: str, model: str = "gpt-4") -> int:
+def count_tokens(text: str, model: str = "gpt-5") -> int:
     """Count the number of tokens in a text string.
 
     Args:
         text: The text to count tokens for
-        model: The model to use for tokenization (default: "gpt-4")
+        model: The model to use for tokenization (default: "gpt-5")
 
     Returns:
         Number of tokens in the text
@@ -370,7 +370,7 @@ class ChatRequest(BaseModel):
     conversation_id: Optional[str] = None  # ID to continue existing conversation
     developer_message: str  # Message from the developer/system
     user_message: str      # Message from the user
-    model: Optional[str] = "gpt-4.1-mini"  # Optional model selection with default
+    model: Optional[str] = "gpt-5-mini"  # Optional model selection with default
     api_key: Optional[str] = None  # API key for authentication (optional, can use session's key or server key)
     provider: Optional[str] = "openai"  # Provider selection: "openai" or "together"
 
@@ -436,27 +436,26 @@ class ChatRequest(BaseModel):
     def validate_model(cls, v):
         """Validate model selection"""
         if not v:
-            return "gpt-4.1-mini"  # Default model
-        
-        # List of allowed models for OpenAI
+            return "gpt-5-mini"  # Default model
+
+        # List of allowed models for OpenAI (GPT-5 family only)
         openai_models = [
-            "gpt-4", "gpt-4-mini", "gpt-4-turbo", "gpt-4o", "gpt-4o-mini",
-            "gpt-4.1", "gpt-4.1-mini", "gpt-4.1-nano", "gpt-5", "gpt-5-mini", "gpt-5-nano"
+            "gpt-5", "gpt-5-mini", "gpt-5-nano"
         ]
-        
+
         # List of allowed models for Together.ai
         together_models = [
             "deepseek-ai/DeepSeek-R1", "deepseek-ai/DeepSeek-V3.1", "deepseek-ai/DeepSeek-V3",
-            "meta-llama/Llama-3.3-70B-Instruct-Turbo", 
+            "meta-llama/Llama-3.3-70B-Instruct-Turbo",
             "openai/gpt-oss-20b", "openai/gpt-oss-120b", "moonshotai/Kimi-K2-Instruct-0905",
             "Qwen/Qwen3-Next-80B-A3B-Thinking"
         ]
-        
+
         all_models = openai_models + together_models
-        
+
         if v not in all_models:
             raise ValueError(f'Invalid model: {v}. Allowed models: {", ".join(all_models)}')
-        
+
         return v
     
     @field_validator('conversation_id')
@@ -580,7 +579,7 @@ class RAGQueryRequest(BaseModel):
     question: str
     developer_message: str  # System message from the developer/UI
     k: Optional[int] = 5  # Number of relevant chunks to retrieve
-    model: Optional[str] = "gpt-4.1"  # Model selection for RAG queries
+    model: Optional[str] = "gpt-5"  # Model selection for RAG queries
     mode: Optional[str] = "rag"  # RAG mode: "rag" or "topic-explorer"
     provider: Optional[str] = "openai"  # Provider selection: "openai" or "together"
     
@@ -631,14 +630,13 @@ class RAGQueryRequest(BaseModel):
     def validate_model(cls, v):
         """Validate model selection"""
         if not v:
-            return "gpt-4.1-mini"  # Default model
-        
-        # List of allowed models for OpenAI
+            return "gpt-5-mini"  # Default model
+
+        # List of allowed models for OpenAI (GPT-5 family only)
         openai_models = [
-            "gpt-4", "gpt-4-mini", "gpt-4-turbo", "gpt-4o", "gpt-4o-mini",
-            "gpt-4.1", "gpt-4.1-mini", "gpt-4.1-nano", "gpt-5", "gpt-5-mini", "gpt-5-nano"
+            "gpt-5", "gpt-5-mini", "gpt-5-nano"
         ]
-        
+
         # List of allowed models for Together.ai
         together_models = [
             "deepseek-ai/DeepSeek-R1", "deepseek-ai/DeepSeek-V3.1", "deepseek-ai/DeepSeek-V3",
@@ -646,12 +644,12 @@ class RAGQueryRequest(BaseModel):
             "openai/gpt-oss-20b", "openai/gpt-oss-120b", "moonshotai/Kimi-K2-Instruct-0905",
             "Qwen/Qwen3-Next-80B-A3B-Thinking"
         ]
-        
+
         all_models = openai_models + together_models
-        
+
         if v not in all_models:
             raise ValueError(f'Invalid model: {v}. Allowed models: {", ".join(all_models)}')
-        
+
         return v
     
     @field_validator('provider')
@@ -948,7 +946,7 @@ def _fetch_suggestions() -> List[str]:
             model = "deepseek-ai/DeepSeek-V3.1"
         else:
             base_url = "https://api.openai.com/v1"
-            model = "gpt-4o-mini"
+            model = "gpt-5-mini"
 
         # Create OpenAI client
         client = OpenAI(api_key=api_key, base_url=base_url)
@@ -1527,7 +1525,7 @@ async def upload_document(
                 kwargs["response_format"] = {"type": "json_object"}
                 chat_model = ChatOpenAI(api_key=api_key, provider=provider)
                 response = chat_model.run(
-                    model_name="gpt-4.1-mini" if provider == "openai" else "deepseek-ai/DeepSeek-V3.1",
+                    model_name="gpt-5-mini" if provider == "openai" else "deepseek-ai/DeepSeek-V3.1",
                     messages=[
                         {"role": "system", "content": system_message},
                         {"role": "user", "content": user_message}

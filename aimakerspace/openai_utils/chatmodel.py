@@ -27,7 +27,7 @@ class ChatOpenAI:
         else:
             self.base_url = None  # Use default OpenAI base URL
 
-    def run(self, messages, model_name: str = "gpt-4.1-mini", text_only: bool = True, **kwargs):
+    def run(self, messages, model_name: str = "gpt-5-mini", text_only: bool = True, **kwargs):
         if not isinstance(messages, list):
             raise ValueError("messages must be a list")
 
@@ -35,11 +35,11 @@ class ChatOpenAI:
         client_kwargs = {"api_key": self.api_key}
         if self.base_url:
             client_kwargs["base_url"] = self.base_url
-            
+
         client = OpenAI(**client_kwargs)
         response = client.chat.completions.create(
-            model=model_name, 
-            messages=messages, 
+            model=model_name,
+            messages=messages,
             # temperature=0.7,
             **kwargs,
             # max_tokens=4096,
@@ -54,8 +54,8 @@ class ChatOpenAI:
             return response.choices[0].message.content
 
         return response
-    
-    async def arun(self, messages, model_name: str = "gpt-4.1-mini", text_only: bool = True, **kwargs):
+
+    async def arun(self, messages, model_name: str = "gpt-5-mini", text_only: bool = True, **kwargs):
         """Async version of run method."""
         if not isinstance(messages, list):
             raise ValueError("messages must be a list")
@@ -64,11 +64,11 @@ class ChatOpenAI:
         client_kwargs = {"api_key": self.api_key}
         if self.base_url:
             client_kwargs["base_url"] = self.base_url
-            
+
         client = OpenAI(**client_kwargs)
         response = await client.chat.completions.create(
-            model=model_name, 
-            messages=messages, 
+            model=model_name,
+            messages=messages,
             # temperature=0.7,
             **kwargs
             # max_tokens=4096,
