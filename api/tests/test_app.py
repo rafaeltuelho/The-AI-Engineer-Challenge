@@ -609,12 +609,12 @@ async def test_chat_endpoint_forwards_selected_model_to_provider(client, clean_s
     """Test POST /api/chat forwards the requested model unchanged to the provider SDK."""
     from openai_helper import create_openai_client
 
+    # For GPT-5 models, we now use Responses API which has a different streaming format
     stream_chunk = MagicMock()
-    stream_chunk.model = "gpt-5"
-    stream_chunk.choices = [MagicMock(delta=MagicMock(content="Hello from GPT-5"))]
+    stream_chunk.output_text_delta = "Hello from GPT-5"
 
     mock_client = MagicMock()
-    mock_client.chat.completions.create.return_value = iter([stream_chunk])
+    mock_client.responses.create.return_value = iter([stream_chunk])
 
     with patch("openai_helper.create_openai_client", return_value=mock_client):
         response = await client.post(
@@ -633,21 +633,20 @@ async def test_chat_endpoint_forwards_selected_model_to_provider(client, clean_s
     assert response.headers["x-conversation-id"]
     assert response.headers["x-free-turns-remaining"] == "3"
 
-    mock_client.chat.completions.create.assert_called_once()
-    call_kwargs = mock_client.chat.completions.create.call_args.kwargs
+    # Verify Responses API was called (not Chat Completions API)
+    mock_client.responses.create.assert_called_once()
+    call_kwargs = mock_client.responses.create.call_args.kwargs
     assert call_kwargs["model"] == "gpt-5"
     assert call_kwargs["stream"] is True
-    # Verify web_search_options is added for GPT-5 models
-    assert "web_search_options" in call_kwargs
-    assert call_kwargs["web_search_options"]["search_context_size"] == "medium"
-    assert call_kwargs["messages"][0] == {
-        "role": "system",
-        "content": "You are a helpful assistant."
-    }
-    assert call_kwargs["messages"][1] == {
-        "role": "user",
-        "content": "Say hello"
-    }
+    # Verify web_search tool is added for GPT-5 models
+    assert "tools" in call_kwargs
+    assert call_kwargs["tools"] == [{"type": "web_search"}]
+    # Verify input contains the messages
+    assert "input" in call_kwargs
+    assert "You are a helpful assistant" in call_kwargs["input"]
+    assert "Say hello" in call_kwargs["input"]
+    # Verify Chat Completions API was NOT called
+    assert not mock_client.chat.completions.create.called
 
 
 # ============================================
@@ -1507,7 +1506,7 @@ async def test_guest_session_no_persistence_load_after_cache_clear(client, clean
 
 @pytest.mark.asyncio
 async def test_chat_with_gpt5_enables_web_search(client, clean_state):
-    """Test that chat requests with GPT-5 models enable web search."""
+    """Test that chat requests with GPT-5 models enable web search via Responses API."""
     import app as app_module
     from openai_helper import create_openai_request
 
@@ -1516,10 +1515,11 @@ async def test_chat_with_gpt5_enables_web_search(client, clean_state):
 
     # Mock the create_openai_request to capture parameters
     with patch('app.create_openai_request') as mock_helper:
-        # Configure mock to return a mock streaming response
+        # Configure mock to return a Responses API streaming response
+        # (GPT-5 models use Responses API format with output_text_delta)
         mock_stream = MagicMock()
         mock_stream.__iter__ = Mock(return_value=iter([
-            MagicMock(choices=[MagicMock(delta=MagicMock(content="Test response"))])
+            MagicMock(output_text_delta="Test response")
         ]))
         mock_helper.return_value = mock_stream
 
@@ -1582,15 +1582,15 @@ async def test_chat_with_together_no_web_search(client, clean_state):
 
 
 def test_openai_helper_adds_web_search_for_gpt5():
-    """Test that the helper adds web_search_options parameter for GPT-5 models."""
+    """Test that the helper uses Responses API with web_search tool for GPT-5 models."""
     from openai_helper import create_openai_request
 
     # Mock the OpenAI client
     with patch('openai_helper.OpenAI') as mock_openai_class:
         mock_client = MagicMock()
         mock_openai_class.return_value = mock_client
-        mock_client.chat.completions.create.return_value = MagicMock(
-            choices=[MagicMock(message=MagicMock(content="Test response"))]
+        mock_client.responses.create.return_value = MagicMock(
+            output_text="Test response"
         )
 
         # Call helper with GPT-5 model
@@ -1602,14 +1602,18 @@ def test_openai_helper_adds_web_search_for_gpt5():
             stream=False
         )
 
-        # Verify web_search_options was added
-        call_kwargs = mock_client.chat.completions.create.call_args[1]
-        assert "web_search_options" in call_kwargs
-        assert call_kwargs["web_search_options"]["search_context_size"] == "medium"
+        # Verify Responses API was called with web_search tool
+        assert mock_client.responses.create.called
+        call_kwargs = mock_client.responses.create.call_args[1]
+        assert "tools" in call_kwargs
+        assert call_kwargs["tools"] == [{"type": "web_search"}]
+        assert "input" in call_kwargs
+        # Verify Chat Completions API was NOT called
+        assert not mock_client.chat.completions.create.called
 
 
 def test_openai_helper_no_web_search_for_together():
-    """Test that the helper does not add web_search for Together.ai."""
+    """Test that the helper uses Chat Completions API without web_search for Together.ai."""
     from openai_helper import create_openai_request
 
     # Mock the OpenAI client
@@ -1629,9 +1633,15 @@ def test_openai_helper_no_web_search_for_together():
             stream=False
         )
 
-        # Verify web_search was NOT added
+        # Verify Chat Completions API was called
+        assert mock_client.chat.completions.create.called
         call_kwargs = mock_client.chat.completions.create.call_args[1]
+        # Verify web_search and tools were NOT added
         assert "web_search" not in call_kwargs
+        assert "web_search_options" not in call_kwargs
+        assert "tools" not in call_kwargs
+        # Verify Responses API was NOT called
+        assert not mock_client.responses.create.called
 
 
 def test_chatmodel_uses_helper_for_gpt5():

@@ -1171,7 +1171,7 @@ async def chat(
         async def generate():
             try:
                 # Create a streaming chat completion request using the helper
-                # This automatically enables web search for GPT-5 models
+                # This automatically enables web search for GPT-5 models via Responses API
                 stream = create_openai_request(
                     api_key=api_key,
                     provider=chat_request.provider,
@@ -1179,23 +1179,45 @@ async def chat(
                     messages=messages_for_openai,
                     stream=True  # Enable streaming response
                 )
-                
+
                 # Collect the full response for storage
                 full_response = ""
-                
+
+                # Determine if this is a Responses API stream (GPT-5 with web search)
+                # or Chat Completions API stream (Together.ai or other models)
+                is_responses_api = chat_request.provider == "openai" and chat_request.model in ["gpt-5", "gpt-5-mini", "gpt-5-nano"]
+
                 # Yield each chunk of the response as it becomes available
                 for chunk in stream:
                     # Some providers may send chunks without choices or content (e.g., role updates or keep-alives)
                     try:
-                        choices = getattr(chunk, "choices", None)
-                        if not choices or len(choices) == 0:
-                            continue
-                        choice0 = choices[0]
-                        delta = getattr(choice0, "delta", None)
-                        content = getattr(delta, "content", None) if delta is not None else None
-                        if content:
-                            full_response += content
-                            yield content
+                        if is_responses_api:
+                            # Responses API streaming format
+                            # Events have 'type' and may have 'output_text_delta' or 'output_text'
+                            if hasattr(chunk, 'output_text_delta') and chunk.output_text_delta:
+                                content = chunk.output_text_delta
+                                full_response += content
+                                yield content
+                            elif hasattr(chunk, 'output_text') and chunk.output_text:
+                                # Some events may have full output_text
+                                content = chunk.output_text
+                                if content and content != full_response:
+                                    # Only yield if it's new content
+                                    new_content = content[len(full_response):]
+                                    if new_content:
+                                        full_response = content
+                                        yield new_content
+                        else:
+                            # Chat Completions API streaming format
+                            choices = getattr(chunk, "choices", None)
+                            if not choices or len(choices) == 0:
+                                continue
+                            choice0 = choices[0]
+                            delta = getattr(choice0, "delta", None)
+                            content = getattr(delta, "content", None) if delta is not None else None
+                            if content:
+                                full_response += content
+                                yield content
                     except Exception:
                         # Be tolerant to provider-specific streaming variations
                         continue

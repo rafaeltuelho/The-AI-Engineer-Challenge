@@ -40,6 +40,7 @@ class ChatOpenAI:
             raise ValueError("messages must be a list")
 
         # Use the shared helper which automatically enables web search for GPT-5 models
+        # via Responses API for GPT-5 models, Chat Completions API for others
         response = create_openai_request(
             api_key=self.api_key,
             provider=self.provider,
@@ -50,7 +51,11 @@ class ChatOpenAI:
         )
 
         if text_only:
-            return response.choices[0].message.content
+            # Handle both Responses API (has output_text) and Chat Completions API (has choices)
+            if hasattr(response, 'output_text'):
+                return response.output_text
+            else:
+                return response.choices[0].message.content
 
         return response
 
@@ -59,32 +64,59 @@ class ChatOpenAI:
         if not isinstance(messages, list):
             raise ValueError("messages must be a list")
 
-        # Use the shared helper which automatically enables web search for GPT-5 models
-        # Note: create_openai_request is not async, but the underlying client.chat.completions.create is
-        # We need to use the OpenAI client directly for async support
+        # Create OpenAI client
         client_kwargs = {"api_key": self.api_key}
         if self.base_url:
             client_kwargs["base_url"] = self.base_url
 
         client = OpenAI(**client_kwargs)
 
-        # Build request parameters
-        request_params = {
-            "model": model_name,
-            "messages": messages,
-            **kwargs
-        }
-
-        # For OpenAI GPT-5 models, enable web search
+        # Check if this is a GPT-5 model that supports web search
         GPT5_WEB_SEARCH_MODELS = ["gpt-5", "gpt-5-mini", "gpt-5-nano"]
-        if self.provider == "openai" and model_name in GPT5_WEB_SEARCH_MODELS:
-            request_params["web_search_options"] = {
-                "search_context_size": "medium"
+        is_gpt5_with_web_search = self.provider == "openai" and model_name in GPT5_WEB_SEARCH_MODELS
+
+        if is_gpt5_with_web_search:
+            # For GPT-5 models, use Responses API with web search tool
+            # Convert messages to input format
+            if len(messages) == 1:
+                input_text = messages[0]["content"]
+            else:
+                # Format multi-turn conversation
+                formatted_parts = []
+                for msg in messages:
+                    role = msg["role"]
+                    content = msg["content"]
+                    if role == "system":
+                        formatted_parts.append(f"System: {content}")
+                    elif role == "user":
+                        formatted_parts.append(f"User: {content}")
+                    elif role == "assistant":
+                        formatted_parts.append(f"Assistant: {content}")
+                input_text = "\n\n".join(formatted_parts)
+
+            # Build Responses API request parameters
+            request_params = {
+                "model": model_name,
+                "input": input_text,
+                "tools": [{"type": "web_search"}],
+                **kwargs
             }
 
-        response = await client.chat.completions.create(**request_params)
+            response = await client.responses.create(**request_params)
 
-        if text_only:
-            return response.choices[0].message.content
+            if text_only:
+                return response.output_text
+            return response
+        else:
+            # For Together.ai and other models, use Chat Completions API
+            request_params = {
+                "model": model_name,
+                "messages": messages,
+                **kwargs
+            }
 
-        return response
+            response = await client.chat.completions.create(**request_params)
+
+            if text_only:
+                return response.choices[0].message.content
+            return response
