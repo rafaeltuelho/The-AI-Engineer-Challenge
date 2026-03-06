@@ -502,9 +502,13 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         model: selectedModel,
         api_key: apiKey || undefined,
         provider: selectedProvider,
-        // Include image_data only for OpenAI GPT models in regular chat mode
+        // Include image_attachment only for OpenAI GPT models in regular chat mode
         ...(currentImage && selectedProvider === 'openai' && chatMode === 'regular' ? {
-          image_data: currentImage.dataUrl
+          image_attachment: {
+            mime_type: currentImage.file.type,
+            data_url: currentImage.dataUrl,
+            filename: currentImage.file.name
+          }
         } : {})
       }
 
