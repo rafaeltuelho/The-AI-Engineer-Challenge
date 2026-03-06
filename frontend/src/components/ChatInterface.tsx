@@ -124,6 +124,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const [isLoading, setIsLoading] = useState(false)
   const [conversationId, setConversationId] = useState<string | null>(null)
   const [conversations, setConversations] = useState<any[]>([])
+  const [loadingConversationId, setLoadingConversationId] = useState<string | null>(null)
 
   const [pdfUploadError, setPdfUploadError] = useState<string | null>(null)
   const [pdfUploadSuccess, setPdfUploadSuccess] = useState<string | null>(null)
@@ -142,8 +143,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   // Filter available models based on chat mode and provider
   // const getAvailableModels = () => {
   //   const openaiModels = [
-  //     'gpt-4', 'gpt-4-mini', 'gpt-4-turbo', 'gpt-4o', 'gpt-4o-mini',
-  //     'gpt-4.1', 'gpt-4.1-mini', 'gpt-4.1-nano', 'gpt-5', 'gpt-5-mini', 'gpt-5-nano'
+  //     'gpt-5', 'gpt-5-mini', 'gpt-5-nano'
   //   ]
   //
   //   const togetherModels = [
@@ -161,13 +161,13 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   //     if (selectedProvider === 'together') {
   //       return ['deepseek-ai/DeepSeek-V3', 'deepseek-ai/DeepSeek-R1','meta-llama/Llama-3.3-70B-Instruct-Turbo']
   //     } else {
-  //       return ['gpt-4.1', 'gpt-4o', 'gpt-5']
+  //       return ['gpt-5']
   //     }
   //   }
   //
   //   return availableModels
   // }
-  
+
   // const availableModels = getAvailableModels()
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -329,6 +329,14 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   }
 
   const loadConversation = async (convId: string) => {
+    // Prevent loading if already active or currently loading
+    if (conversationId === convId || loadingConversationId === convId) {
+      return
+    }
+
+    // Set loading state
+    setLoadingConversationId(convId)
+
     try {
       const response = await fetch(`/api/conversations/${convId}`, {
         headers: {
@@ -405,6 +413,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       }
     } catch (error) {
       console.error('Error loading conversation:', error)
+    } finally {
+      // Clear loading state
+      setLoadingConversationId(null)
     }
   }
 
@@ -878,18 +889,29 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
               ) : (
                 conversations.map((conv) => {
                   const isActive = conversationId === conv.conversation_id
+                  const isLoading = loadingConversationId === conv.conversation_id
                   const modeLabel = conv.mode === 'rag' ? '📄' : conv.mode === 'topic-explorer' ? '📚' : '💬'
 
                   return (
                     <div
                       key={conv.conversation_id}
-                      className={`conversation-item ${isActive ? 'active' : ''}`}
+                      className={`conversation-item ${isActive ? 'active' : ''} ${isLoading ? 'loading' : ''}`}
                       onClick={() => loadConversation(conv.conversation_id)}
+                      style={{ cursor: isLoading ? 'wait' : 'pointer' }}
                     >
                       <span className="conversation-mode-icon">{modeLabel}</span>
                       <div className="conversation-title">
                         {conv.title || conv.system_message.substring(0, 30)}
                       </div>
+                      {isLoading && (
+                        <div className="conversation-loading-indicator">
+                          <div className="typing-indicator">
+                            <span></span>
+                            <span></span>
+                            <span></span>
+                          </div>
+                        </div>
+                      )}
                       <button
                         className="delete-conversation-btn"
                         onClick={(e) => {
@@ -951,6 +973,20 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           ref={messagesContainerRef}
           onScroll={handleScroll}
         >
+          {/* Show loading indicator when loading a conversation */}
+          {loadingConversationId && messages.length === 0 && (
+            <div className="conversation-loading-screen">
+              <div className="loading-message">
+                <div className="typing-indicator">
+                  <span></span>
+                  <span></span>
+                  <span></span>
+                </div>
+                <p>Loading conversation...</p>
+              </div>
+            </div>
+          )}
+
           {/* Show document summary and suggested questions when available - always visible */}
           {documentSummary && documentSuggestedQuestions.length > 0 && (
             <div className="document-summary-section">
@@ -965,8 +1001,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
               </div>
             </div>
           )}
-          
-          {messages.length === 0 ? (
+
+          {!loadingConversationId && messages.length === 0 ? (
             <div className="welcome-screen">
               <h1 className="welcome-heading">What can I help with?</h1>
 

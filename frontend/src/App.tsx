@@ -17,15 +17,7 @@ function App() {
   const [welcomeSuggestions, setWelcomeSuggestions] = useState<string[]>([])
 
   const modelDescriptions = {
-    // OpenAI models
-    'gpt-4': 'Standard GPT-4 model',
-    'gpt-4-mini': 'Compact GPT-4 variant',
-    'gpt-4-turbo': 'Enhanced GPT-4 with improved performance',
-    'gpt-4o': 'Latest GPT-4 optimized model',
-    'gpt-4o-mini': 'Lightweight version of GPT-4o',
-    'gpt-4.1': 'Standard GPT-4.1 model',
-    'gpt-4.1-mini': 'Compact GPT-4.1 variant',
-    'gpt-4.1-nano': 'Ultra-lightweight GPT-4.1',
+    // OpenAI models - GPT-5 only
     'gpt-5': 'Latest GPT-5 model',
     'gpt-5-mini': 'Compact GPT-5 variant',
     'gpt-5-nano': 'Ultra-lightweight GPT-5 (default)',
