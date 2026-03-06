@@ -610,8 +610,10 @@ async def test_chat_endpoint_forwards_selected_model_to_provider(client, clean_s
     from openai_helper import create_openai_client
 
     # For GPT-5 models, we now use Responses API which has a different streaming format
+    # Events have 'type' field and text deltas are in 'delta' attribute
     stream_chunk = MagicMock()
-    stream_chunk.output_text_delta = "Hello from GPT-5"
+    stream_chunk.type = "response.output_text.delta"
+    stream_chunk.delta = "Hello from GPT-5"
 
     mock_client = MagicMock()
     mock_client.responses.create.return_value = iter([stream_chunk])
@@ -1516,11 +1518,13 @@ async def test_chat_with_gpt5_enables_web_search(client, clean_state):
     # Mock the create_openai_request to capture parameters
     with patch('app.create_openai_request') as mock_helper:
         # Configure mock to return a Responses API streaming response
-        # (GPT-5 models use Responses API format with output_text_delta)
+        # (GPT-5 models use Responses API format with type and delta)
+        mock_event = MagicMock()
+        mock_event.type = "response.output_text.delta"
+        mock_event.delta = "Test response"
+
         mock_stream = MagicMock()
-        mock_stream.__iter__ = Mock(return_value=iter([
-            MagicMock(output_text_delta="Test response")
-        ]))
+        mock_stream.__iter__ = Mock(return_value=iter([mock_event]))
         mock_helper.return_value = mock_stream
 
         # Send chat request with GPT-5 model

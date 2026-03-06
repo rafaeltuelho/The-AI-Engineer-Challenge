@@ -1193,20 +1193,14 @@ async def chat(
                     try:
                         if is_responses_api:
                             # Responses API streaming format
-                            # Events have 'type' and may have 'output_text_delta' or 'output_text'
-                            if hasattr(chunk, 'output_text_delta') and chunk.output_text_delta:
-                                content = chunk.output_text_delta
-                                full_response += content
-                                yield content
-                            elif hasattr(chunk, 'output_text') and chunk.output_text:
-                                # Some events may have full output_text
-                                content = chunk.output_text
-                                if content and content != full_response:
-                                    # Only yield if it's new content
-                                    new_content = content[len(full_response):]
-                                    if new_content:
-                                        full_response = content
-                                        yield new_content
+                            # Events have 'type' field and text deltas are in 'delta' attribute
+                            event_type = getattr(chunk, 'type', None)
+                            if event_type == 'response.output_text.delta':
+                                # Text delta events have the incremental text in 'delta' attribute
+                                delta = getattr(chunk, 'delta', None)
+                                if delta:
+                                    full_response += delta
+                                    yield delta
                         else:
                             # Chat Completions API streaming format
                             choices = getattr(chunk, "choices", None)
