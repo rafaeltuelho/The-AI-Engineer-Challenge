@@ -44,6 +44,7 @@ from context_manager import (
     should_compress, compress_conversation, count_conversation_tokens,
     SUMMARY_PREFIX,
 )
+from openai_helper import create_openai_request
 
 # ============================================
 # Google OAuth Configuration
@@ -1169,8 +1170,11 @@ async def chat(
         # Create an async generator function for streaming responses
         async def generate():
             try:
-                # Create a streaming chat completion request
-                stream = client.chat.completions.create(
+                # Create a streaming chat completion request using the helper
+                # This automatically enables web search for GPT-5 models
+                stream = create_openai_request(
+                    api_key=api_key,
+                    provider=chat_request.provider,
                     model=chat_request.model,
                     messages=messages_for_openai,
                     stream=True  # Enable streaming response

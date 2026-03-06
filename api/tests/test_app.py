@@ -1496,3 +1496,161 @@ async def test_guest_session_no_persistence_load_after_cache_clear(client, clean
 
         # Verify load_conversations was NOT called for guest session
         mock_load.assert_not_called()
+
+
+# ============================================
+# 15. OpenAI Helper Integration Tests
+# ============================================
+
+@pytest.mark.asyncio
+async def test_chat_with_gpt5_enables_web_search(client, clean_state):
+    """Test that chat requests with GPT-5 models enable web search."""
+    import app as app_module
+    from openai_helper import create_openai_request
+
+    # Create a session with OpenAI API key
+    session_id = create_session(auth_type="api_key", api_key="test-openai-key", provider="openai")
+
+    # Mock the create_openai_request to capture parameters
+    with patch('app.create_openai_request') as mock_helper:
+        # Configure mock to return a mock streaming response
+        mock_stream = MagicMock()
+        mock_stream.__iter__ = Mock(return_value=iter([
+            MagicMock(choices=[MagicMock(delta=MagicMock(content="Test response"))])
+        ]))
+        mock_helper.return_value = mock_stream
+
+        # Send chat request with GPT-5 model
+        response = await client.post(
+            "/api/chat",
+            json={
+                "user_message": "What is the weather today?",
+                "developer_message": "You are a helpful assistant.",
+                "model": "gpt-5",
+                "provider": "openai"
+            },
+            headers={"X-Session-ID": session_id}
+        )
+
+        # Verify the helper was called
+        assert mock_helper.called
+        call_kwargs = mock_helper.call_args[1]
+
+        # Verify correct parameters
+        assert call_kwargs["provider"] == "openai"
+        assert call_kwargs["model"] == "gpt-5"
+        assert call_kwargs["stream"] is True
+        assert call_kwargs["api_key"] == "test-openai-key"
+
+
+@pytest.mark.asyncio
+async def test_chat_with_together_no_web_search(client, clean_state):
+    """Test that Together.ai requests do not get web search parameter."""
+    import app as app_module
+
+    # Create a session with Together API key
+    session_id = create_session(auth_type="api_key", api_key="test-together-key", provider="together")
+
+    # Mock the create_openai_request to capture parameters
+    with patch('app.create_openai_request') as mock_helper:
+        # Configure mock to return a mock streaming response
+        mock_stream = MagicMock()
+        mock_stream.__iter__ = Mock(return_value=iter([
+            MagicMock(choices=[MagicMock(delta=MagicMock(content="Test response"))])
+        ]))
+        mock_helper.return_value = mock_stream
+
+        # Send chat request with Together.ai model
+        response = await client.post(
+            "/api/chat",
+            json={
+                "user_message": "Hello",
+                "developer_message": "You are a helpful assistant.",
+                "model": "meta-llama/Llama-3.3-70B-Instruct-Turbo",
+                "provider": "together"
+            },
+            headers={"X-Session-ID": session_id}
+        )
+
+        # Verify the helper was called with Together provider
+        assert mock_helper.called
+        call_kwargs = mock_helper.call_args[1]
+        assert call_kwargs["provider"] == "together"
+
+
+def test_openai_helper_adds_web_search_for_gpt5():
+    """Test that the helper adds web_search parameter for GPT-5 models."""
+    from openai_helper import create_openai_request
+
+    # Mock the OpenAI client
+    with patch('openai_helper.OpenAI') as mock_openai_class:
+        mock_client = MagicMock()
+        mock_openai_class.return_value = mock_client
+        mock_client.chat.completions.create.return_value = MagicMock(
+            choices=[MagicMock(message=MagicMock(content="Test response"))]
+        )
+
+        # Call helper with GPT-5 model
+        create_openai_request(
+            api_key="test-key",
+            provider="openai",
+            model="gpt-5",
+            messages=[{"role": "user", "content": "test"}],
+            stream=False
+        )
+
+        # Verify web_search was added
+        call_kwargs = mock_client.chat.completions.create.call_args[1]
+        assert "web_search" in call_kwargs
+        assert call_kwargs["web_search"] == {"enabled": True}
+
+
+def test_openai_helper_no_web_search_for_together():
+    """Test that the helper does not add web_search for Together.ai."""
+    from openai_helper import create_openai_request
+
+    # Mock the OpenAI client
+    with patch('openai_helper.OpenAI') as mock_openai_class:
+        mock_client = MagicMock()
+        mock_openai_class.return_value = mock_client
+        mock_client.chat.completions.create.return_value = MagicMock(
+            choices=[MagicMock(message=MagicMock(content="Test response"))]
+        )
+
+        # Call helper with Together.ai
+        create_openai_request(
+            api_key="test-key",
+            provider="together",
+            model="meta-llama/Llama-3.3-70B-Instruct-Turbo",
+            messages=[{"role": "user", "content": "test"}],
+            stream=False
+        )
+
+        # Verify web_search was NOT added
+        call_kwargs = mock_client.chat.completions.create.call_args[1]
+        assert "web_search" not in call_kwargs
+
+
+def test_chatmodel_uses_helper_for_gpt5():
+    """Test that ChatOpenAI class uses helper and enables web search for GPT-5."""
+    from aimakerspace.openai_utils.chatmodel import ChatOpenAI
+
+    # Mock the helper
+    with patch('aimakerspace.openai_utils.chatmodel.create_openai_request') as mock_helper:
+        mock_helper.return_value = MagicMock(
+            choices=[MagicMock(message=MagicMock(content="Test response"))]
+        )
+
+        # Create ChatOpenAI instance and call run
+        chat = ChatOpenAI(api_key="test-key", provider="openai")
+        result = chat.run(
+            messages=[{"role": "user", "content": "test"}],
+            model_name="gpt-5-mini"
+        )
+
+        # Verify helper was called with correct parameters
+        assert mock_helper.called
+        call_kwargs = mock_helper.call_args[1]
+        assert call_kwargs["provider"] == "openai"
+        assert call_kwargs["model"] == "gpt-5-mini"
+        assert call_kwargs["stream"] is False

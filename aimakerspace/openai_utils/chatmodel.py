@@ -1,9 +1,17 @@
 from openai import OpenAI
 from dotenv import load_dotenv
 import os
+import sys
 from typing import Optional
 
 load_dotenv()
+
+# Add api directory to path to import openai_helper
+api_dir = os.path.join(os.path.dirname(__file__), '..', '..', 'api')
+if api_dir not in sys.path:
+    sys.path.insert(0, api_dir)
+
+from openai_helper import create_openai_request
 
 
 class ChatOpenAI:
@@ -31,23 +39,14 @@ class ChatOpenAI:
         if not isinstance(messages, list):
             raise ValueError("messages must be a list")
 
-        # Initialize client with appropriate base URL
-        client_kwargs = {"api_key": self.api_key}
-        if self.base_url:
-            client_kwargs["base_url"] = self.base_url
-
-        client = OpenAI(**client_kwargs)
-        response = client.chat.completions.create(
+        # Use the shared helper which automatically enables web search for GPT-5 models
+        response = create_openai_request(
+            api_key=self.api_key,
+            provider=self.provider,
             model=model_name,
             messages=messages,
-            # temperature=0.7,
-            **kwargs,
-            # max_tokens=4096,
-            # top_p=1,
-            # frequency_penalty=0,
-            # presence_penalty=0,
-            # stop=None,
-            # n=1,
+            stream=False,
+            **kwargs
         )
 
         if text_only:
@@ -60,24 +59,28 @@ class ChatOpenAI:
         if not isinstance(messages, list):
             raise ValueError("messages must be a list")
 
-        # Initialize client with appropriate base URL
+        # Use the shared helper which automatically enables web search for GPT-5 models
+        # Note: create_openai_request is not async, but the underlying client.chat.completions.create is
+        # We need to use the OpenAI client directly for async support
         client_kwargs = {"api_key": self.api_key}
         if self.base_url:
             client_kwargs["base_url"] = self.base_url
 
         client = OpenAI(**client_kwargs)
-        response = await client.chat.completions.create(
-            model=model_name,
-            messages=messages,
-            # temperature=0.7,
+
+        # Build request parameters
+        request_params = {
+            "model": model_name,
+            "messages": messages,
             **kwargs
-            # max_tokens=4096,
-            # top_p=1,
-            # frequency_penalty=0,
-            # presence_penalty=0,
-            # stop=None,
-            # n=1,
-        )
+        }
+
+        # For OpenAI GPT-5 models, enable web search
+        GPT5_WEB_SEARCH_MODELS = ["gpt-5", "gpt-5-mini", "gpt-5-nano"]
+        if self.provider == "openai" and model_name in GPT5_WEB_SEARCH_MODELS:
+            request_params["web_search"] = {"enabled": True}
+
+        response = await client.chat.completions.create(**request_params)
 
         if text_only:
             return response.choices[0].message.content
