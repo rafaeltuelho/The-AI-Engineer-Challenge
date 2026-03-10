@@ -362,5 +362,178 @@ describe('ChatInterface - Image Attachment', () => {
       expect(messageImage).toBeInTheDocument()
     })
   })
+
+  it('loads and renders images from conversation history', async () => {
+    // Mock conversation history with image_attachment from backend
+    const mockConversations = [
+      {
+        conversation_id: 'conv-with-image',
+        title: 'Conversation with Image',
+        last_updated: new Date().toISOString(),
+        mode: 'regular',
+      }
+    ]
+
+    const mockConversationDetail = {
+      conversation_id: 'conv-with-image',
+      title: 'Conversation with Image',
+      mode: 'regular',
+      messages: [
+        {
+          role: 'user',
+          content: 'Here is my screenshot',
+          timestamp: new Date().toISOString(),
+          image_attachment: {
+            data_url: 'data:image/png;base64,historicalimage123',
+            mime_type: 'image/png',
+            filename: 'screenshot.png'
+          }
+        },
+        {
+          role: 'assistant',
+          content: 'I can see your screenshot.',
+          timestamp: new Date().toISOString()
+        }
+      ]
+    }
+
+    global.fetch = vi.fn((url) => {
+      if (url === '/api/conversations') {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve(mockConversations),
+        } as Response)
+      }
+      if (url === '/api/conversations/conv-with-image') {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve(mockConversationDetail),
+        } as Response)
+      }
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve([]),
+      } as Response)
+    })
+
+    render(<ChatInterface {...defaultProps} sidebarOpen={true} />)
+
+    // Wait for conversations to load
+    await waitFor(() => {
+      expect(screen.getByText('Conversation with Image')).toBeInTheDocument()
+    })
+
+    // Click on the conversation to load it
+    const conversationItem = screen.getByText('Conversation with Image')
+    fireEvent.click(conversationItem)
+
+    // Wait for messages to load
+    await waitFor(() => {
+      expect(screen.getByText('Here is my screenshot')).toBeInTheDocument()
+    })
+
+    // Verify image is rendered from history
+    const historyImage = screen.getByAltText('screenshot.png')
+    expect(historyImage).toBeInTheDocument()
+    expect(historyImage.getAttribute('src')).toBe('data:image/png;base64,historicalimage123')
+
+    // Verify assistant response is also present
+    expect(screen.getByText('I can see your screenshot.')).toBeInTheDocument()
+  })
+
+  it('handles conversation reload with multiple images', async () => {
+    const mockConversations = [
+      {
+        conversation_id: 'conv-multi-images',
+        title: 'Multiple Images',
+        last_updated: new Date().toISOString(),
+        mode: 'regular',
+      }
+    ]
+
+    const mockConversationDetail = {
+      conversation_id: 'conv-multi-images',
+      title: 'Multiple Images',
+      mode: 'regular',
+      messages: [
+        {
+          role: 'user',
+          content: 'First image',
+          timestamp: new Date(Date.now() - 2000).toISOString(),
+          image_attachment: {
+            data_url: 'data:image/jpeg;base64,firstimage',
+            mime_type: 'image/jpeg',
+            filename: 'first.jpg'
+          }
+        },
+        {
+          role: 'assistant',
+          content: 'Got the first one.',
+          timestamp: new Date(Date.now() - 1500).toISOString()
+        },
+        {
+          role: 'user',
+          content: 'Second image',
+          timestamp: new Date(Date.now() - 1000).toISOString(),
+          image_attachment: {
+            data_url: 'data:image/webp;base64,secondimage',
+            mime_type: 'image/webp',
+            filename: 'second.webp'
+          }
+        },
+        {
+          role: 'assistant',
+          content: 'Got the second one too.',
+          timestamp: new Date().toISOString()
+        }
+      ]
+    }
+
+    global.fetch = vi.fn((url) => {
+      if (url === '/api/conversations') {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve(mockConversations),
+        } as Response)
+      }
+      if (url === '/api/conversations/conv-multi-images') {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve(mockConversationDetail),
+        } as Response)
+      }
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve([]),
+      } as Response)
+    })
+
+    render(<ChatInterface {...defaultProps} sidebarOpen={true} />)
+
+    await waitFor(() => {
+      expect(screen.getByText('Multiple Images')).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByText('Multiple Images'))
+
+    // Wait for all messages to load
+    await waitFor(() => {
+      expect(screen.getByText('First image')).toBeInTheDocument()
+      expect(screen.getByText('Second image')).toBeInTheDocument()
+    })
+
+    // Verify both images are rendered
+    const firstImage = screen.getByAltText('first.jpg')
+    expect(firstImage).toBeInTheDocument()
+    expect(firstImage.getAttribute('src')).toBe('data:image/jpeg;base64,firstimage')
+
+    const secondImage = screen.getByAltText('second.webp')
+    expect(secondImage).toBeInTheDocument()
+    expect(secondImage.getAttribute('src')).toBe('data:image/webp;base64,secondimage')
+
+    // Verify all assistant responses are present
+    expect(screen.getByText('Got the first one.')).toBeInTheDocument()
+    expect(screen.getByText('Got the second one too.')).toBeInTheDocument()
+  })
 })
 

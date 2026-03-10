@@ -373,7 +373,14 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             content: msg.content,
             timestamp: new Date(msg.timestamp),
             // Preserve image data if present in backend message
-            ...(msg.image ? { image: msg.image } : {})
+            // Backend returns image_attachment, map it to local image shape
+            ...(msg.image_attachment ? {
+              image: {
+                dataUrl: msg.image_attachment.data_url,
+                mimeType: msg.image_attachment.mime_type,
+                filename: msg.image_attachment.filename
+              }
+            } : {})
           }
 
           // Process Topic Explorer assistant messages - include suggested questions per message
