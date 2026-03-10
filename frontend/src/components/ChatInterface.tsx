@@ -14,6 +14,11 @@ interface Message {
   timestamp: Date
   extractedContent?: ExtractedContent
   suggestedQuestions?: string[]  // Store suggested questions per message for Topic Explorer
+  image?: {
+    dataUrl: string
+    mimeType: string
+    filename?: string
+  }
 }
 
 interface ChatInterfaceProps {
@@ -366,7 +371,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             id: msg.timestamp,
             role: msg.role,
             content: msg.content,
-            timestamp: new Date(msg.timestamp)
+            timestamp: new Date(msg.timestamp),
+            // Preserve image data if present in backend message
+            ...(msg.image ? { image: msg.image } : {})
           }
 
           // Process Topic Explorer assistant messages - include suggested questions per message
@@ -467,7 +474,14 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       id: Date.now().toString(),
       role: 'user',
       content: messageToSubmit,
-      timestamp: new Date()
+      timestamp: new Date(),
+      ...(attachedImage ? {
+        image: {
+          dataUrl: attachedImage.dataUrl,
+          mimeType: attachedImage.file.type,
+          filename: attachedImage.file.name
+        }
+      } : {})
     }
 
     setMessages(prev => [...prev, userMessage])
@@ -950,7 +964,25 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     if (message.role === 'assistant') {
       return <MarkdownRenderer content={message.content} chatMode={chatMode} />
     }
-    return <>{message.content}</>
+
+    // For user messages, render text and optional image
+    return (
+      <>
+        {message.image && (
+          <div className="message-image">
+            <img
+              src={message.image.dataUrl}
+              alt={message.image.filename || 'Uploaded image'}
+              loading="lazy"
+            />
+            {message.image.filename && (
+              <span className="message-image-filename">{message.image.filename}</span>
+            )}
+          </div>
+        )}
+        {message.content && <div className="message-text">{message.content}</div>}
+      </>
+    )
   }
 
   return (

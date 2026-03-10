@@ -543,6 +543,7 @@ class Message(BaseModel):
     role: str  # "system", "user", or "assistant"
     content: str
     timestamp: datetime
+    image_attachment: Optional[ImageAttachment] = None  # Optional image attachment for user messages
 
 class ConversationResponse(BaseModel):
     conversation_id: str
@@ -1181,7 +1182,8 @@ async def chat(
         user_message = Message(
             role="user",
             content=chat_request.user_message,
-            timestamp=datetime.now(timezone.utc)
+            timestamp=datetime.now(timezone.utc),
+            image_attachment=chat_request.image_attachment
         )
         user_conversations[conversation_id]["messages"].append(user_message)
         user_conversations[conversation_id]["last_updated"] = datetime.now(timezone.utc)
