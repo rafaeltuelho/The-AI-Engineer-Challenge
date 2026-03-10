@@ -209,5 +209,158 @@ describe('ChatInterface - Image Attachment', () => {
     // Should not show image preview for Together.ai
     expect(screen.queryByText('pasted.png')).not.toBeInTheDocument()
   })
+
+  it('renders image in user message after sending', async () => {
+    // Mock successful chat response
+    global.fetch = vi.fn((url) => {
+      if (url === '/api/conversations') {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve([]),
+        } as Response)
+      }
+      // Mock chat endpoint
+      return Promise.resolve({
+        ok: true,
+        headers: new Headers({
+          'X-Conversation-ID': 'test-conv-123',
+          'X-Free-Turns-Remaining': '9',
+        }),
+        body: {
+          getReader: () => ({
+            read: vi.fn()
+              .mockResolvedValueOnce({ done: false, value: new TextEncoder().encode('Test response') })
+              .mockResolvedValueOnce({ done: true, value: undefined }),
+          }),
+        },
+      } as any)
+    })
+
+    render(<ChatInterface {...defaultProps} />)
+
+    const imageButton = screen.getByTitle('Attach Image (PNG, JPEG, WEBP, GIF)')
+    const fileInput = imageButton.parentElement?.querySelector('input[type="file"][accept*="image"]') as HTMLInputElement
+
+    // Create and attach a valid image
+    const validFile = new File(['fake png content'], 'test-image.png', { type: 'image/png' })
+
+    const mockFileReader = {
+      readAsDataURL: vi.fn(function(this: any) {
+        setTimeout(() => {
+          if (this.onload) {
+            this.onload({ target: { result: 'data:image/png;base64,testdata123' } })
+          }
+        }, 0)
+      }),
+      onload: null as any,
+      onerror: null as any,
+    }
+
+    global.FileReader = vi.fn(function(this: any) {
+      return mockFileReader
+    }) as any
+
+    fireEvent.change(fileInput, { target: { files: [validFile] } })
+
+    // Wait for image preview to appear
+    await waitFor(() => {
+      expect(screen.getByText('test-image.png')).toBeInTheDocument()
+    }, { timeout: 2000 })
+
+    // Type a message and send
+    const textarea = screen.getByRole('textbox')
+    fireEvent.change(textarea, { target: { value: 'Check out this image!' } })
+
+    const form = textarea.closest('form')!
+    fireEvent.submit(form)
+
+    // Wait for user message to appear in chat
+    await waitFor(() => {
+      expect(screen.getByText('Check out this image!')).toBeInTheDocument()
+    })
+
+    // Check that image is rendered in the message
+    const messageImages = screen.getAllByAltText('test-image.png')
+    expect(messageImages.length).toBeGreaterThan(0)
+
+    // Verify image src contains the data URL
+    const renderedImage = messageImages.find(img =>
+      img.getAttribute('src')?.includes('data:image/png;base64,testdata123')
+    )
+    expect(renderedImage).toBeInTheDocument()
+  })
+
+  it('renders image without text in user message', async () => {
+    global.fetch = vi.fn((url) => {
+      if (url === '/api/conversations') {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve([]),
+        } as Response)
+      }
+      return Promise.resolve({
+        ok: true,
+        headers: new Headers({
+          'X-Conversation-ID': 'test-conv-123',
+          'X-Free-Turns-Remaining': '9',
+        }),
+        body: {
+          getReader: () => ({
+            read: vi.fn()
+              .mockResolvedValueOnce({ done: false, value: new TextEncoder().encode('Response') })
+              .mockResolvedValueOnce({ done: true, value: undefined }),
+          }),
+        },
+      } as any)
+    })
+
+    render(<ChatInterface {...defaultProps} />)
+
+    const imageButton = screen.getByTitle('Attach Image (PNG, JPEG, WEBP, GIF)')
+    const fileInput = imageButton.parentElement?.querySelector('input[type="file"][accept*="image"]') as HTMLInputElement
+
+    const validFile = new File(['fake png'], 'image-only.png', { type: 'image/png' })
+
+    const mockFileReader = {
+      readAsDataURL: vi.fn(function(this: any) {
+        setTimeout(() => {
+          if (this.onload) {
+            this.onload({ target: { result: 'data:image/png;base64,imageonly' } })
+          }
+        }, 0)
+      }),
+      onload: null as any,
+      onerror: null as any,
+    }
+
+    global.FileReader = vi.fn(function(this: any) {
+      return mockFileReader
+    }) as any
+
+    fireEvent.change(fileInput, { target: { files: [validFile] } })
+
+    await waitFor(() => {
+      expect(screen.getByText('image-only.png')).toBeInTheDocument()
+    }, { timeout: 2000 })
+
+    // Send with minimal text (image is the main content)
+    const textarea = screen.getByRole('textbox')
+    fireEvent.change(textarea, { target: { value: 'Image' } })
+
+    const form = textarea.closest('form')!
+    fireEvent.submit(form)
+
+    // Image should be rendered in the message
+    await waitFor(() => {
+      const images = screen.getAllByAltText('image-only.png')
+      // Should have at least one image in the message (not just in preview)
+      expect(images.length).toBeGreaterThan(0)
+      // Verify the image has the correct data URL
+      const messageImage = images.find(img =>
+        img.getAttribute('src')?.includes('data:image/png;base64,imageonly')
+      )
+      expect(messageImage).toBeInTheDocument()
+    })
+  })
 })
 
