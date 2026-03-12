@@ -1,3 +1,11 @@
+---
+name: vitest-react-testing-library
+description: Comprehensive testing guidance for Vitest and React Testing Library in React + Vite + TypeScript projects. Use when writing component tests, debugging flaky tests, testing async behavior, handling jsdom limitations, or ensuring accessibility-first testing patterns. Covers user-centric interaction testing, fetch mocking, FileReader mocking, global restoration, and common pitfalls.
+license: MIT
+metadata:
+  author: augment-code
+  version: "1.0.0"
+---
 # Vitest + React Testing Library Skill
 
 ## Overview
