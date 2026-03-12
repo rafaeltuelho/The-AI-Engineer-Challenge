@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import ChatInterface from './ChatInterface'
 
@@ -34,6 +34,10 @@ vi.mock('./SettingsModal', () => ({
 }))
 
 describe('ChatInterface - Image Attachment', () => {
+  // Store original globals to restore after tests
+  const originalFetch = global.fetch
+  const originalFileReader = global.FileReader
+
   const defaultProps = {
     apiKey: 'test-key',
     setApiKey: vi.fn(),
@@ -65,6 +69,12 @@ describe('ChatInterface - Image Attachment', () => {
         json: () => Promise.resolve([]),
       } as Response)
     )
+  })
+
+  afterEach(() => {
+    // Restore original globals to prevent test pollution
+    global.fetch = originalFetch
+    global.FileReader = originalFileReader
   })
 
   it('shows image attachment button for OpenAI in regular chat mode', () => {
