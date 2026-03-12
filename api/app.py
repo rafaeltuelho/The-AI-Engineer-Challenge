@@ -410,6 +410,34 @@ class ImageAttachment(BaseModel):
 
         return v
 
+    @model_validator(mode='after')
+    def validate_mime_type_matches_data_url(self):
+        """Validate that the MIME type in data_url matches the mime_type field"""
+        # Extract media type from data URL (format: data:image/png;base64,...)
+        if ';' in self.data_url:
+            data_url_media_type = self.data_url.split(';', 1)[0].replace('data:', '')
+        else:
+            # Shouldn't happen due to validate_data_url, but be defensive
+            raise ValueError('Invalid data URL format')
+
+        # Normalize both for comparison (handle image/jpg vs image/jpeg)
+        normalized_mime = self.mime_type.lower()
+        normalized_data_url_type = data_url_media_type.lower()
+
+        # Special case: image/jpg and image/jpeg are equivalent
+        if normalized_mime == 'image/jpg':
+            normalized_mime = 'image/jpeg'
+        if normalized_data_url_type == 'image/jpg':
+            normalized_data_url_type = 'image/jpeg'
+
+        if normalized_mime != normalized_data_url_type:
+            raise ValueError(
+                f'MIME type mismatch: mime_type is "{self.mime_type}" but data_url contains "{data_url_media_type}". '
+                f'These must match exactly.'
+            )
+
+        return self
+
 # Define the data model for chat requests using Pydantic
 # This ensures incoming request data is properly validated
 class ChatRequest(BaseModel):
@@ -543,6 +571,7 @@ class Message(BaseModel):
     role: str  # "system", "user", or "assistant"
     content: str
     timestamp: datetime
+    image_attachment: Optional[ImageAttachment] = None  # Optional image attachment for user messages
 
 class ConversationResponse(BaseModel):
     conversation_id: str
@@ -1181,7 +1210,8 @@ async def chat(
         user_message = Message(
             role="user",
             content=chat_request.user_message,
-            timestamp=datetime.now(timezone.utc)
+            timestamp=datetime.now(timezone.utc),
+            image_attachment=chat_request.image_attachment
         )
         user_conversations[conversation_id]["messages"].append(user_message)
         user_conversations[conversation_id]["last_updated"] = datetime.now(timezone.utc)

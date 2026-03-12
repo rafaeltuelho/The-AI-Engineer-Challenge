@@ -1694,16 +1694,19 @@ def test_image_attachment_validation_mime_type():
 
     # Create a small test image (1x1 PNG)
     small_png = base64.b64encode(b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde').decode()
-    valid_data_url = f"data:image/png;base64,{small_png}"
 
-    # Valid MIME types should work
+    # Valid MIME types should work (data_url must match mime_type)
     for mime_type in ["image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif"]:
+        # Normalize jpg to jpeg for data URL
+        data_url_type = "image/jpeg" if mime_type == "image/jpg" else mime_type
+        valid_data_url = f"data:{data_url_type};base64,{small_png}"
         attachment = ImageAttachment(mime_type=mime_type, data_url=valid_data_url)
         assert attachment.mime_type == mime_type.lower()
 
     # Invalid MIME type should fail
+    invalid_data_url = f"data:image/bmp;base64,{small_png}"
     with pytest.raises(ValueError, match="Unsupported image type"):
-        ImageAttachment(mime_type="image/bmp", data_url=valid_data_url)
+        ImageAttachment(mime_type="image/bmp", data_url=invalid_data_url)
 
 
 def test_image_attachment_validation_size():
@@ -1728,6 +1731,49 @@ def test_image_attachment_validation_size():
     # Oversized image should fail
     with pytest.raises(ValueError, match="exceeds maximum allowed size"):
         ImageAttachment(mime_type="image/png", data_url=large_data_url)
+
+
+def test_image_attachment_validation_mime_type_mismatch():
+    """Test ImageAttachment rejects mismatched MIME types between mime_type and data_url."""
+    from app import ImageAttachment
+    import base64
+
+    # Create a small test image
+    small_png = base64.b64encode(b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde').decode()
+
+    # Test case 1: mime_type says png, data_url says jpeg - should fail
+    mismatched_data_url = f"data:image/jpeg;base64,{small_png}"
+    with pytest.raises(ValueError, match="MIME type mismatch.*mime_type is \"image/png\".*data_url contains \"image/jpeg\""):
+        ImageAttachment(mime_type="image/png", data_url=mismatched_data_url)
+
+    # Test case 2: mime_type says jpeg, data_url says webp - should fail
+    mismatched_data_url_2 = f"data:image/webp;base64,{small_png}"
+    with pytest.raises(ValueError, match="MIME type mismatch.*mime_type is \"image/jpeg\".*data_url contains \"image/webp\""):
+        ImageAttachment(mime_type="image/jpeg", data_url=mismatched_data_url_2)
+
+    # Test case 3: mime_type says gif, data_url says png - should fail
+    mismatched_data_url_3 = f"data:image/png;base64,{small_png}"
+    with pytest.raises(ValueError, match="MIME type mismatch.*mime_type is \"image/gif\".*data_url contains \"image/png\""):
+        ImageAttachment(mime_type="image/gif", data_url=mismatched_data_url_3)
+
+    # Test case 4: Matching types should work - png/png
+    valid_png_url = f"data:image/png;base64,{small_png}"
+    attachment = ImageAttachment(mime_type="image/png", data_url=valid_png_url)
+    assert attachment.mime_type == "image/png"
+
+    # Test case 5: Matching types should work - jpeg/jpeg
+    valid_jpeg_url = f"data:image/jpeg;base64,{small_png}"
+    attachment = ImageAttachment(mime_type="image/jpeg", data_url=valid_jpeg_url)
+    assert attachment.mime_type == "image/jpeg"
+
+    # Test case 6: jpg and jpeg should be treated as equivalent
+    jpeg_url = f"data:image/jpeg;base64,{small_png}"
+    attachment = ImageAttachment(mime_type="image/jpg", data_url=jpeg_url)
+    assert attachment.mime_type == "image/jpg"
+
+    jpg_url = f"data:image/jpg;base64,{small_png}"
+    attachment = ImageAttachment(mime_type="image/jpeg", data_url=jpg_url)
+    assert attachment.mime_type == "image/jpeg"
 
 
 def test_chat_request_image_attachment_provider_validation():
@@ -1824,6 +1870,123 @@ async def test_chat_with_image_attachment(client, clean_state, mock_session):
         assert mock_helper.called
         call_kwargs = mock_helper.call_args[1]
         assert call_kwargs["image_data_url"] == valid_data_url
+
+
+@pytest.mark.asyncio
+async def test_image_attachment_persistence(client, clean_state, mock_session):
+    """Test that image attachments are persisted in conversation history."""
+    import base64
+
+    # Create a small test image
+    small_png = base64.b64encode(b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde').decode()
+    valid_data_url = f"data:image/png;base64,{small_png}"
+
+    # Mock the create_openai_request to return a streaming response
+    with patch('app.create_openai_request') as mock_helper:
+        mock_stream = MagicMock()
+        mock_stream.__iter__ = Mock(return_value=iter([
+            MagicMock(type='response.output_text.delta', delta="I see a test image.")
+        ]))
+        mock_helper.return_value = mock_stream
+
+        # Send chat request with image attachment
+        response = await client.post(
+            "/api/chat",
+            json={
+                "user_message": "What's in this image?",
+                "developer_message": "You are a helpful assistant.",
+                "model": "gpt-5-mini",
+                "provider": "openai",
+                "image_attachment": {
+                    "mime_type": "image/png",
+                    "data_url": valid_data_url,
+                    "filename": "test.png"
+                }
+            },
+            headers={"X-Session-ID": mock_session}
+        )
+
+        assert response.status_code == 200
+        conversation_id = response.headers.get("X-Conversation-ID")
+        assert conversation_id is not None
+
+        # Retrieve the conversation to verify image attachment was persisted
+        conv_response = await client.get(
+            f"/api/conversations/{conversation_id}",
+            headers={"X-Session-ID": mock_session}
+        )
+
+        assert conv_response.status_code == 200
+        conv_data = conv_response.json()
+
+        # Verify conversation has messages
+        assert "messages" in conv_data
+        messages = conv_data["messages"]
+        assert len(messages) == 2  # User message + assistant response
+
+        # Verify user message has image attachment
+        user_message = messages[0]
+        assert user_message["role"] == "user"
+        assert user_message["content"] == "What's in this image?"
+        assert "image_attachment" in user_message
+        assert user_message["image_attachment"] is not None
+        assert user_message["image_attachment"]["mime_type"] == "image/png"
+        assert user_message["image_attachment"]["data_url"] == valid_data_url
+        assert user_message["image_attachment"]["filename"] == "test.png"
+
+        # Verify assistant message has no image attachment
+        assistant_message = messages[1]
+        assert assistant_message["role"] == "assistant"
+        assert assistant_message["content"] == "I see a test image."
+        # Assistant messages should not have image_attachment or it should be None
+        assert assistant_message.get("image_attachment") is None
+
+
+@pytest.mark.asyncio
+async def test_text_only_message_no_regression(client, clean_state, mock_session):
+    """Test that text-only messages continue to work without image attachments."""
+    # Mock the create_openai_request to return a streaming response
+    with patch('app.create_openai_request') as mock_helper:
+        mock_stream = MagicMock()
+        mock_stream.__iter__ = Mock(return_value=iter([
+            MagicMock(type='response.output_text.delta', delta="Hello! How can I help?")
+        ]))
+        mock_helper.return_value = mock_stream
+
+        # Send chat request without image attachment
+        response = await client.post(
+            "/api/chat",
+            json={
+                "user_message": "Hello",
+                "developer_message": "You are a helpful assistant.",
+                "model": "gpt-5-mini",
+                "provider": "openai"
+            },
+            headers={"X-Session-ID": mock_session}
+        )
+
+        assert response.status_code == 200
+        conversation_id = response.headers.get("X-Conversation-ID")
+        assert conversation_id is not None
+
+        # Retrieve the conversation
+        conv_response = await client.get(
+            f"/api/conversations/{conversation_id}",
+            headers={"X-Session-ID": mock_session}
+        )
+
+        assert conv_response.status_code == 200
+        conv_data = conv_response.json()
+
+        # Verify messages exist
+        messages = conv_data["messages"]
+        assert len(messages) == 2
+
+        # Verify user message has no image attachment (or it's None)
+        user_message = messages[0]
+        assert user_message["role"] == "user"
+        assert user_message["content"] == "Hello"
+        assert user_message.get("image_attachment") is None
 
 
 def test_openai_helper_multimodal_input():

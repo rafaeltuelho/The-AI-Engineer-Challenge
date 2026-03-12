@@ -791,6 +791,37 @@
   margin-bottom: 0;
 }
 
+/* Message image styles */
+.message-image {
+  margin-bottom: 12px;
+  border-radius: 8px;
+  overflow: hidden;
+  max-width: 400px;
+  border: 1px solid var(--border-primary);
+  background: var(--bg-secondary);
+}
+
+.message-image img {
+  width: 100%;
+  height: auto;
+  display: block;
+  max-height: 400px;
+  object-fit: contain;
+}
+
+.message-image-filename {
+  display: block;
+  padding: 8px 12px;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  background: var(--bg-tertiary);
+  border-top: 1px solid var(--border-primary);
+}
+
+.message-text {
+  margin-top: 8px;
+}
+
 /* Ensure markdown content in assistant messages doesn't break layout */
 .message-row.assistant .message-content .markdown-content {
   color: var(--text-primary);
