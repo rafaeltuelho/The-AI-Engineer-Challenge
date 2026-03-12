@@ -1,8 +1,25 @@
+---
+name: ai-chat-rag-application-patterns
+description: Comprehensive guide to AI chat and RAG patterns used in this repository. Covers chat endpoints, provider abstraction, document ingestion, retrieval augmentation, vector search, conversation persistence, multimodal attachments, and security/guardrails. Use when implementing or modifying chat functionality, RAG features, provider integrations, conversation management, document processing, or security features in this AI application.
+license: MIT
+metadata:
+  author: augment-solutions
+  version: "1.0.0"
+---
 # AI Chat and RAG Application Patterns
 
-**Description:** Comprehensive guide to AI chat and RAG patterns used in this repository. Covers chat endpoints, provider abstraction, document ingestion, retrieval augmentation, vector search, conversation persistence, multimodal attachments, and security/guardrails.
+Comprehensive guide to AI chat and RAG patterns used in this repository. Covers chat endpoints, provider abstraction, document ingestion, retrieval augmentation, vector search, conversation persistence, multimodal attachments, and security/guardrails.
 
-**When to use:** When implementing or modifying chat functionality, RAG features, provider integrations, conversation management, document processing, or security features in this AI application.
+## When to Apply
+
+Use this skill when:
+
+- Implementing or modifying chat functionality
+- Adding RAG features or document processing
+- Integrating new AI providers
+- Managing conversation persistence
+- Handling multimodal attachments
+- Implementing security features or guardrails
 
 ---
 
