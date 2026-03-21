@@ -1049,11 +1049,11 @@ def _fetch_suggestions() -> List[str]:
             messages=[
                 {
                     "role": "system",
-                    "content": "You are a helpful assistant that generates diverse, engaging conversation starters."
+                    "content": "You are a helpful assistant that generates diverse, engaging, short and punchy conversation starters."
                 },
                 {
                     "role": "user",
-                    "content": "Generate 3 diverse, interesting conversation starter questions that a user might ask an AI assistant. Return ONLY a JSON array of strings, nothing else. Example: [\"question 1\", \"question 2\", \"question 3\"]"
+                    "content": "Generate 3 diverse, interesting, and VERY short (under 6 words each) conversation starter questions or prompts that a user might ask an AI assistant. Use catchy sentences. Return ONLY a JSON array of strings, nothing else. Example: [\"Tell me a joke\", \"Explain quantum physics\", \"Write a poem\"]"
                 }
             ],
             temperature=0.8,
@@ -1628,17 +1628,17 @@ async def upload_document(
                 
                 # System message for summarization
                 system_message = """
-                You are a helpful assistant. Please, summarize this document content and return 5 suggested prompts/questions about it. 
+                You are a helpful assistant. Please, summarize this document content and return 5 suggested short, punchy prompts/questions about it (under 6 words each).
                 These questions will be presented to the user so it can start a conversation with you about.
 
                 Aways respond with a JSON object in the following strict format:
                 {
                     "summary": "Brief summary of the document content",
-                    "suggested_questions": ["Question 1", "Question 2", "Question 3", "Question 4", "Question 5"]
+                    "suggested_questions": ["Short Q1", "Short Q2", "Short Q3", "Short Q4", "Short Q5"]
                 }"""
-                
+
                 # Create the prompt for summarization
-                user_message = f"Please summarize the following document content and provide 5 suggested questions:\n\n{document_content}"
+                user_message = f"Please summarize the following document content and provide 5 VERY SHORT suggested questions:\n\n{document_content}"
                 
                 # Generate summary and suggested questions
                 # Initialize ChatOpenAI with the provided API key and provider

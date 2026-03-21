@@ -124,7 +124,7 @@
   flex-direction: column;
   position: relative;
   min-height: 0;
-  max-height: 100vh;
+  max-height: 100%;
   transition: border-color var(--transition-base);
 }
 
@@ -577,26 +577,32 @@
   margin: 0 0 32px 0;
 }
 
+.mode-cards-container {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+}
+
 .mode-cards {
   display: flex;
   gap: 16px;
-  margin-bottom: 32px;
+  margin-bottom: 8px;
   flex-wrap: wrap;
   justify-content: center;
 }
 
 .mode-card {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
   gap: 8px;
-  padding: 20px 24px;
+  padding: 8px 12px;
   border: 1px solid var(--border-primary);
   border-radius: 12px;
   background: var(--bg-primary);
   cursor: pointer;
   transition: all 0.2s;
-  min-width: 140px;
+  min-width: unset;
   color: var(--text-secondary);
 }
 
@@ -1302,11 +1308,10 @@
 /* Mobile breakpoint */
 @media (max-width: 768px) {
   .chat-interface {
-    height: auto;
-    min-height: 100vh;
-    min-height: 100dvh; /* Dynamic viewport height for mobile */
-    padding: var(--spacing-xs);
-    gap: var(--spacing-sm);
+    height: 100%;
+    padding: 0;
+    gap: 0;
+    flex-direction: column;
   }
 
   .left-panel {
@@ -1347,6 +1352,9 @@
   .chat-container {
     height: 100%;
     border-radius: var(--radius-lg);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
   }
 
   .chat-header {
@@ -1379,6 +1387,8 @@
   .messages-container {
     padding: var(--spacing-sm);
     gap: var(--spacing-sm);
+    flex: 1;
+    overflow-y: auto;
   }
 
   .message-row {
@@ -1436,8 +1446,8 @@
   }
 
   .conversation-item {
-    flex-direction: column;
-    align-items: stretch;
+    flex-direction: row;
+    align-items: center;
     gap: var(--spacing-xs);
   }
 
@@ -1475,13 +1485,16 @@
     gap: 8px;
     margin-bottom: 20px;
     flex-wrap: nowrap;
+    justify-content: center;
   }
 
   .mode-card {
-    padding: 12px 10px;
+    padding: 8px 10px;
     min-width: 0;
     flex: 1;
-    gap: 4px;
+    flex-direction: row;
+    justify-content: center;
+    gap: 6px;
   }
 
   .mode-card svg {
@@ -1501,7 +1514,7 @@
 /* Small mobile breakpoint */
 @media (max-width: 480px) {
   .chat-interface {
-    padding: var(--spacing-xs);
+    padding: 0;
   }
 
   .chat-header h2 {
@@ -1513,15 +1526,17 @@
   }
 
   .mode-card {
-    padding: 10px 8px;
+    padding: 6px 8px;
+    gap: 4px;
+  }
+
+  .mode-card svg {
+    width: 14px;
+    height: 14px;
   }
 
   .mode-card-title {
     font-size: 0.75rem;
-  }
-
-  .mode-card-desc {
-    font-size: 0.625rem;
   }
 }
 

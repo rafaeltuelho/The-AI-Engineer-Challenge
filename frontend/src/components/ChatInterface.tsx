@@ -248,6 +248,14 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     }
   }, [inputMessage])
 
+  // Auto-focus textarea on load
+  useEffect(() => {
+    // Only focus if not on mobile, or give it a short delay on load
+    if (textareaRef.current) {
+      textareaRef.current.focus()
+    }
+  }, [])
+
   // Detect mobile viewport
   useEffect(() => {
     const checkMobile = () => {
@@ -1159,36 +1167,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             <div className="welcome-screen">
               <h1 className="welcome-heading">What can I help with?</h1>
 
-              <div className="mode-cards">
-                <button
-                  className={`mode-card ${chatMode === 'regular' ? 'active' : ''} ${hasConversationStarted ? 'disabled' : ''}`}
-                  onClick={() => { if (!hasConversationStarted) { setChatMode('regular'); setDeveloperMessage(getDefaultDeveloperMessage('regular')); }}}
-                  disabled={hasConversationStarted}
-                >
-                  <MessageSquare size={24} />
-                  <div className="mode-card-title">AI Chat</div>
-                  <div className="mode-card-desc">General conversation</div>
-                </button>
-                <button
-                  className={`mode-card ${chatMode === 'rag' ? 'active' : ''} ${hasConversationStarted ? 'disabled' : ''}`}
-                  onClick={() => { if (!hasConversationStarted) { setChatMode('rag'); setDeveloperMessage(getDefaultDeveloperMessage('rag')); }}}
-                  disabled={hasConversationStarted}
-                >
-                  <FileText size={24} />
-                  <div className="mode-card-title">RAG Mode</div>
-                  <div className="mode-card-desc">Chat with documents</div>
-                </button>
-                <button
-                  className={`mode-card ${chatMode === 'topic-explorer' ? 'active' : ''} ${hasConversationStarted ? 'disabled' : ''}`}
-                  onClick={() => { if (!hasConversationStarted) { setChatMode('topic-explorer'); setDeveloperMessage(getDefaultDeveloperMessage('topic-explorer')); }}}
-                  disabled={hasConversationStarted}
-                >
-                  <Compass size={24} />
-                  <div className="mode-card-title">Topic Explorer</div>
-                  <div className="mode-card-desc">Deep dive into topics</div>
-                </button>
-              </div>
-
               {welcomeSuggestions && welcomeSuggestions.length > 0 ? (
                 <div className="suggestion-chips">
                   {welcomeSuggestions.slice(0, 3).map((suggestion, index) => (
@@ -1297,6 +1275,37 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         )}
 
         <form onSubmit={handleSubmit} className="input-form">
+          <div className="mode-cards-container">
+            <div className="mode-cards">
+              <button
+                type="button"
+                className={`mode-card ${chatMode === 'regular' ? 'active' : ''} ${hasConversationStarted ? 'disabled' : ''}`}
+                onClick={() => { if (!hasConversationStarted) { setChatMode('regular'); setDeveloperMessage(getDefaultDeveloperMessage('regular')); }}}
+                disabled={hasConversationStarted}
+              >
+                <MessageSquare size={16} />
+                <span className="mode-card-title">AI Chat</span>
+              </button>
+              <button
+                type="button"
+                className={`mode-card ${chatMode === 'rag' ? 'active' : ''} ${hasConversationStarted ? 'disabled' : ''}`}
+                onClick={() => { if (!hasConversationStarted) { setChatMode('rag'); setDeveloperMessage(getDefaultDeveloperMessage('rag')); }}}
+                disabled={hasConversationStarted}
+              >
+                <FileText size={16} />
+                <span className="mode-card-title">RAG Mode</span>
+              </button>
+              <button
+                type="button"
+                className={`mode-card ${chatMode === 'topic-explorer' ? 'active' : ''} ${hasConversationStarted ? 'disabled' : ''}`}
+                onClick={() => { if (!hasConversationStarted) { setChatMode('topic-explorer'); setDeveloperMessage(getDefaultDeveloperMessage('topic-explorer')); }}}
+                disabled={hasConversationStarted}
+              >
+                <Compass size={16} />
+                <span className="mode-card-title">Topic Explorer</span>
+              </button>
+            </div>
+          </div>
           {/* Image preview */}
           {attachedImage && (
             <div className="image-preview-container">
