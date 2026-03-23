@@ -248,12 +248,45 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     }
   }, [inputMessage])
 
-  // Auto-focus textarea on load
+  // Auto-focus textarea on load.
+  //
+  // iOS Safari blocks programmatic focus() calls that don't originate from
+  // a synchronous user-gesture handler (touchstart/touchend/click). Both the
+  // `autoFocus` HTML attribute and any setTimeout-based focus() call are
+  // silently ignored — this is intentional Apple policy to prevent pages from
+  // forcibly showing the virtual keyboard.
+  //
+  // Strategy:
+  //   1. On non-iOS browsers (desktop, Android Chrome): focus immediately.
+  //   2. On iOS Safari: attach a one-shot `touchstart` listener on the document.
+  //      The first time the user touches *anything* on the page, focus() is
+  //      called synchronously inside that gesture handler, which iOS Safari
+  //      permits. This mirrors the behaviour of Gmail, Slack, and ChatGPT on iOS.
   useEffect(() => {
-    // Only focus if not on mobile, or give it a short delay on load
-    if (textareaRef.current) {
-      textareaRef.current.focus()
+    const textarea = textareaRef.current
+    if (!textarea) return
+
+    // Detect iOS Safari. The canonical check is the presence of a touch-capable
+    // Safari that is NOT Android (Android Chrome also sets MaxTouchPoints > 0).
+    const isIOS =
+      /iP(hone|od|ad)/.test(navigator.userAgent) ||
+      (navigator.maxTouchPoints > 1 && /Mac/.test(navigator.userAgent))
+
+    if (!isIOS) {
+      // Non-iOS: plain programmatic focus works fine.
+      const timer = setTimeout(() => {
+        textareaRef.current?.focus({ preventScroll: true })
+      }, 100)
+      return () => clearTimeout(timer)
     }
+
+    // iOS Safari: defer focus to the first user touch anywhere on the page.
+    const focusOnFirstTouch = () => {
+      textareaRef.current?.focus()
+      document.removeEventListener('touchstart', focusOnFirstTouch)
+    }
+    document.addEventListener('touchstart', focusOnFirstTouch, { passive: true })
+    return () => document.removeEventListener('touchstart', focusOnFirstTouch)
   }, [])
 
   // Detect mobile viewport
@@ -1353,6 +1386,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             )}
             <textarea
               ref={textareaRef}
+              autoFocus
               value={inputMessage}
               onChange={(e) => setInputMessage(e.target.value)}
               onKeyDown={handleKeyDown}
