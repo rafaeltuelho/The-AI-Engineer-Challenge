@@ -171,8 +171,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
   // Context menu state
   const [showContextMenu, setShowContextMenu] = useState(false)
-  const [webSearchEnabled, setWebSearchEnabled] = useState(false)
-  const [studyLearnEnabled, setStudyLearnEnabled] = useState(false)
+  const [webSearchEnabled, setWebSearchEnabled] = useState(true)
+  const [studyLearnEnabled, setStudyLearnEnabled] = useState(true)
   const [topicExplorerEnabled, setTopicExplorerEnabled] = useState(false)
   const [thinkingEnabled, setThinkingEnabled] = useState(false)
 
@@ -642,12 +642,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         // New optional fields for ChatGPT-style features (backend will ignore for now)
         web_search: webSearchEnabled,
         ...(thinkingEnabled ? {
-          reasoning: {
-            enabled: true
-          }
+          reasoning: { effort: "medium", summary: "auto" }
         } : {}),
-        ...(studyLearnEnabled ? {
-          include: ['study_learn']
+        ...(webSearchEnabled ? {
+          include: ['web_search_call.action.sources']
         } : {})
       }
 

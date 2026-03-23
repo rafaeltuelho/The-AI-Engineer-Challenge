@@ -96,7 +96,7 @@ def create_openai_request(
     stream: bool = False,
     image_data_url: Optional[str] = None,
     web_search: Optional[bool] = None,
-    reasoning: Optional[str] = None,
+    reasoning: Optional[Dict[str, str]] = None,
     include: Optional[List[str]] = None,
     **kwargs
 ) -> Union[Any, Iterator[Any]]:

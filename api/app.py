@@ -449,7 +449,7 @@ class ChatRequest(BaseModel):
     provider: Optional[str] = "openai"  # Provider selection: "openai" or "together"
     image_attachment: Optional[ImageAttachment] = None  # Optional image attachment for OpenAI GPT models
     web_search: Optional[bool] = None  # Optional web search control (default: True for GPT-5 models)
-    reasoning: Optional[str] = None  # Optional reasoning effort level ("low", "medium", "high")
+    reasoning: Optional[Dict[str, str]] = None  # Optional reasoning effort level ("low", "medium", "high")
     include: Optional[List[str]] = None  # Optional list of additional data to include (e.g., ["reasoning"])
 
     @field_validator('api_key')
@@ -562,11 +562,15 @@ class ChatRequest(BaseModel):
         if v is None:
             return v
 
-        allowed_levels = ["low", "medium", "high"]
-        if v.lower() not in allowed_levels:
-            raise ValueError(f'Invalid reasoning level: {v}. Allowed levels: {", ".join(allowed_levels)}')
+        if not isinstance(v, dict):
+            raise ValueError('Reasoning must be a dictionary')
 
-        return v.lower()
+        effort = v.get("effort")
+        allowed_levels = ["low", "medium", "high"]
+        if effort not in allowed_levels:
+            raise ValueError(f'Invalid reasoning effort: {effort}. Allowed levels: {", ".join(allowed_levels)}')
+
+        return v
 
     @field_validator('include')
     @classmethod
@@ -578,7 +582,7 @@ class ChatRequest(BaseModel):
         if not isinstance(v, list):
             raise ValueError('Include must be a list of strings')
 
-        allowed_values = ["reasoning"]
+        allowed_values = ["reasoning", "web_search_call.action.sources"]
         for item in v:
             if not isinstance(item, str):
                 raise ValueError('Include items must be strings')
