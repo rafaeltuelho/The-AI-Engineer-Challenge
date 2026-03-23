@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react'
-import { Send, MessageSquare, User, Bot, Trash2, Settings, ArrowDown, X, FileText, Upload, Compass, Image } from 'lucide-react'
+import { Send, MessageSquare, User, Bot, Trash2, Settings, ArrowDown, X, FileText, Upload, Compass, Image, Plus, Search, BookOpen, Brain } from 'lucide-react'
 import MarkdownRenderer from './MarkdownRenderer'
 import SuggestedQuestions from './SuggestedQuestions'
 import SettingsModal from './SettingsModal'
@@ -150,9 +150,17 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const [imageError, setImageError] = useState<string | null>(null)
   const [isDraggingImage, setIsDraggingImage] = useState(false)
 
+  // Context menu state
+  const [showContextMenu, setShowContextMenu] = useState(false)
+  const [webSearchEnabled, setWebSearchEnabled] = useState(false)
+  const [studyLearnEnabled, setStudyLearnEnabled] = useState(false)
+  const [topicExplorerEnabled, setTopicExplorerEnabled] = useState(false)
+  const [thinkingEnabled, setThinkingEnabled] = useState(false)
+
   const fileInputRef = useRef<HTMLInputElement>(null)
   const imageInputRef = useRef<HTMLInputElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
+  const contextMenuRef = useRef<HTMLDivElement>(null)
 
 
   // Filter available models based on chat mode and provider
@@ -288,6 +296,35 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     document.addEventListener('touchstart', focusOnFirstTouch, { passive: true })
     return () => document.removeEventListener('touchstart', focusOnFirstTouch)
   }, [])
+
+  // Close context menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (contextMenuRef.current && !contextMenuRef.current.contains(event.target as Node)) {
+        setShowContextMenu(false)
+      }
+    }
+
+    if (showContextMenu) {
+      document.addEventListener('mousedown', handleClickOutside)
+      return () => document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [showContextMenu])
+
+  // Derive chatMode from toggles (for backward compatibility)
+  useEffect(() => {
+    if (topicExplorerEnabled) {
+      setChatMode('topic-explorer')
+      setDeveloperMessage(getDefaultDeveloperMessage('topic-explorer'))
+    } else if (documentSummary) {
+      // If document is uploaded, use RAG mode
+      setChatMode('rag')
+      setDeveloperMessage(getDefaultDeveloperMessage('rag'))
+    } else {
+      setChatMode('regular')
+      setDeveloperMessage(getDefaultDeveloperMessage('regular'))
+    }
+  }, [topicExplorerEnabled, documentSummary])
 
   // Detect mobile viewport
   useEffect(() => {
@@ -503,6 +540,16 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     }
   }
 
+  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const value = e.target.value
+    setInputMessage(value)
+
+    // Detect slash command at the start of input
+    if (value === '/' && !showContextMenu) {
+      setShowContextMenu(true)
+    }
+  }
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
@@ -572,6 +619,16 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             data_url: currentImage.dataUrl,
             filename: currentImage.file.name
           }
+        } : {}),
+        // New optional fields for ChatGPT-style features (backend will ignore for now)
+        web_search: webSearchEnabled,
+        ...(thinkingEnabled ? {
+          reasoning: {
+            enabled: true
+          }
+        } : {}),
+        ...(studyLearnEnabled ? {
+          include: ['study_learn']
         } : {})
       }
 

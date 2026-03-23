@@ -448,6 +448,9 @@ class ChatRequest(BaseModel):
     api_key: Optional[str] = None  # API key for authentication (optional, can use session's key or server key)
     provider: Optional[str] = "openai"  # Provider selection: "openai" or "together"
     image_attachment: Optional[ImageAttachment] = None  # Optional image attachment for OpenAI GPT models
+    web_search: Optional[bool] = None  # Optional web search control (default: True for GPT-5 models)
+    reasoning: Optional[str] = None  # Optional reasoning effort level ("low", "medium", "high")
+    include: Optional[List[str]] = None  # Optional list of additional data to include (e.g., ["reasoning"])
 
     @field_validator('api_key')
     @classmethod
@@ -549,6 +552,38 @@ class ChatRequest(BaseModel):
         # Allow alphanumeric, hyphens, and underscores
         if not re.match(r'^[A-Za-z0-9_-]+$', v):
             raise ValueError('Conversation ID contains invalid characters')
+
+        return v
+
+    @field_validator('reasoning')
+    @classmethod
+    def validate_reasoning(cls, v):
+        """Validate reasoning effort level"""
+        if v is None:
+            return v
+
+        allowed_levels = ["low", "medium", "high"]
+        if v.lower() not in allowed_levels:
+            raise ValueError(f'Invalid reasoning level: {v}. Allowed levels: {", ".join(allowed_levels)}')
+
+        return v.lower()
+
+    @field_validator('include')
+    @classmethod
+    def validate_include(cls, v):
+        """Validate include parameter"""
+        if v is None:
+            return v
+
+        if not isinstance(v, list):
+            raise ValueError('Include must be a list of strings')
+
+        allowed_values = ["reasoning"]
+        for item in v:
+            if not isinstance(item, str):
+                raise ValueError('Include items must be strings')
+            if item not in allowed_values:
+                raise ValueError(f'Invalid include value: {item}. Allowed values: {", ".join(allowed_values)}')
 
         return v
 
@@ -1278,7 +1313,10 @@ async def chat(
                     model=chat_request.model,
                     messages=messages_for_openai,
                     stream=True,  # Enable streaming response
-                    image_data_url=image_data_url
+                    image_data_url=image_data_url,
+                    web_search=chat_request.web_search,
+                    reasoning=chat_request.reasoning,
+                    include=chat_request.include
                 )
 
                 # Collect the full response for storage
@@ -1288,6 +1326,10 @@ async def chat(
                 # or Chat Completions API stream (Together.ai or other models)
                 is_responses_api = chat_request.provider == "openai" and chat_request.model in ["gpt-5", "gpt-5-mini", "gpt-5-nano"]
 
+                # Track reasoning state for proper marker placement
+                in_reasoning = False
+                reasoning_started = False
+
                 # Yield each chunk of the response as it becomes available
                 for chunk in stream:
                     # Some providers may send chunks without choices or content (e.g., role updates or keep-alives)
@@ -1296,10 +1338,27 @@ async def chat(
                             # Responses API streaming format
                             # Events have 'type' field and text deltas are in 'delta' attribute
                             event_type = getattr(chunk, 'type', None)
-                            if event_type == 'response.output_text.delta':
+
+                            # Handle reasoning summary text deltas
+                            if event_type == 'response.reasoning_summary_text.delta':
+                                delta = getattr(chunk, 'delta', None)
+                                if delta:
+                                    # Emit thinking marker at the start of reasoning
+                                    if not reasoning_started:
+                                        yield '<!--THINKING-->'
+                                        reasoning_started = True
+                                        in_reasoning = True
+                                    yield delta
+
+                            # Handle regular output text deltas
+                            elif event_type == 'response.output_text.delta':
                                 # Text delta events have the incremental text in 'delta' attribute
                                 delta = getattr(chunk, 'delta', None)
                                 if delta:
+                                    # If we were in reasoning mode, close it before outputting text
+                                    if in_reasoning:
+                                        yield '<!--/THINKING-->'
+                                        in_reasoning = False
                                     full_response += delta
                                     yield delta
                         else:
