@@ -219,7 +219,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
   const scrollToBottom = () => {
     if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' })
+      messagesEndRef.current?.scrollIntoView?.({ behavior: 'smooth' })
     }
   }
 
@@ -341,9 +341,16 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       setDeveloperMessage(getDefaultDeveloperMessage('rag'))
     } else {
       setChatMode('regular')
-      setDeveloperMessage(getDefaultDeveloperMessage('regular'))
+      // Use student prompt when Study & Learn is enabled, generic prompt otherwise
+      if (studyLearnEnabled) {
+        setDeveloperMessage(getDefaultDeveloperMessage('regular'))
+      } else {
+        setDeveloperMessage(
+          'You are a helpful, knowledgeable AI assistant. You provide clear, accurate, and well-structured answers. You can help with research, analysis, writing, coding, math, science, and general questions. When appropriate, use markdown formatting for better readability. If you\'re unsure about something, say so honestly.'
+        )
+      }
     }
-  }, [topicExplorerEnabled, documentSummary])
+  }, [topicExplorerEnabled, documentSummary, studyLearnEnabled])
 
   // Detect mobile viewport
   useEffect(() => {
