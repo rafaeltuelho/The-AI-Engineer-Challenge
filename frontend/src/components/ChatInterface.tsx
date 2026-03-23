@@ -14,6 +14,7 @@ interface Message {
   timestamp: Date
   extractedContent?: ExtractedContent
   suggestedQuestions?: string[]  // Store suggested questions per message for Topic Explorer
+  thinking?: string  // Thinking content from <!--THINKING--> blocks
   image?: {
     dataUrl: string
     mimeType: string
@@ -42,6 +43,24 @@ interface ChatInterfaceProps {
   hasOwnApiKey: boolean
   welcomeSuggestions?: string[]
   maxImageSizeMB: number
+}
+
+// Parse thinking blocks from streamed content
+const parseThinkingBlocks = (content: string): { thinking: string; response: string } => {
+  const thinkingRegex = /<!--THINKING-->([\s\S]*?)<!--\/THINKING-->/g
+  let thinking = ''
+  let response = content
+
+  const matches = content.matchAll(thinkingRegex)
+  for (const match of matches) {
+    thinking += match[1].trim() + '\n\n'
+    response = response.replace(match[0], '')
+  }
+
+  return {
+    thinking: thinking.trim(),
+    response: response.trim()
+  }
 }
 
 // Default developer messages for each chat mode (pure function, extracted outside component)
@@ -798,28 +817,45 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           const chunk = new TextDecoder().decode(value)
           assistantMessage += chunk
 
-          setMessages(prev => 
-            prev.map(msg => 
-              msg.id === assistantMessageId 
-                ? { ...msg, content: assistantMessage }
+          // Parse thinking blocks if thinking is enabled
+          const { thinking, response: cleanedContent } = thinkingEnabled
+            ? parseThinkingBlocks(assistantMessage)
+            : { thinking: '', response: assistantMessage }
+
+          setMessages(prev =>
+            prev.map(msg =>
+              msg.id === assistantMessageId
+                ? { ...msg, content: cleanedContent, thinking: thinking || undefined }
                 : msg
             )
           )
         }
 
+        // Parse thinking blocks one final time
+        const { thinking: finalThinking, response: finalContent } = thinkingEnabled
+          ? parseThinkingBlocks(assistantMessage)
+          : { thinking: '', response: assistantMessage }
+
         // Extract suggested questions from the streamed response
-        const extracted = extractSuggestedQuestions(assistantMessage)
+        const extracted = extractSuggestedQuestions(finalContent)
         let regularSuggestedQuestions: string[] = []
         if (extracted.hasSuggestedQuestions) {
           assistantMessage = extracted.mainContent
           regularSuggestedQuestions = extracted.suggestedQuestions
+        } else {
+          assistantMessage = finalContent
         }
 
-        // Update message with cleaned content and suggested questions
+        // Update message with cleaned content, thinking, and suggested questions
         setMessages(prev =>
           prev.map(msg =>
             msg.id === assistantMessageId
-              ? { ...msg, content: assistantMessage, suggestedQuestions: regularSuggestedQuestions }
+              ? {
+                  ...msg,
+                  content: assistantMessage,
+                  thinking: finalThinking || undefined,
+                  suggestedQuestions: regularSuggestedQuestions
+                }
               : msg
           )
         )
@@ -1284,6 +1320,20 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                     <div className="message-role-label">
                       {message.role === 'user' ? 'You' : 'Assistant'}
                     </div>
+
+                    {/* Thinking block - collapsible */}
+                    {message.role === 'assistant' && message.thinking && (
+                      <details className="thinking-block">
+                        <summary className="thinking-header">
+                          <Brain size={16} />
+                          <span>Thinking</span>
+                        </summary>
+                        <div className="thinking-content">
+                          <MarkdownRenderer content={message.thinking} />
+                        </div>
+                      </details>
+                    )}
+
                     <div className="message-content">
                       {message.role === 'assistant' && !message.content && isLoading ? (
                         <div className="typing-indicator">
@@ -1365,37 +1415,63 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         )}
 
         <form onSubmit={handleSubmit} className="input-form">
-          <div className="mode-cards-container">
-            <div className="mode-cards">
-              <button
-                type="button"
-                className={`mode-card ${chatMode === 'regular' ? 'active' : ''} ${hasConversationStarted ? 'disabled' : ''}`}
-                onClick={() => { if (!hasConversationStarted) { setChatMode('regular'); setDeveloperMessage(getDefaultDeveloperMessage('regular')); }}}
-                disabled={hasConversationStarted}
-              >
-                <MessageSquare size={16} />
-                <span className="mode-card-title">AI Chat</span>
-              </button>
-              <button
-                type="button"
-                className={`mode-card ${chatMode === 'rag' ? 'active' : ''} ${hasConversationStarted ? 'disabled' : ''}`}
-                onClick={() => { if (!hasConversationStarted) { setChatMode('rag'); setDeveloperMessage(getDefaultDeveloperMessage('rag')); }}}
-                disabled={hasConversationStarted}
-              >
-                <FileText size={16} />
-                <span className="mode-card-title">RAG Mode</span>
-              </button>
-              <button
-                type="button"
-                className={`mode-card ${chatMode === 'topic-explorer' ? 'active' : ''} ${hasConversationStarted ? 'disabled' : ''}`}
-                onClick={() => { if (!hasConversationStarted) { setChatMode('topic-explorer'); setDeveloperMessage(getDefaultDeveloperMessage('topic-explorer')); }}}
-                disabled={hasConversationStarted}
-              >
-                <Compass size={16} />
-                <span className="mode-card-title">Topic Explorer</span>
-              </button>
+          {/* Active feature pills */}
+          {(webSearchEnabled || studyLearnEnabled || topicExplorerEnabled || thinkingEnabled) && (
+            <div className="active-features-pills">
+              {webSearchEnabled && (
+                <div className="feature-pill">
+                  <Search size={14} />
+                  <span>Web Search</span>
+                  <button
+                    type="button"
+                    onClick={() => setWebSearchEnabled(false)}
+                    className="pill-remove"
+                  >
+                    <X size={12} />
+                  </button>
+                </div>
+              )}
+              {studyLearnEnabled && (
+                <div className="feature-pill">
+                  <BookOpen size={14} />
+                  <span>Study & Learn</span>
+                  <button
+                    type="button"
+                    onClick={() => setStudyLearnEnabled(false)}
+                    className="pill-remove"
+                  >
+                    <X size={12} />
+                  </button>
+                </div>
+              )}
+              {topicExplorerEnabled && (
+                <div className="feature-pill">
+                  <Compass size={14} />
+                  <span>Topic Explorer</span>
+                  <button
+                    type="button"
+                    onClick={() => setTopicExplorerEnabled(false)}
+                    className="pill-remove"
+                  >
+                    <X size={12} />
+                  </button>
+                </div>
+              )}
+              {thinkingEnabled && (
+                <div className="feature-pill">
+                  <Brain size={14} />
+                  <span>Thinking</span>
+                  <button
+                    type="button"
+                    onClick={() => setThinkingEnabled(false)}
+                    className="pill-remove"
+                  >
+                    <X size={12} />
+                  </button>
+                </div>
+              )}
             </div>
-          </div>
+          )}
           {/* Image preview */}
           {attachedImage && (
             <div className="image-preview-container">
@@ -1420,32 +1496,92 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             onDragOver={handleImageDragOver}
             onDragLeave={handleImageDragLeave}
           >
-            <button
-              type="button"
-              className="pdf-upload-button"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={isLoading || (!isWhitelisted && !hasOwnApiKey && !hasFreeTurns) || isPdfUploading}
-              title="Upload Document (PDF, Word, PowerPoint)"
-            >
-              <Upload size={20} />
-            </button>
-            {/* Image attachment button - only show for OpenAI in regular chat mode */}
-            {selectedProvider === 'openai' && chatMode === 'regular' && (
+            {/* Context menu button */}
+            <div className="context-menu-wrapper" ref={contextMenuRef}>
               <button
                 type="button"
-                className="image-upload-button"
-                onClick={() => imageInputRef.current?.click()}
-                disabled={isLoading || (!isWhitelisted && !hasOwnApiKey && !hasFreeTurns) || !!attachedImage}
-                title="Attach Image (PNG, JPEG, WEBP, GIF)"
+                className="context-menu-button"
+                onClick={() => setShowContextMenu(!showContextMenu)}
+                disabled={isLoading || (!isWhitelisted && !hasOwnApiKey && !hasFreeTurns)}
+                title="Add context (or type /)"
               >
-                <Image size={20} />
+                <Plus size={20} />
               </button>
-            )}
+
+              {/* Context menu popover */}
+              {showContextMenu && (
+                <div className="context-menu-popover">
+                  <button
+                    type="button"
+                    className="context-menu-item"
+                    onClick={() => {
+                      imageInputRef.current?.click()
+                      setShowContextMenu(false)
+                    }}
+                    disabled={selectedProvider !== 'openai' || chatMode !== 'regular' || !!attachedImage}
+                  >
+                    <Image size={16} />
+                    <span>Attach Image</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="context-menu-item"
+                    onClick={() => {
+                      fileInputRef.current?.click()
+                      setShowContextMenu(false)
+                    }}
+                    disabled={isPdfUploading}
+                  >
+                    <Upload size={16} />
+                    <span>Attach Document</span>
+                  </button>
+                  <div className="context-menu-divider" />
+                  <button
+                    type="button"
+                    className={`context-menu-item toggle ${webSearchEnabled ? 'active' : ''}`}
+                    onClick={() => setWebSearchEnabled(!webSearchEnabled)}
+                  >
+                    <Search size={16} />
+                    <span>Web Search</span>
+                    {webSearchEnabled && <span className="checkmark">✓</span>}
+                  </button>
+                  <button
+                    type="button"
+                    className={`context-menu-item toggle ${studyLearnEnabled ? 'active' : ''}`}
+                    onClick={() => setStudyLearnEnabled(!studyLearnEnabled)}
+                  >
+                    <BookOpen size={16} />
+                    <span>Study & Learn</span>
+                    {studyLearnEnabled && <span className="checkmark">✓</span>}
+                  </button>
+                  <button
+                    type="button"
+                    className={`context-menu-item toggle ${topicExplorerEnabled ? 'active' : ''}`}
+                    onClick={() => setTopicExplorerEnabled(!topicExplorerEnabled)}
+                    disabled={hasConversationStarted}
+                  >
+                    <Compass size={16} />
+                    <span>Topic Explorer</span>
+                    {topicExplorerEnabled && <span className="checkmark">✓</span>}
+                  </button>
+                  <button
+                    type="button"
+                    className={`context-menu-item toggle ${thinkingEnabled ? 'active' : ''}`}
+                    onClick={() => setThinkingEnabled(!thinkingEnabled)}
+                  >
+                    <Brain size={16} />
+                    <span>Thinking</span>
+                    {thinkingEnabled && <span className="checkmark">✓</span>}
+                  </button>
+                </div>
+              )}
+            </div>
+
             <textarea
               ref={textareaRef}
               autoFocus
               value={inputMessage}
-              onChange={(e) => setInputMessage(e.target.value)}
+              onChange={handleInputChange}
               onKeyDown={handleKeyDown}
               onPaste={handlePaste}
               placeholder={
@@ -1453,7 +1589,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                   ? "Free messages exhausted. Add your API key in Settings to continue."
                   : isDraggingImage
                   ? "Drop image here..."
-                  : ""
+                  : "Message AI..."
               }
               className="message-input"
               disabled={isLoading || (!isWhitelisted && !hasOwnApiKey && !hasFreeTurns)}
