@@ -43,6 +43,7 @@ interface ChatInterfaceProps {
   hasOwnApiKey: boolean
   welcomeSuggestions?: string[]
   maxImageSizeMB: number
+  setStudyLearnOverride: (override: boolean) => void
 }
 
 // Parse thinking blocks from streamed content
@@ -152,7 +153,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   hasFreeTurns,
   hasOwnApiKey,
   welcomeSuggestions = [],
-  maxImageSizeMB
+  maxImageSizeMB,
+  setStudyLearnOverride
 }) => {
   const [messages, setMessages] = useState<Message[]>([])
   const [inputMessage, setInputMessage] = useState('')
@@ -367,8 +369,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     if (studyLearnEnabled) {
       setSelectedModel('gpt-5')
       setSelectedProvider('openai')
+      setStudyLearnOverride(true)
+    } else {
+      setStudyLearnOverride(false)
     }
-  }, [studyLearnEnabled, setSelectedModel, setSelectedProvider])
+  }, [studyLearnEnabled, setSelectedModel, setSelectedProvider, setStudyLearnOverride])
 
   // Detect mobile viewport
   useEffect(() => {

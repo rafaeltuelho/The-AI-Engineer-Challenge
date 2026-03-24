@@ -62,6 +62,7 @@ describe('ChatInterface - Image Attachment', () => {
     hasOwnApiKey: true,
     welcomeSuggestions: [],
     maxImageSizeMB: 3,
+    setStudyLearnOverride: vi.fn(),
   }
 
   beforeEach(() => {

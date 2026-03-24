@@ -15,6 +15,7 @@ function App() {
   const [settingsModalOpen, setSettingsModalOpen] = useState(false)
   const [freeTurnsRemaining, setFreeTurnsRemaining] = useState<number>(user?.freeTurnsRemaining ?? 0)
   const [welcomeSuggestions, setWelcomeSuggestions] = useState<string[]>([])
+  const [studyLearnOverride, setStudyLearnOverride] = useState(false)
 
   const modelDescriptions = {
     // OpenAI models - GPT-5 only
@@ -132,8 +133,8 @@ function App() {
     const hasOwnKey = selectedProvider === 'together' ? togetherApiKey.trim() : openaiApiKey.trim()
     const isFreeTierMode = !user.isWhitelisted && freeTurnsRemaining > 0 && !hasOwnKey
 
-    if (isFreeTierMode) {
-      // Lock to free provider and model
+    if (isFreeTierMode && !studyLearnOverride) {
+      // Lock to free provider and model (unless Study & Learn is active)
       if (selectedProvider !== authConfig.freeProvider) {
         setSelectedProvider(authConfig.freeProvider)
       }
@@ -141,7 +142,7 @@ function App() {
         setSelectedModel(authConfig.freeModel)
       }
     }
-  }, [user, authConfig, freeTurnsRemaining, togetherApiKey, openaiApiKey, selectedProvider, selectedModel])
+  }, [user, authConfig, freeTurnsRemaining, togetherApiKey, openaiApiKey, selectedProvider, selectedModel, studyLearnOverride])
 
   const handleFreeTurnsUpdate = (turns: number) => {
     setFreeTurnsRemaining(turns)
@@ -191,6 +192,7 @@ function App() {
           hasOwnApiKey={!!hasOwnKey}
           welcomeSuggestions={welcomeSuggestions}
           maxImageSizeMB={maxImageSizeMB}
+          setStudyLearnOverride={setStudyLearnOverride}
         />
       </main>
     </div>
