@@ -995,6 +995,51 @@
   margin-bottom: 0;
 }
 
+.message-actions {
+  display: flex;
+  gap: 4px;
+  margin-top: 4px;
+  align-items: center;
+}
+
+.read-aloud-btn {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.read-aloud-btn:hover:not(:disabled) {
+  color: var(--text-primary);
+  background: var(--bg-tertiary);
+}
+
+.read-aloud-btn.playing {
+  color: var(--accent-primary);
+}
+
+.read-aloud-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.tts-spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid transparent;
+  border-top: 2px solid currentColor;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
 .message-timestamp {
   font-size: 0.6875rem;
   color: var(--text-muted);

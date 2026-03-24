@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react'
-import { Send, MessageSquare, User, Bot, Trash2, Settings, ArrowDown, X, FileText, Upload, Compass, Image, Plus, Search, BookOpen, Brain } from 'lucide-react'
+import { Send, MessageSquare, User, Bot, Trash2, Settings, ArrowDown, X, FileText, Upload, Compass, Image, Plus, Search, BookOpen, Brain, Volume2, Square } from 'lucide-react'
 import MarkdownRenderer from './MarkdownRenderer'
 import SuggestedQuestions from './SuggestedQuestions'
 import SettingsModal from './SettingsModal'
@@ -186,6 +186,12 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const [studyLearnEnabled, setStudyLearnEnabled] = useState(true)
   const [topicExplorerEnabled, setTopicExplorerEnabled] = useState(false)
   const [thinkingEnabled, setThinkingEnabled] = useState(false)
+
+  // TTS state
+  const [playingMessageId, setPlayingMessageId] = useState<string | null>(null)
+  const [loadingTtsId, setLoadingTtsId] = useState<string | null>(null)
+  const audioRef = useRef<HTMLAudioElement | null>(null)
+  const audioBlobUrlRef = useRef<string | null>(null)
 
   const fileInputRef = useRef<HTMLInputElement>(null)
   const imageInputRef = useRef<HTMLInputElement>(null)
@@ -420,6 +426,20 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     }
   }, [messages, thinkingEnabled])
 
+  // Cleanup audio on unmount
+  useEffect(() => {
+    return () => {
+      if (audioRef.current) {
+        audioRef.current.pause()
+        audioRef.current = null
+      }
+      if (audioBlobUrlRef.current) {
+        URL.revokeObjectURL(audioBlobUrlRef.current)
+        audioBlobUrlRef.current = null
+      }
+    }
+  }, [])
+
   const loadConversations = async () => {
     try {
       console.log('Loading conversations for session:', sessionId)
@@ -612,6 +632,93 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
       handleSubmit(e as any)
+    }
+  }
+
+  const handleReadAloud = async (message: Message) => {
+    // Toggle off if already playing this message
+    if (playingMessageId === message.id) {
+      if (audioRef.current) {
+        audioRef.current.pause()
+      }
+      setPlayingMessageId(null)
+      if (audioBlobUrlRef.current) {
+        URL.revokeObjectURL(audioBlobUrlRef.current)
+        audioBlobUrlRef.current = null
+      }
+      return
+    }
+
+    // Stop any currently playing audio
+    if (audioRef.current) {
+      audioRef.current.pause()
+    }
+    if (audioBlobUrlRef.current) {
+      URL.revokeObjectURL(audioBlobUrlRef.current)
+      audioBlobUrlRef.current = null
+    }
+
+    // Strip markdown from content for TTS
+    let plainText = message.content
+      .replace(/\*\*([^*]+)\*\*/g, '$1')  // Remove bold **text**
+      .replace(/\*([^*]+)\*/g, '$1')      // Remove italic *text*
+      .replace(/_([^_]+)_/g, '$1')        // Remove italic _text_
+      .replace(/#{1,6}\s+/g, '')          // Remove headings #
+      .replace(/`([^`]+)`/g, '$1')        // Remove inline code `code`
+      .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')  // Remove links [text](url) -> text
+      .trim()
+
+    setLoadingTtsId(message.id)
+
+    try {
+      const response = await fetch('/api/tts', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Session-ID': sessionId
+        },
+        body: JSON.stringify({
+          text: plainText,
+          voice: 'coral'
+        })
+      })
+
+      if (!response.ok) {
+        throw new Error(`TTS request failed: ${response.status}`)
+      }
+
+      const blob = await response.blob()
+      const url = URL.createObjectURL(blob)
+      audioBlobUrlRef.current = url
+
+      const audio = new Audio(url)
+      audioRef.current = audio
+
+      audio.onended = () => {
+        setPlayingMessageId(null)
+        if (audioBlobUrlRef.current) {
+          URL.revokeObjectURL(audioBlobUrlRef.current)
+          audioBlobUrlRef.current = null
+        }
+      }
+
+      audio.onerror = () => {
+        setPlayingMessageId(null)
+        if (audioBlobUrlRef.current) {
+          URL.revokeObjectURL(audioBlobUrlRef.current)
+          audioBlobUrlRef.current = null
+        }
+        console.error('Audio playback error')
+      }
+
+      setPlayingMessageId(message.id)
+      setLoadingTtsId(null)
+      await audio.play()
+
+    } catch (error) {
+      console.error('TTS error:', error)
+      setLoadingTtsId(null)
+      // Could show error message to user here if needed
     }
   }
 
@@ -1381,6 +1488,32 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                         </div>
                       ) : renderMessageContent(message)}
                     </div>
+
+                    {/* Read Aloud button for assistant messages */}
+                    {message.role === 'assistant' &&
+                     message.content &&
+                     !isLoading &&
+                     selectedProvider === 'openai' &&
+                     hasOwnApiKey && (
+                      <div className="message-actions">
+                        <button
+                          className={`read-aloud-btn ${playingMessageId === message.id ? 'playing' : ''}`}
+                          onClick={() => handleReadAloud(message)}
+                          disabled={loadingTtsId === message.id}
+                          title={playingMessageId === message.id ? 'Stop' : 'Read aloud'}
+                          aria-label={playingMessageId === message.id ? 'Stop reading' : 'Read aloud'}
+                        >
+                          {loadingTtsId === message.id ? (
+                            <div className="tts-spinner" />
+                          ) : playingMessageId === message.id ? (
+                            <Square size={14} />
+                          ) : (
+                            <Volume2 size={14} />
+                          )}
+                        </button>
+                      </div>
+                    )}
+
                     <div className="message-timestamp">
                       {message.timestamp.toLocaleTimeString()}
                     </div>
