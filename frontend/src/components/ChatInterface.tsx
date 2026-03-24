@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react'
-import { Send, MessageSquare, User, Bot, Trash2, Settings, ArrowDown, X, FileText, Upload, Compass, Image } from 'lucide-react'
+import { Send, MessageSquare, User, Bot, Trash2, Settings, ArrowDown, X, FileText, Upload, Compass, Image, Plus, Search, BookOpen, Brain } from 'lucide-react'
 import MarkdownRenderer from './MarkdownRenderer'
 import SuggestedQuestions from './SuggestedQuestions'
 import SettingsModal from './SettingsModal'
@@ -14,6 +14,7 @@ interface Message {
   timestamp: Date
   extractedContent?: ExtractedContent
   suggestedQuestions?: string[]  // Store suggested questions per message for Topic Explorer
+  thinking?: string  // Thinking content from <!--THINKING--> blocks
   image?: {
     dataUrl: string
     mimeType: string
@@ -42,27 +43,55 @@ interface ChatInterfaceProps {
   hasOwnApiKey: boolean
   welcomeSuggestions?: string[]
   maxImageSizeMB: number
+  setStudyLearnOverride: (override: boolean) => void
+}
+
+// Parse thinking blocks from streamed content
+const parseThinkingBlocks = (content: string): { thinking: string; response: string } => {
+  const thinkingRegex = /<!--THINKING-->([\s\S]*?)<!--\/THINKING-->/g
+  let thinking = ''
+  let response = content
+
+  const matches = content.matchAll(thinkingRegex)
+  for (const match of matches) {
+    thinking += match[1].trim() + '\n\n'
+    response = response.replace(match[0], '')
+  }
+
+  return {
+    thinking: thinking.trim(),
+    response: response.trim()
+  }
 }
 
 // Default developer messages for each chat mode (pure function, extracted outside component)
 const getDefaultDeveloperMessage = (mode: 'regular' | 'rag' | 'topic-explorer'): string => {
   switch (mode) {
     case 'regular':
-      return `You are a friendly and curious AI study buddy for students. Your mission is to spark curiosity, make learning exciting, and encourage students to keep exploring and asking questions.
+      return `You are a brilliant study companion who makes learning irresistible. Your secret: you adapt to the student's curiosity.
 
-When answering:
-- Be warm, encouraging, and enthusiastic — like a friend who loves learning
-- Explain things clearly and make complex ideas feel approachable
-- Use real-world examples and analogies that students can relate to
-- Celebrate good questions and encourage deeper thinking
-- Keep responses focused but engaging — don't overwhelm with walls of text
+**How you respond:**
+- Start SHORT and punchy. Don't overwhelm. Give the core idea in 2-3 sentences max.
+- Connect EVERYTHING to real-world examples — show how concepts live in everyday life, technology, nature, sports, games, or current events.
+- Drop curiosity hooks — end with a fascinating "did you know?" or a mind-bending connection that makes them WANT to ask more.
+- As the student asks follow-ups, progressively go deeper. Match their energy and curiosity level.
+- If they're really engaged (asking great questions, going deeper), unlock more advanced insights and connections.
 
-If the topic involves math, always write equations or expressions in LaTeX notation, enclosed in double dollar signs ($$...$$) for block equations or single dollar signs ($...$) for inline expressions.
-Do not explain LaTeX syntax to the user, only show the math properly formatted. If your response contains any sentence with money representation using the dollar currency sign followed by a number (money value), make sure you escape it with '\\$' to not confuse with an inline LaTeX math notation.
-Always enrich the markdown response with emoji markups and engaging words to make the content more appealing for students.
-If you need to show a picture, use the ![description](url) format.
+**Your style:**
+- Warm but not over-the-top. Like a cool older sibling who happens to know everything.
+- Use analogies that click — compare abstract concepts to things students actually experience.
+- Celebrate genuine curiosity, not just correct answers.
+- If a concept connects to another subject (math → music, history → science), mention it briefly to spark cross-disciplinary thinking.
 
-At the end of every response, include a section titled "### Suggested Questions" with exactly 3 short follow-up questions the student could ask next to keep exploring the topic. These should spark curiosity and invite deeper engagement. Format them as a numbered list.
+**Formatting rules:**
+- Keep initial responses concise (under 150 words unless the topic demands more)
+- Use emoji sparingly but effectively to highlight key points
+- For math: use LaTeX notation with $$...$$ for block equations and $...$ for inline
+- Do not explain LaTeX syntax — just show the math formatted
+- If showing money with $ sign, escape it as \\$ to avoid LaTeX confusion
+- Use ![description](url) format for images
+
+At the end of every response, include "### Suggested Questions" with exactly 3 follow-up questions. Make them progressively more intriguing — the third one should be the most mind-blowing connection or deeper dive.
 `
     case 'rag':
       return `You are a helpful assistant that answers questions based on provided context. If the context doesn\'t contain enough information to answer the question, please say so.
@@ -124,7 +153,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   hasFreeTurns,
   hasOwnApiKey,
   welcomeSuggestions = [],
-  maxImageSizeMB
+  maxImageSizeMB,
+  setStudyLearnOverride
 }) => {
   const [messages, setMessages] = useState<Message[]>([])
   const [inputMessage, setInputMessage] = useState('')
@@ -150,9 +180,18 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const [imageError, setImageError] = useState<string | null>(null)
   const [isDraggingImage, setIsDraggingImage] = useState(false)
 
+  // Context menu state
+  const [showContextMenu, setShowContextMenu] = useState(false)
+  const [webSearchEnabled, setWebSearchEnabled] = useState(true)
+  const [studyLearnEnabled, setStudyLearnEnabled] = useState(true)
+  const [topicExplorerEnabled, setTopicExplorerEnabled] = useState(false)
+  const [thinkingEnabled, setThinkingEnabled] = useState(false)
+
   const fileInputRef = useRef<HTMLInputElement>(null)
   const imageInputRef = useRef<HTMLInputElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
+  const contextMenuRef = useRef<HTMLDivElement>(null)
+  const autoThinkingTriggered = useRef(false)
 
 
   // Filter available models based on chat mode and provider
@@ -192,7 +231,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
   const scrollToBottom = () => {
     if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' })
+      messagesEndRef.current?.scrollIntoView?.({ behavior: 'smooth' })
     }
   }
 
@@ -248,6 +287,94 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     }
   }, [inputMessage])
 
+  // Auto-focus textarea on load.
+  //
+  // iOS Safari blocks programmatic focus() calls that don't originate from
+  // a synchronous user-gesture handler (touchstart/touchend/click). Both the
+  // `autoFocus` HTML attribute and any setTimeout-based focus() call are
+  // silently ignored — this is intentional Apple policy to prevent pages from
+  // forcibly showing the virtual keyboard.
+  //
+  // Strategy:
+  //   1. On non-iOS browsers (desktop, Android Chrome): focus immediately.
+  //   2. On iOS Safari: attach a one-shot `touchstart` listener on the document.
+  //      The first time the user touches *anything* on the page, focus() is
+  //      called synchronously inside that gesture handler, which iOS Safari
+  //      permits. This mirrors the behaviour of Gmail, Slack, and ChatGPT on iOS.
+  useEffect(() => {
+    const textarea = textareaRef.current
+    if (!textarea) return
+
+    // Detect iOS Safari. The canonical check is the presence of a touch-capable
+    // Safari that is NOT Android (Android Chrome also sets MaxTouchPoints > 0).
+    const isIOS =
+      /iP(hone|od|ad)/.test(navigator.userAgent) ||
+      (navigator.maxTouchPoints > 1 && /Mac/.test(navigator.userAgent))
+
+    if (!isIOS) {
+      // Non-iOS: plain programmatic focus works fine.
+      const timer = setTimeout(() => {
+        textareaRef.current?.focus({ preventScroll: true })
+      }, 100)
+      return () => clearTimeout(timer)
+    }
+
+    // iOS Safari: defer focus to the first user touch anywhere on the page.
+    const focusOnFirstTouch = () => {
+      textareaRef.current?.focus()
+      document.removeEventListener('touchstart', focusOnFirstTouch)
+    }
+    document.addEventListener('touchstart', focusOnFirstTouch, { passive: true })
+    return () => document.removeEventListener('touchstart', focusOnFirstTouch)
+  }, [])
+
+  // Close context menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (contextMenuRef.current && !contextMenuRef.current.contains(event.target as Node)) {
+        setShowContextMenu(false)
+      }
+    }
+
+    if (showContextMenu) {
+      document.addEventListener('mousedown', handleClickOutside)
+      return () => document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [showContextMenu])
+
+  // Derive chatMode from toggles (for backward compatibility)
+  useEffect(() => {
+    if (topicExplorerEnabled) {
+      setChatMode('topic-explorer')
+      setDeveloperMessage(getDefaultDeveloperMessage('topic-explorer'))
+    } else if (documentSummary) {
+      // If document is uploaded, use RAG mode
+      setChatMode('rag')
+      setDeveloperMessage(getDefaultDeveloperMessage('rag'))
+    } else {
+      setChatMode('regular')
+      // Use student prompt when Study & Learn is enabled, generic prompt otherwise
+      if (studyLearnEnabled) {
+        setDeveloperMessage(getDefaultDeveloperMessage('regular'))
+      } else {
+        setDeveloperMessage(
+          'You are a helpful, knowledgeable AI assistant. You provide clear, accurate, and well-structured answers. You can help with research, analysis, writing, coding, math, science, and general questions. When appropriate, use markdown formatting for better readability. If you\'re unsure about something, say so honestly.'
+        )
+      }
+    }
+  }, [topicExplorerEnabled, documentSummary, studyLearnEnabled])
+
+  // Auto-switch to GPT-5 when Study & Learn is enabled
+  useEffect(() => {
+    if (studyLearnEnabled) {
+      setSelectedModel('gpt-5')
+      setSelectedProvider('openai')
+      setStudyLearnOverride(true)
+    } else {
+      setStudyLearnOverride(false)
+    }
+  }, [studyLearnEnabled, setSelectedModel, setSelectedProvider, setStudyLearnOverride])
+
   // Detect mobile viewport
   useEffect(() => {
     const checkMobile = () => {
@@ -283,6 +410,15 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       setShowApiKeySuccess(true)
     }
   }, [apiKey, showApiKeySuccess])
+
+  // Auto-enable Thinking after 3 user messages
+  useEffect(() => {
+    const userMessageCount = messages.filter(m => m.role === 'user').length
+    if (userMessageCount >= 3 && !thinkingEnabled && !autoThinkingTriggered.current) {
+      setThinkingEnabled(true)
+      autoThinkingTriggered.current = true
+    }
+  }, [messages, thinkingEnabled])
 
   const loadConversations = async () => {
     try {
@@ -462,6 +598,16 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     }
   }
 
+  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const value = e.target.value
+    setInputMessage(value)
+
+    // Detect slash command at the start of input
+    if (value === '/' && !showContextMenu) {
+      setShowContextMenu(true)
+    }
+  }
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
@@ -531,6 +677,14 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             data_url: currentImage.dataUrl,
             filename: currentImage.file.name
           }
+        } : {}),
+        // New optional fields for ChatGPT-style features (backend will ignore for now)
+        web_search: webSearchEnabled,
+        ...(thinkingEnabled ? {
+          reasoning: { effort: "medium", summary: "auto" }
+        } : {}),
+        ...(webSearchEnabled ? {
+          include: ['web_search_call.action.sources']
         } : {})
       }
 
@@ -700,28 +854,45 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           const chunk = new TextDecoder().decode(value)
           assistantMessage += chunk
 
-          setMessages(prev => 
-            prev.map(msg => 
-              msg.id === assistantMessageId 
-                ? { ...msg, content: assistantMessage }
+          // Parse thinking blocks if thinking is enabled
+          const { thinking, response: cleanedContent } = thinkingEnabled
+            ? parseThinkingBlocks(assistantMessage)
+            : { thinking: '', response: assistantMessage }
+
+          setMessages(prev =>
+            prev.map(msg =>
+              msg.id === assistantMessageId
+                ? { ...msg, content: cleanedContent, thinking: thinking || undefined }
                 : msg
             )
           )
         }
 
+        // Parse thinking blocks one final time
+        const { thinking: finalThinking, response: finalContent } = thinkingEnabled
+          ? parseThinkingBlocks(assistantMessage)
+          : { thinking: '', response: assistantMessage }
+
         // Extract suggested questions from the streamed response
-        const extracted = extractSuggestedQuestions(assistantMessage)
+        const extracted = extractSuggestedQuestions(finalContent)
         let regularSuggestedQuestions: string[] = []
         if (extracted.hasSuggestedQuestions) {
           assistantMessage = extracted.mainContent
           regularSuggestedQuestions = extracted.suggestedQuestions
+        } else {
+          assistantMessage = finalContent
         }
 
-        // Update message with cleaned content and suggested questions
+        // Update message with cleaned content, thinking, and suggested questions
         setMessages(prev =>
           prev.map(msg =>
             msg.id === assistantMessageId
-              ? { ...msg, content: assistantMessage, suggestedQuestions: regularSuggestedQuestions }
+              ? {
+                  ...msg,
+                  content: assistantMessage,
+                  thinking: finalThinking || undefined,
+                  suggestedQuestions: regularSuggestedQuestions
+                }
               : msg
           )
         )
@@ -759,6 +930,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     setHasConversationStarted(false)
     setDocumentSuggestedQuestions([])
     setDocumentSummary(null)
+    autoThinkingTriggered.current = false
   }
 
   const startNewConversation = () => {
@@ -1159,36 +1331,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             <div className="welcome-screen">
               <h1 className="welcome-heading">What can I help with?</h1>
 
-              <div className="mode-cards">
-                <button
-                  className={`mode-card ${chatMode === 'regular' ? 'active' : ''} ${hasConversationStarted ? 'disabled' : ''}`}
-                  onClick={() => { if (!hasConversationStarted) { setChatMode('regular'); setDeveloperMessage(getDefaultDeveloperMessage('regular')); }}}
-                  disabled={hasConversationStarted}
-                >
-                  <MessageSquare size={24} />
-                  <div className="mode-card-title">AI Chat</div>
-                  <div className="mode-card-desc">General conversation</div>
-                </button>
-                <button
-                  className={`mode-card ${chatMode === 'rag' ? 'active' : ''} ${hasConversationStarted ? 'disabled' : ''}`}
-                  onClick={() => { if (!hasConversationStarted) { setChatMode('rag'); setDeveloperMessage(getDefaultDeveloperMessage('rag')); }}}
-                  disabled={hasConversationStarted}
-                >
-                  <FileText size={24} />
-                  <div className="mode-card-title">RAG Mode</div>
-                  <div className="mode-card-desc">Chat with documents</div>
-                </button>
-                <button
-                  className={`mode-card ${chatMode === 'topic-explorer' ? 'active' : ''} ${hasConversationStarted ? 'disabled' : ''}`}
-                  onClick={() => { if (!hasConversationStarted) { setChatMode('topic-explorer'); setDeveloperMessage(getDefaultDeveloperMessage('topic-explorer')); }}}
-                  disabled={hasConversationStarted}
-                >
-                  <Compass size={24} />
-                  <div className="mode-card-title">Topic Explorer</div>
-                  <div className="mode-card-desc">Deep dive into topics</div>
-                </button>
-              </div>
-
               {welcomeSuggestions && welcomeSuggestions.length > 0 ? (
                 <div className="suggestion-chips">
                   {welcomeSuggestions.slice(0, 3).map((suggestion, index) => (
@@ -1216,6 +1358,20 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                     <div className="message-role-label">
                       {message.role === 'user' ? 'You' : 'Assistant'}
                     </div>
+
+                    {/* Thinking block - collapsible */}
+                    {message.role === 'assistant' && message.thinking && (
+                      <details className="thinking-block">
+                        <summary className="thinking-header">
+                          <Brain size={16} />
+                          <span>Thinking</span>
+                        </summary>
+                        <div className="thinking-content">
+                          <MarkdownRenderer content={message.thinking} />
+                        </div>
+                      </details>
+                    )}
+
                     <div className="message-content">
                       {message.role === 'assistant' && !message.content && isLoading ? (
                         <div className="typing-indicator">
@@ -1297,6 +1453,63 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         )}
 
         <form onSubmit={handleSubmit} className="input-form">
+          {/* Active feature pills */}
+          {(webSearchEnabled || studyLearnEnabled || topicExplorerEnabled || thinkingEnabled) && (
+            <div className="active-features-pills">
+              {webSearchEnabled && (
+                <div className="feature-pill">
+                  <Search size={14} />
+                  <span>Web Search</span>
+                  <button
+                    type="button"
+                    onClick={() => setWebSearchEnabled(false)}
+                    className="pill-remove"
+                  >
+                    <X size={12} />
+                  </button>
+                </div>
+              )}
+              {studyLearnEnabled && (
+                <div className="feature-pill">
+                  <BookOpen size={14} />
+                  <span>Study & Learn</span>
+                  <button
+                    type="button"
+                    onClick={() => setStudyLearnEnabled(false)}
+                    className="pill-remove"
+                  >
+                    <X size={12} />
+                  </button>
+                </div>
+              )}
+              {topicExplorerEnabled && (
+                <div className="feature-pill">
+                  <Compass size={14} />
+                  <span>Topic Explorer</span>
+                  <button
+                    type="button"
+                    onClick={() => setTopicExplorerEnabled(false)}
+                    className="pill-remove"
+                  >
+                    <X size={12} />
+                  </button>
+                </div>
+              )}
+              {thinkingEnabled && (
+                <div className="feature-pill">
+                  <Brain size={14} />
+                  <span>Thinking</span>
+                  <button
+                    type="button"
+                    onClick={() => setThinkingEnabled(false)}
+                    className="pill-remove"
+                  >
+                    <X size={12} />
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
           {/* Image preview */}
           {attachedImage && (
             <div className="image-preview-container">
@@ -1321,31 +1534,92 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             onDragOver={handleImageDragOver}
             onDragLeave={handleImageDragLeave}
           >
-            <button
-              type="button"
-              className="pdf-upload-button"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={isLoading || (!isWhitelisted && !hasOwnApiKey && !hasFreeTurns) || isPdfUploading}
-              title="Upload Document (PDF, Word, PowerPoint)"
-            >
-              <Upload size={20} />
-            </button>
-            {/* Image attachment button - only show for OpenAI in regular chat mode */}
-            {selectedProvider === 'openai' && chatMode === 'regular' && (
+            {/* Context menu button */}
+            <div className="context-menu-wrapper" ref={contextMenuRef}>
               <button
                 type="button"
-                className="image-upload-button"
-                onClick={() => imageInputRef.current?.click()}
-                disabled={isLoading || (!isWhitelisted && !hasOwnApiKey && !hasFreeTurns) || !!attachedImage}
-                title="Attach Image (PNG, JPEG, WEBP, GIF)"
+                className="context-menu-button"
+                onClick={() => setShowContextMenu(!showContextMenu)}
+                disabled={isLoading || (!isWhitelisted && !hasOwnApiKey && !hasFreeTurns)}
+                title="Add context (or type /)"
               >
-                <Image size={20} />
+                <Plus size={20} />
               </button>
-            )}
+
+              {/* Context menu popover */}
+              {showContextMenu && (
+                <div className="context-menu-popover">
+                  <button
+                    type="button"
+                    className="context-menu-item"
+                    onClick={() => {
+                      imageInputRef.current?.click()
+                      setShowContextMenu(false)
+                    }}
+                    disabled={selectedProvider !== 'openai' || chatMode !== 'regular' || !!attachedImage}
+                  >
+                    <Image size={16} />
+                    <span>Attach Image</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="context-menu-item"
+                    onClick={() => {
+                      fileInputRef.current?.click()
+                      setShowContextMenu(false)
+                    }}
+                    disabled={isPdfUploading}
+                  >
+                    <Upload size={16} />
+                    <span>Attach Document</span>
+                  </button>
+                  <div className="context-menu-divider" />
+                  <button
+                    type="button"
+                    className={`context-menu-item toggle ${webSearchEnabled ? 'active' : ''}`}
+                    onClick={() => setWebSearchEnabled(!webSearchEnabled)}
+                  >
+                    <Search size={16} />
+                    <span>Web Search</span>
+                    {webSearchEnabled && <span className="checkmark">✓</span>}
+                  </button>
+                  <button
+                    type="button"
+                    className={`context-menu-item toggle ${studyLearnEnabled ? 'active' : ''}`}
+                    onClick={() => setStudyLearnEnabled(!studyLearnEnabled)}
+                  >
+                    <BookOpen size={16} />
+                    <span>Study & Learn</span>
+                    {studyLearnEnabled && <span className="checkmark">✓</span>}
+                  </button>
+                  <button
+                    type="button"
+                    className={`context-menu-item toggle ${topicExplorerEnabled ? 'active' : ''}`}
+                    onClick={() => setTopicExplorerEnabled(!topicExplorerEnabled)}
+                    disabled={hasConversationStarted}
+                  >
+                    <Compass size={16} />
+                    <span>Topic Explorer</span>
+                    {topicExplorerEnabled && <span className="checkmark">✓</span>}
+                  </button>
+                  <button
+                    type="button"
+                    className={`context-menu-item toggle ${thinkingEnabled ? 'active' : ''}`}
+                    onClick={() => setThinkingEnabled(!thinkingEnabled)}
+                  >
+                    <Brain size={16} />
+                    <span>Thinking</span>
+                    {thinkingEnabled && <span className="checkmark">✓</span>}
+                  </button>
+                </div>
+              )}
+            </div>
+
             <textarea
               ref={textareaRef}
+              autoFocus
               value={inputMessage}
-              onChange={(e) => setInputMessage(e.target.value)}
+              onChange={handleInputChange}
               onKeyDown={handleKeyDown}
               onPaste={handlePaste}
               placeholder={
@@ -1353,7 +1627,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                   ? "Free messages exhausted. Add your API key in Settings to continue."
                   : isDraggingImage
                   ? "Drop image here..."
-                  : ""
+                  : "Message AI..."
               }
               className="message-input"
               disabled={isLoading || (!isWhitelisted && !hasOwnApiKey && !hasFreeTurns)}

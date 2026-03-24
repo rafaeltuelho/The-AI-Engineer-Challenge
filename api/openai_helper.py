@@ -95,6 +95,9 @@ def create_openai_request(
     messages: List[Dict[str, str]],
     stream: bool = False,
     image_data_url: Optional[str] = None,
+    web_search: Optional[bool] = None,
+    reasoning: Optional[Dict[str, str]] = None,
+    include: Optional[List[str]] = None,
     **kwargs
 ) -> Union[Any, Iterator[Any]]:
     """
@@ -110,6 +113,9 @@ def create_openai_request(
         messages: List of message dicts with 'role' and 'content'
         stream: Whether to stream the response
         image_data_url: Optional base64 data URL for image attachment (OpenAI GPT models only)
+        web_search: Optional bool to enable/disable web search (default: True for GPT-5 models)
+        reasoning: Optional reasoning effort level ("low", "medium", "high")
+        include: Optional list of additional data to include in response (e.g., ["reasoning"])
         **kwargs: Additional parameters (e.g., response_format, temperature)
 
     Returns:
@@ -126,10 +132,21 @@ def create_openai_request(
         request_params = {
             "model": model,
             "input": input_data,
-            "tools": [{"type": "web_search"}],
             "stream": stream,
             **kwargs
         }
+
+        # Add web_search tool if enabled (default: True for backward compatibility)
+        if web_search is None or web_search:
+            request_params["tools"] = [{"type": "web_search"}]
+
+        # Add reasoning parameter if provided
+        if reasoning is not None:
+            request_params["reasoning"] = reasoning
+
+        # Add include parameter if provided
+        if include is not None:
+            request_params["include"] = include
 
         # Use Responses API for GPT-5 models with web search
         return client.responses.create(**request_params)

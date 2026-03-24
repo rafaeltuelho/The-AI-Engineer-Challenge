@@ -124,7 +124,7 @@
   flex-direction: column;
   position: relative;
   min-height: 0;
-  max-height: 100vh;
+  max-height: 100%;
   transition: border-color var(--transition-base);
 }
 
@@ -577,54 +577,182 @@
   margin: 0 0 32px 0;
 }
 
-.mode-cards {
+/* Active feature pills */
+.active-features-pills {
   display: flex;
-  gap: 16px;
-  margin-bottom: 32px;
+  gap: 8px;
+  margin-bottom: 12px;
   flex-wrap: wrap;
   justify-content: center;
 }
 
-.mode-card {
+.feature-pill {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 8px;
-  padding: 20px 24px;
-  border: 1px solid var(--border-primary);
-  border-radius: 12px;
-  background: var(--bg-primary);
-  cursor: pointer;
-  transition: all 0.2s;
-  min-width: 140px;
-  color: var(--text-secondary);
-}
-
-.mode-card:hover {
+  gap: 6px;
+  padding: 6px 10px;
   background: var(--bg-tertiary);
-  border-color: var(--accent-primary);
+  border: 1px solid var(--border-primary);
+  border-radius: 16px;
+  font-size: 0.875rem;
   color: var(--text-primary);
 }
 
-.mode-card.active {
-  border-color: var(--accent-primary);
-  background: var(--bg-tertiary);
+.feature-pill svg {
   color: var(--accent-primary);
 }
 
-.mode-card.disabled {
+.pill-remove {
+  background: none;
+  border: none;
+  padding: 0;
+  margin-left: 2px;
+  cursor: pointer;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  transition: color 0.2s;
+}
+
+.pill-remove:hover {
+  color: var(--text-primary);
+}
+
+/* Context menu */
+.context-menu-wrapper {
+  position: relative;
+}
+
+.context-menu-button {
+  background: transparent;
+  border: none;
+  padding: 8px;
+  cursor: pointer;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  transition: all 0.2s;
+}
+
+.context-menu-button:hover:not(:disabled) {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.context-menu-button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
 
-.mode-card-title {
-  font-size: 0.9375rem;
-  font-weight: 600;
+.context-menu-popover {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  margin-bottom: 8px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-primary);
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  min-width: 220px;
+  padding: 8px;
+  z-index: 1000;
+  animation: slideUp 0.2s ease-out;
 }
 
-.mode-card-desc {
-  font-size: 0.8125rem;
-  color: var(--text-muted);
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.context-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  width: 100%;
+  text-align: left;
+  color: var(--text-primary);
+  font-size: 0.9375rem;
+  transition: background 0.2s;
+  position: relative;
+}
+
+.context-menu-item:hover:not(:disabled) {
+  background: var(--bg-tertiary);
+}
+
+.context-menu-item:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.context-menu-item svg {
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.context-menu-item.toggle.active {
+  background: var(--bg-tertiary);
+}
+
+.context-menu-item .checkmark {
+  margin-left: auto;
+  color: var(--accent-primary);
+  font-weight: bold;
+}
+
+.context-menu-divider {
+  height: 1px;
+  background: var(--border-primary);
+  margin: 4px 0;
+}
+
+/* Thinking block */
+.thinking-block {
+  margin-bottom: 12px;
+  border: 1px solid var(--border-primary);
+  border-radius: 8px;
+  background: var(--bg-tertiary);
+  overflow: hidden;
+}
+
+.thinking-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  cursor: pointer;
+  user-select: none;
+  font-weight: 600;
+  color: var(--text-primary);
+  list-style: none;
+}
+
+.thinking-header::-webkit-details-marker {
+  display: none;
+}
+
+.thinking-header svg {
+  color: var(--accent-primary);
+}
+
+.thinking-content {
+  padding: 0 12px 12px 12px;
+  color: var(--text-secondary);
+  font-size: 0.9375rem;
+  line-height: 1.6;
 }
 
 .suggestion-chips {
@@ -993,6 +1121,11 @@
   font-family: inherit;
 }
 
+.message-input:focus {
+  border: none;
+  outline: none;
+}
+
 .message-input::placeholder {
   color: var(--text-muted);
 }
@@ -1302,11 +1435,10 @@
 /* Mobile breakpoint */
 @media (max-width: 768px) {
   .chat-interface {
-    height: auto;
-    min-height: 100vh;
-    min-height: 100dvh; /* Dynamic viewport height for mobile */
-    padding: var(--spacing-xs);
-    gap: var(--spacing-sm);
+    height: 100%;
+    padding: 0;
+    gap: 0;
+    flex-direction: column;
   }
 
   .left-panel {
@@ -1347,6 +1479,9 @@
   .chat-container {
     height: 100%;
     border-radius: var(--radius-lg);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
   }
 
   .chat-header {
@@ -1379,6 +1514,8 @@
   .messages-container {
     padding: var(--spacing-sm);
     gap: var(--spacing-sm);
+    flex: 1;
+    overflow-y: auto;
   }
 
   .message-row {
@@ -1436,8 +1573,8 @@
   }
 
   .conversation-item {
-    flex-direction: column;
-    align-items: stretch;
+    flex-direction: row;
+    align-items: center;
     gap: var(--spacing-xs);
   }
 
@@ -1470,38 +1607,12 @@
   .section-content {
     padding: var(--spacing-sm);
   }
-
-  .mode-cards {
-    gap: 8px;
-    margin-bottom: 20px;
-    flex-wrap: nowrap;
-  }
-
-  .mode-card {
-    padding: 12px 10px;
-    min-width: 0;
-    flex: 1;
-    gap: 4px;
-  }
-
-  .mode-card svg {
-    width: 18px;
-    height: 18px;
-  }
-
-  .mode-card-title {
-    font-size: 0.8125rem;
-  }
-
-  .mode-card-desc {
-    font-size: 0.6875rem;
-  }
 }
 
 /* Small mobile breakpoint */
 @media (max-width: 480px) {
   .chat-interface {
-    padding: var(--spacing-xs);
+    padding: 0;
   }
 
   .chat-header h2 {
@@ -1510,18 +1621,6 @@
 
   .welcome-heading {
     font-size: 1.5rem;
-  }
-
-  .mode-card {
-    padding: 10px 8px;
-  }
-
-  .mode-card-title {
-    font-size: 0.75rem;
-  }
-
-  .mode-card-desc {
-    font-size: 0.625rem;
   }
 }
 

@@ -448,6 +448,9 @@ class ChatRequest(BaseModel):
     api_key: Optional[str] = None  # API key for authentication (optional, can use session's key or server key)
     provider: Optional[str] = "openai"  # Provider selection: "openai" or "together"
     image_attachment: Optional[ImageAttachment] = None  # Optional image attachment for OpenAI GPT models
+    web_search: Optional[bool] = None  # Optional web search control (default: True for GPT-5 models)
+    reasoning: Optional[Dict[str, str]] = None  # Optional reasoning effort level ("low", "medium", "high")
+    include: Optional[List[str]] = None  # Optional list of additional data to include (e.g., ["reasoning"])
 
     @field_validator('api_key')
     @classmethod
@@ -549,6 +552,42 @@ class ChatRequest(BaseModel):
         # Allow alphanumeric, hyphens, and underscores
         if not re.match(r'^[A-Za-z0-9_-]+$', v):
             raise ValueError('Conversation ID contains invalid characters')
+
+        return v
+
+    @field_validator('reasoning')
+    @classmethod
+    def validate_reasoning(cls, v):
+        """Validate reasoning effort level"""
+        if v is None:
+            return v
+
+        if not isinstance(v, dict):
+            raise ValueError('Reasoning must be a dictionary')
+
+        effort = v.get("effort")
+        allowed_levels = ["low", "medium", "high"]
+        if effort not in allowed_levels:
+            raise ValueError(f'Invalid reasoning effort: {effort}. Allowed levels: {", ".join(allowed_levels)}')
+
+        return v
+
+    @field_validator('include')
+    @classmethod
+    def validate_include(cls, v):
+        """Validate include parameter"""
+        if v is None:
+            return v
+
+        if not isinstance(v, list):
+            raise ValueError('Include must be a list of strings')
+
+        allowed_values = ["reasoning", "web_search_call.action.sources"]
+        for item in v:
+            if not isinstance(item, str):
+                raise ValueError('Include items must be strings')
+            if item not in allowed_values:
+                raise ValueError(f'Invalid include value: {item}. Allowed values: {", ".join(allowed_values)}')
 
         return v
 
@@ -1049,11 +1088,11 @@ def _fetch_suggestions() -> List[str]:
             messages=[
                 {
                     "role": "system",
-                    "content": "You are a helpful assistant that generates diverse, engaging conversation starters."
+                    "content": "You are a helpful assistant that generates diverse, engaging, short and punchy conversation starters."
                 },
                 {
                     "role": "user",
-                    "content": "Generate 3 diverse, interesting conversation starter questions that a user might ask an AI assistant. Return ONLY a JSON array of strings, nothing else. Example: [\"question 1\", \"question 2\", \"question 3\"]"
+                    "content": "Generate 3 diverse, interesting, and VERY short (under 6 words each) conversation starter questions or prompts that a user might ask an AI assistant. Use catchy sentences. Return ONLY a JSON array of strings, nothing else. Example: [\"Tell me a joke\", \"Explain quantum physics\", \"Write a poem\"]"
                 }
             ],
             temperature=0.8,
@@ -1278,7 +1317,10 @@ async def chat(
                     model=chat_request.model,
                     messages=messages_for_openai,
                     stream=True,  # Enable streaming response
-                    image_data_url=image_data_url
+                    image_data_url=image_data_url,
+                    web_search=chat_request.web_search,
+                    reasoning=chat_request.reasoning,
+                    include=chat_request.include
                 )
 
                 # Collect the full response for storage
@@ -1288,6 +1330,10 @@ async def chat(
                 # or Chat Completions API stream (Together.ai or other models)
                 is_responses_api = chat_request.provider == "openai" and chat_request.model in ["gpt-5", "gpt-5-mini", "gpt-5-nano"]
 
+                # Track reasoning state for proper marker placement
+                in_reasoning = False
+                reasoning_started = False
+
                 # Yield each chunk of the response as it becomes available
                 for chunk in stream:
                     # Some providers may send chunks without choices or content (e.g., role updates or keep-alives)
@@ -1296,10 +1342,27 @@ async def chat(
                             # Responses API streaming format
                             # Events have 'type' field and text deltas are in 'delta' attribute
                             event_type = getattr(chunk, 'type', None)
-                            if event_type == 'response.output_text.delta':
+
+                            # Handle reasoning summary text deltas
+                            if event_type == 'response.reasoning_summary_text.delta':
+                                delta = getattr(chunk, 'delta', None)
+                                if delta:
+                                    # Emit thinking marker at the start of reasoning
+                                    if not reasoning_started:
+                                        yield '<!--THINKING-->'
+                                        reasoning_started = True
+                                        in_reasoning = True
+                                    yield delta
+
+                            # Handle regular output text deltas
+                            elif event_type == 'response.output_text.delta':
                                 # Text delta events have the incremental text in 'delta' attribute
                                 delta = getattr(chunk, 'delta', None)
                                 if delta:
+                                    # If we were in reasoning mode, close it before outputting text
+                                    if in_reasoning:
+                                        yield '<!--/THINKING-->'
+                                        in_reasoning = False
                                     full_response += delta
                                     yield delta
                         else:
@@ -1628,17 +1691,17 @@ async def upload_document(
                 
                 # System message for summarization
                 system_message = """
-                You are a helpful assistant. Please, summarize this document content and return 5 suggested prompts/questions about it. 
+                You are a helpful assistant. Please, summarize this document content and return 5 suggested short, punchy prompts/questions about it (under 6 words each).
                 These questions will be presented to the user so it can start a conversation with you about.
 
                 Aways respond with a JSON object in the following strict format:
                 {
                     "summary": "Brief summary of the document content",
-                    "suggested_questions": ["Question 1", "Question 2", "Question 3", "Question 4", "Question 5"]
+                    "suggested_questions": ["Short Q1", "Short Q2", "Short Q3", "Short Q4", "Short Q5"]
                 }"""
-                
+
                 # Create the prompt for summarization
-                user_message = f"Please summarize the following document content and provide 5 suggested questions:\n\n{document_content}"
+                user_message = f"Please summarize the following document content and provide 5 VERY SHORT suggested questions:\n\n{document_content}"
                 
                 # Generate summary and suggested questions
                 # Initialize ChatOpenAI with the provided API key and provider
