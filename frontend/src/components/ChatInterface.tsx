@@ -764,7 +764,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-Session-ID': sessionId
+          'X-Session-ID': sessionId,
+          ...(apiKey ? { 'X-API-Key': apiKey } : {})
         },
         body: JSON.stringify({
           text: plainText,
@@ -869,7 +870,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
           const response = await fetch('/api/transcribe', {
             method: 'POST',
-            headers: { 'X-Session-ID': sessionId },
+            headers: {
+              'X-Session-ID': sessionId,
+              ...(apiKey ? { 'X-API-Key': apiKey } : {})
+            },
             body: formData,
           })
 
