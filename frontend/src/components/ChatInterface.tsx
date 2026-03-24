@@ -44,6 +44,8 @@ interface ChatInterfaceProps {
   welcomeSuggestions?: string[]
   maxImageSizeMB: number
   setStudyLearnOverride: (override: boolean) => void
+  ttsVoice: string
+  setTtsVoice: (voice: string) => void
 }
 
 // Parse thinking blocks from streamed content
@@ -154,7 +156,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   hasOwnApiKey,
   welcomeSuggestions = [],
   maxImageSizeMB,
-  setStudyLearnOverride
+  setStudyLearnOverride,
+  ttsVoice,
+  setTtsVoice
 }) => {
   const [messages, setMessages] = useState<Message[]>([])
   const [inputMessage, setInputMessage] = useState('')
@@ -696,7 +700,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         },
         body: JSON.stringify({
           text: plainText,
-          voice: 'coral'
+          voice: ttsVoice
         })
       })
 
@@ -1378,6 +1382,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         isWhitelisted={isWhitelisted}
         freeTurnsRemaining={freeTurnsRemaining}
         hasFreeTurns={hasFreeTurns}
+        ttsVoice={ttsVoice}
+        setTtsVoice={setTtsVoice}
+        sessionId={sessionId}
       />
 
       {/* Backdrop for mobile sidebar */}

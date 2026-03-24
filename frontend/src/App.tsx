@@ -16,6 +16,7 @@ function App() {
   const [freeTurnsRemaining, setFreeTurnsRemaining] = useState<number>(user?.freeTurnsRemaining ?? 0)
   const [welcomeSuggestions, setWelcomeSuggestions] = useState<string[]>([])
   const [studyLearnOverride, setStudyLearnOverride] = useState(false)
+  const [ttsVoice, setTtsVoice] = useState<string>('coral')
 
   const modelDescriptions = {
     // OpenAI models - GPT-5 only
@@ -193,6 +194,8 @@ function App() {
           welcomeSuggestions={welcomeSuggestions}
           maxImageSizeMB={maxImageSizeMB}
           setStudyLearnOverride={setStudyLearnOverride}
+          ttsVoice={ttsVoice}
+          setTtsVoice={setTtsVoice}
         />
       </main>
     </div>

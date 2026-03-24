@@ -1,6 +1,13 @@
 import React, { useState, useEffect } from 'react'
-import { X, Key, Settings, MessageSquare, CheckCircle, AlertCircle } from 'lucide-react'
+import { X, Key, Settings, MessageSquare, CheckCircle, AlertCircle, Volume2, Play } from 'lucide-react'
 import './SettingsModal.css'
+
+const VOICES = [
+  { id: 'coral',  name: 'Coral',  label: 'Female · Warm' },
+  { id: 'nova',   name: 'Nova',   label: 'Female · Bright' },
+  { id: 'onyx',   name: 'Onyx',   label: 'Male · Deep' },
+  { id: 'echo',   name: 'Echo',   label: 'Male · Clear' },
+]
 
 interface SettingsModalProps {
   isOpen: boolean
@@ -17,6 +24,9 @@ interface SettingsModalProps {
   isWhitelisted?: boolean
   freeTurnsRemaining?: number
   hasFreeTurns?: boolean
+  ttsVoice: string
+  setTtsVoice: (v: string) => void
+  sessionId: string
 }
 
 const SettingsModal: React.FC<SettingsModalProps> = ({
@@ -33,10 +43,14 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   modelDescriptions,
   isWhitelisted = false,
   freeTurnsRemaining = 0,
-  hasFreeTurns = false
+  hasFreeTurns = false,
+  ttsVoice,
+  setTtsVoice,
+  sessionId
 }) => {
   const [showApiKeySuccess, setShowApiKeySuccess] = useState(false)
   const [localDeveloperMessage, setLocalDeveloperMessage] = useState(developerMessage)
+  const [previewingVoice, setPreviewingVoice] = useState<string | null>(null)
 
   // Sync local state with prop changes (e.g., when Study & Learn is toggled)
   useEffect(() => {
@@ -54,6 +68,30 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     if (apiKey.trim()) {
       setShowApiKeySuccess(true)
       setTimeout(() => setShowApiKeySuccess(false), 3000)
+    }
+  }
+
+  const handleVoicePreview = async (voiceId: string) => {
+    setPreviewingVoice(voiceId)
+    try {
+      const response = await fetch('/api/tts', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Session-ID': sessionId,
+        },
+        body: JSON.stringify({ text: 'Hello! This is how I sound.', voice: voiceId }),
+      })
+      if (!response.ok) throw new Error('Preview failed')
+      const blob = await response.blob()
+      const url = URL.createObjectURL(blob)
+      const audio = new Audio(url)
+      audio.onended = () => URL.revokeObjectURL(url)
+      await audio.play()
+    } catch (e) {
+      console.error('Voice preview error:', e)
+    } finally {
+      setPreviewingVoice(null)
     }
   }
 
@@ -184,6 +222,36 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
               </div>
             )}
           </div>
+
+          {/* Read Aloud Voice Section */}
+          {(selectedProvider === 'openai' || isWhitelisted) && (
+            <div className="settings-section">
+              <label className="settings-label">
+                <Volume2 size={16} />
+                <span>Read Aloud Voice</span>
+              </label>
+              <div className="voice-options">
+                {VOICES.map(v => (
+                  <div key={v.id} className={`voice-option${ttsVoice === v.id ? ' selected' : ''}`}>
+                    <button className="voice-select-btn" onClick={() => setTtsVoice(v.id)}>
+                      <span className="voice-name">{v.name}</span>
+                      <span className="voice-label">{v.label}</span>
+                    </button>
+                    <button
+                      className="voice-preview-btn"
+                      onClick={() => handleVoicePreview(v.id)}
+                      title="Preview voice"
+                      disabled={previewingVoice !== null}
+                    >
+                      {previewingVoice === v.id
+                        ? <div className="preview-spinner" />
+                        : <Play size={12} />}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* System Message Section */}
           <div className="settings-section">
