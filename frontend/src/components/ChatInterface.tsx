@@ -54,10 +54,19 @@ const parseThinkingBlocks = (content: string): { thinking: string; response: str
   let thinking = ''
   let response = content
 
+  // Handle complete thinking blocks (both open + close tags present)
   const matches = content.matchAll(thinkingRegex)
   for (const match of matches) {
     thinking += match[1].trim() + '\n\n'
     response = response.replace(match[0], '')
+  }
+
+  // Handle partial/incomplete thinking block during streaming
+  // (open tag present but close tag hasn't arrived yet)
+  const partialMatch = response.match(/<!--THINKING-->([\s\S]*)$/)
+  if (partialMatch) {
+    thinking += partialMatch[1]
+    response = response.replace(partialMatch[0], '')
   }
 
   return {
