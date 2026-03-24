@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import ChatInterface from './components/ChatInterface'
 import Header from './components/Header'
 import { useAuth } from './contexts/AuthContext'
@@ -8,7 +8,7 @@ function App() {
   const { user, authConfig } = useAuth()
   const [openaiApiKey, setOpenaiApiKey] = useState<string>('')
   const [togetherApiKey, setTogetherApiKey] = useState<string>('')
-  const [theme, setTheme] = useState<'light' | 'dark'>('light')
+  const [theme, setTheme] = useState<'light' | 'dark'>('dark')
   const [selectedModel, setSelectedModel] = useState<string>('gpt-5-nano')
   const [selectedProvider, setSelectedProvider] = useState<string>('openai')
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -16,6 +16,7 @@ function App() {
   const [freeTurnsRemaining, setFreeTurnsRemaining] = useState<number>(user?.freeTurnsRemaining ?? 0)
   const [welcomeSuggestions, setWelcomeSuggestions] = useState<string[]>([])
   const [studyLearnOverride, setStudyLearnOverride] = useState(false)
+  const [ttsVoice, setTtsVoice] = useState<string>('marin')
 
   const modelDescriptions = {
     // OpenAI models - GPT-5 only
@@ -63,8 +64,8 @@ function App() {
     if (savedTheme) {
       setTheme(savedTheme)
     } else {
-      // Default to light theme
-      setTheme('light')
+      // Default to dark theme
+      setTheme('dark')
     }
   }, [])
 
@@ -91,7 +92,8 @@ function App() {
   }
 
   // Handle provider changes
-  const handleProviderChange = async (newProvider: string) => {
+  const handleProviderChange = useCallback(async (newProvider: string) => {
+    if (newProvider === selectedProvider) return  // No-op: provider hasn't changed, don't reset model
     setSelectedProvider(newProvider)
     // Set default model based on provider
     if (newProvider === 'together') {
@@ -99,7 +101,7 @@ function App() {
     } else {
       setSelectedModel('gpt-5-nano')
     }
-  }
+  }, [selectedProvider])
 
   const handleThemeChange = (newTheme: 'light' | 'dark') => {
     setTheme(newTheme)
@@ -126,15 +128,16 @@ function App() {
     return selectedProvider === 'together' ? togetherApiKey : openaiApiKey
   }
 
-  // Lock provider/model for free tier users
+  // Lock provider/model for free tier users (not when Study & Learn is active)
   useEffect(() => {
     if (!user || !authConfig) return
+    if (studyLearnOverride) return  // Study & Learn manages the model — don't interfere
 
     const hasOwnKey = selectedProvider === 'together' ? togetherApiKey.trim() : openaiApiKey.trim()
     const isFreeTierMode = !user.isWhitelisted && freeTurnsRemaining > 0 && !hasOwnKey
 
-    if (isFreeTierMode && !studyLearnOverride) {
-      // Lock to free provider and model (unless Study & Learn is active)
+    if (isFreeTierMode) {
+      // Lock to free provider and model
       if (selectedProvider !== authConfig.freeProvider) {
         setSelectedProvider(authConfig.freeProvider)
       }
@@ -193,6 +196,8 @@ function App() {
           welcomeSuggestions={welcomeSuggestions}
           maxImageSizeMB={maxImageSizeMB}
           setStudyLearnOverride={setStudyLearnOverride}
+          ttsVoice={ttsVoice}
+          setTtsVoice={setTtsVoice}
         />
       </main>
     </div>

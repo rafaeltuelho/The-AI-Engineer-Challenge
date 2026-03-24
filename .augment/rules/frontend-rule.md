@@ -2,7 +2,6 @@
 type: "agent_requested"
 description: "Example description"
 ---
-
 # Frontend Rules
 
 - You must pay attention to visual clarity and contrast. Do not place white text on a white background.
@@ -10,4 +9,3 @@ description: "Example description"
 - When asking the user for sensitive information - you must use password style text-entry boxes in the UI.
 - This frontend will ultimately be deployed on Vercel, but it should be possible to test locally.
 - Always provide users with a way to run the created UI once you have created it.
-

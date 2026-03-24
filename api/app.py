@@ -2,6 +2,7 @@
 import asyncio
 import hashlib
 import json
+import logging
 import os
 import re
 # Add current directory to Python path for Vercel deployment
@@ -28,6 +29,8 @@ from google.oauth2 import id_token
 from google.auth.transport import requests as google_requests
 import tiktoken
 from dotenv import load_dotenv
+
+logger = logging.getLogger(__name__)
 
 # Load environment variables from .env file BEFORE importing modules
 # that read config via os.getenv() at module level.
@@ -68,6 +71,12 @@ FREE_MODEL = os.getenv("FREE_MODEL", "deepseek-ai/DeepSeek-V3.1")
 # Image Upload Configuration
 # ============================================
 MAX_IMAGE_SIZE_MB = float(os.getenv("MAX_IMAGE_SIZE_MB", "3"))
+
+# ============================================
+# Audio Upload Configuration
+# ============================================
+MAX_AUDIO_SIZE_MB = 25  # OpenAI Whisper's actual limit
+MAX_AUDIO_SIZE_BYTES = MAX_AUDIO_SIZE_MB * 1024 * 1024
 
 # Server-side API keys (for free tier)
 SERVER_OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
@@ -697,6 +706,42 @@ class AppConfigResponse(BaseModel):
     suggestions: List[str]
     max_image_size_mb: float
 
+class TTSRequest(BaseModel):
+    text: str
+    voice: str = "coral"
+
+    @field_validator('text')
+    @classmethod
+    def validate_text(cls, v):
+        """Validate text content"""
+        if not v or not isinstance(v, str):
+            raise ValueError('Text is required')
+
+        if len(v.strip()) == 0:
+            raise ValueError('Text cannot be empty')
+
+        if len(v) > 4096:
+            raise ValueError('Text is too long (max 4096 characters)')
+
+        return v.strip()
+
+    @field_validator('voice')
+    @classmethod
+    def validate_voice(cls, v):
+        """Validate voice selection"""
+        if not v:
+            return "coral"  # Default voice
+
+        # OpenAI TTS supported voices
+        allowed_voices = ["alloy", "ash", "ballad", "cedar", "coral", "echo", "fable", "marin", "nova", "onyx", "sage", "shimmer", "verse"]
+        if v.lower() not in allowed_voices:
+            raise ValueError(f'Invalid voice: {v}. Allowed voices: {", ".join(allowed_voices)}')
+
+        return v.lower()
+
+class TranscribeResponse(BaseModel):
+    text: str
+
 class DocumentUploadResponse(BaseModel):
     document_id: str
     message: str
@@ -1178,6 +1223,174 @@ async def get_app_config(request: Request):
         max_image_size_mb=MAX_IMAGE_SIZE_MB
     )
 
+# Endpoint for text-to-speech
+@app.post(
+    "/api/tts",
+    tags=["Audio"],
+    summary="Convert text to speech",
+    description="Convert text to speech using OpenAI's TTS API. Returns MP3 audio data. Requires an OpenAI API key (user-provided via X-API-Key header, stored in session, or server-configured). Works regardless of the session's selected provider.",
+    responses={
+        200: {"description": "Audio generated successfully", "content": {"audio/mpeg": {}}},
+        400: {"description": "Invalid request (empty text or exceeds 4096 characters)"},
+        401: {"description": "Invalid or expired session"},
+        403: {"description": "No OpenAI API key available. Provide one via X-API-Key header or configure a server key."},
+        429: {"description": "Rate limit exceeded"},
+        500: {"description": "Internal server error"}
+    }
+)
+@limiter.limit("10/minute")
+async def text_to_speech(
+    request: Request,
+    tts_request: TTSRequest,
+    x_session_id: str = Header(..., alias="X-Session-ID", description="Session ID for authentication"),
+    x_api_key: Optional[str] = Header(None, alias="X-API-Key", description="Optional OpenAI API key override")
+):
+    try:
+        # For audio features, we always need the OpenAI API key specifically
+        session = get_session(x_session_id)
+        if not session:
+            raise HTTPException(status_code=401, detail="Invalid or expired session")
+
+        # Resolve OpenAI API key with priority:
+        # 1. Per-request key from X-API-Key header (guest/google users who entered a key in the UI)
+        # 2. Session-stored key (api_key auth users with OpenAI provider)
+        # 3. Server-side OpenAI key (whitelisted users, free tier fallback)
+        if x_api_key:
+            api_key = x_api_key
+        elif session.get("has_own_api_key") and session.get("api_key") and session.get("provider") == "openai":
+            api_key = session["api_key"]
+        elif SERVER_OPENAI_API_KEY:
+            api_key = SERVER_OPENAI_API_KEY
+        else:
+            raise HTTPException(
+                status_code=403,
+                detail="OpenAI API key not available. Audio features require an OpenAI key."
+            )
+
+        # Create OpenAI client
+        from openai_helper import create_openai_client
+        client = create_openai_client(api_key, "openai")
+
+        # Call OpenAI TTS API
+        response = client.audio.speech.create(
+            model="gpt-4o-mini-tts",
+            voice=tts_request.voice,
+            input=tts_request.text,
+            response_format="mp3"
+        )
+
+        # Get audio bytes
+        audio_bytes = response.content
+
+        # Return binary MP3 response
+        from fastapi.responses import Response
+        return Response(content=audio_bytes, media_type="audio/mpeg")
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Error in text-to-speech")
+        raise HTTPException(status_code=500, detail="An error occurred processing your request")
+
+# Endpoint for speech-to-text transcription
+@app.post(
+    "/api/transcribe",
+    response_model=TranscribeResponse,
+    tags=["Audio"],
+    summary="Transcribe audio to text",
+    description="Transcribe audio to text using OpenAI's transcription API. Accepts audio file upload (max 25MB). Requires an OpenAI API key (user-provided via X-API-Key header, stored in session, or server-configured).",
+    responses={
+        200: {"description": "Audio transcribed successfully"},
+        400: {"description": "Invalid request (no file, empty file, or unsupported format)"},
+        401: {"description": "Invalid or expired session"},
+        403: {"description": "No OpenAI API key available. Provide one via X-API-Key header or configure a server key."},
+        413: {"description": "Audio file too large (max 25MB)"},
+        429: {"description": "Rate limit exceeded"},
+        500: {"description": "Internal server error"}
+    }
+)
+@limiter.limit("10/minute")
+async def transcribe_audio(
+    request: Request,
+    audio: UploadFile = File(..., description="Audio file to transcribe"),
+    x_session_id: str = Header(..., alias="X-Session-ID", description="Session ID for authentication"),
+    x_api_key: Optional[str] = Header(None, alias="X-API-Key", description="Optional OpenAI API key override")
+):
+    try:
+        # For audio features, we always need the OpenAI API key specifically
+        session = get_session(x_session_id)
+        if not session:
+            raise HTTPException(status_code=401, detail="Invalid or expired session")
+
+        # Resolve OpenAI API key with priority:
+        # 1. Per-request key from X-API-Key header (guest/google users who entered a key in the UI)
+        # 2. Session-stored key (api_key auth users with OpenAI provider)
+        # 3. Server-side OpenAI key (whitelisted users, free tier fallback)
+        if x_api_key:
+            api_key = x_api_key
+        elif session.get("has_own_api_key") and session.get("api_key") and session.get("provider") == "openai":
+            api_key = session["api_key"]
+        elif SERVER_OPENAI_API_KEY:
+            api_key = SERVER_OPENAI_API_KEY
+        else:
+            raise HTTPException(
+                status_code=403,
+                detail="OpenAI API key not available. Audio features require an OpenAI key."
+            )
+
+        # Read file content in chunks to avoid buffering large files in memory before size check
+        chunks = []
+        total_size = 0
+        while True:
+            chunk = await audio.read(8192)
+            if not chunk:
+                break
+            total_size += len(chunk)
+            if total_size > MAX_AUDIO_SIZE_BYTES:
+                raise HTTPException(
+                    status_code=413,
+                    detail=f"Audio file too large. Maximum size is {MAX_AUDIO_SIZE_MB}MB."
+                )
+            chunks.append(chunk)
+        file_bytes = b"".join(chunks)
+
+        # Validate file is not empty
+        if len(file_bytes) == 0:
+            raise HTTPException(status_code=400, detail="Audio file is empty")
+
+        # Create OpenAI client
+        from openai_helper import create_openai_client
+        client = create_openai_client(api_key, "openai")
+
+        # Call OpenAI Whisper API for transcription
+        # The API expects a tuple of (filename, file_bytes, content_type)
+        # Browser MediaRecorder Blobs often have None or empty filename, so provide fallback
+        filename = audio.filename or "audio.webm"
+
+        # Try gpt-4o-transcribe first, fall back to whisper-1 if not available
+        try:
+            transcription = client.audio.transcriptions.create(
+                model="gpt-4o-transcribe",
+                file=(filename, file_bytes, audio.content_type or "audio/webm")
+            )
+        except Exception as model_error:
+            if "model" in str(model_error).lower() or "not found" in str(model_error).lower():
+                transcription = client.audio.transcriptions.create(
+                    model="whisper-1",
+                    file=(filename, file_bytes, audio.content_type or "audio/webm")
+                )
+            else:
+                raise
+
+        # Return transcribed text
+        return TranscribeResponse(text=transcription.text)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Error in transcription")
+        raise HTTPException(status_code=500, detail="An error occurred processing your request")
+
 # Define the main chat endpoint that handles POST requests
 @app.post(
     "/api/chat",
@@ -1220,7 +1433,19 @@ async def chat(
                 )
 
         # Debug logging
-        print(f"Received chat request: session_id={session_id[:8]}..., provider={provider}, model={chat_request.model}, user_message_length={len(chat_request.user_message)}")
+        print(
+            f"[Chat Request] "
+            f"session_id={session_id[:8]}... | "
+            f"provider={provider} | "
+            f"model={chat_request.model} | "
+            f"conversation_id={chat_request.conversation_id} | "
+            f"web_search={chat_request.web_search} | "
+            f"reasoning={chat_request.reasoning} | "
+            f"include={chat_request.include} | "
+            f"image_attachment={'yes' if chat_request.image_attachment else 'no'} | "
+            f"developer_message_len={len(chat_request.developer_message)} | "
+            f"user_message_len={len(chat_request.user_message)}"
+        )
 
         # Initialize OpenAI client with the resolved API key and provider
         client_kwargs = {"api_key": api_key}

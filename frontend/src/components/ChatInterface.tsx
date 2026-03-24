@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react'
-import { Send, MessageSquare, User, Bot, Trash2, Settings, ArrowDown, X, FileText, Upload, Compass, Image, Plus, Search, BookOpen, Brain } from 'lucide-react'
+import { Send, MessageSquare, User, Bot, Trash2, Settings, ArrowDown, X, FileText, Upload, Compass, Image, Plus, Search, BookOpen, Brain, Volume2, Square, Mic, MicOff } from 'lucide-react'
 import MarkdownRenderer from './MarkdownRenderer'
 import SuggestedQuestions from './SuggestedQuestions'
 import SettingsModal from './SettingsModal'
@@ -44,6 +44,8 @@ interface ChatInterfaceProps {
   welcomeSuggestions?: string[]
   maxImageSizeMB: number
   setStudyLearnOverride: (override: boolean) => void
+  ttsVoice: string
+  setTtsVoice: (voice: string) => void
 }
 
 // Parse thinking blocks from streamed content
@@ -52,16 +54,49 @@ const parseThinkingBlocks = (content: string): { thinking: string; response: str
   let thinking = ''
   let response = content
 
+  // Handle complete thinking blocks (both open + close tags present)
   const matches = content.matchAll(thinkingRegex)
   for (const match of matches) {
     thinking += match[1].trim() + '\n\n'
     response = response.replace(match[0], '')
   }
 
+  // Handle partial/incomplete thinking block during streaming
+  // (open tag present but close tag hasn't arrived yet)
+  const partialMatch = response.match(/<!--THINKING-->([\s\S]*)$/)
+  if (partialMatch) {
+    thinking += partialMatch[1]
+    response = response.replace(partialMatch[0], '')
+  }
+
   return {
     thinking: thinking.trim(),
     response: response.trim()
   }
+}
+
+// Collapsible thinking block component
+const ThinkingBlock: React.FC<{ content: string }> = ({ content }) => {
+  const [expanded, setExpanded] = React.useState(false)
+
+  return (
+    <div
+      className={`thinking-block ${expanded ? 'expanded' : 'collapsed'}`}
+      onClick={() => setExpanded(e => !e)}
+      role="button"
+      aria-expanded={expanded}
+    >
+      <div className="thinking-header">
+        <Brain size={14} />
+        <span>Thinking</span>
+        <span className="thinking-toggle-hint">{expanded ? '▲ collapse' : '▼ expand'}</span>
+      </div>
+      <div className="thinking-content">
+        <MarkdownRenderer content={content} chatMode="regular" />
+        {!expanded && <div className="thinking-fade" />}
+      </div>
+    </div>
+  )
 }
 
 // Default developer messages for each chat mode (pure function, extracted outside component)
@@ -154,7 +189,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   hasOwnApiKey,
   welcomeSuggestions = [],
   maxImageSizeMB,
-  setStudyLearnOverride
+  setStudyLearnOverride,
+  ttsVoice,
+  setTtsVoice
 }) => {
   const [messages, setMessages] = useState<Message[]>([])
   const [inputMessage, setInputMessage] = useState('')
@@ -186,12 +223,30 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const [studyLearnEnabled, setStudyLearnEnabled] = useState(true)
   const [topicExplorerEnabled, setTopicExplorerEnabled] = useState(false)
   const [thinkingEnabled, setThinkingEnabled] = useState(false)
+  const [thinkingEffort, setThinkingEffort] = useState<'medium' | 'high'>('medium')
+
+  // TTS state
+  const [playingMessageId, setPlayingMessageId] = useState<string | null>(null)
+  const [loadingTtsId, setLoadingTtsId] = useState<string | null>(null)
+  const audioRef = useRef<HTMLAudioElement | null>(null)
+  const audioBlobUrlRef = useRef<string | null>(null)
+  const ttsAbortControllerRef = useRef<AbortController | null>(null)
+
+  // Dictate state
+  const [isRecording, setIsRecording] = useState(false)
+  const [isTranscribing, setIsTranscribing] = useState(false)
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
+  const recordingChunksRef = useRef<Blob[]>([])
+  const recordingStreamRef = useRef<MediaStream | null>(null)
 
   const fileInputRef = useRef<HTMLInputElement>(null)
   const imageInputRef = useRef<HTMLInputElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const contextMenuRef = useRef<HTMLDivElement>(null)
   const autoThinkingTriggered = useRef(false)
+  const autoMiniTriggered = useRef(false)       // new
+  const autoFullTriggered = useRef(false)       // new
+  const slLastSetModel = useRef<string>('')     // tracks what SL system last set
 
 
   // Filter available models based on chat mode and provider
@@ -364,16 +419,24 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     }
   }, [topicExplorerEnabled, documentSummary, studyLearnEnabled])
 
-  // Auto-switch to GPT-5 when Study & Learn is enabled
+  // Auto-switch to gpt-5-nano when Study & Learn is enabled, then upgrade progressively
   useEffect(() => {
     if (studyLearnEnabled) {
-      setSelectedModel('gpt-5')
+      slLastSetModel.current = 'gpt-5-nano'
+      setSelectedModel('gpt-5-nano')
       setSelectedProvider('openai')
       setStudyLearnOverride(true)
+      // Reset progression refs when re-enabling
+      autoThinkingTriggered.current = false
+      autoMiniTriggered.current = false
+      autoFullTriggered.current = false
+      // Also reset thinking — Study & Learn starts with thinking off (it auto-enables at turn 3)
+      setThinkingEnabled(false)
+      setThinkingEffort('medium')
     } else {
       setStudyLearnOverride(false)
     }
-  }, [studyLearnEnabled, setSelectedModel, setSelectedProvider, setStudyLearnOverride])
+  }, [studyLearnEnabled, setSelectedModel, setSelectedProvider]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Detect mobile viewport
   useEffect(() => {
@@ -411,14 +474,61 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     }
   }, [apiKey, showApiKeySuccess])
 
-  // Auto-enable Thinking after 3 user messages
+  // Model rank for one-directional upgrades (never downgrade)
+  const MODEL_RANK: Record<string, number> = { 'gpt-5-nano': 0, 'gpt-5-mini': 1, 'gpt-5': 2 }
+
+  // Progressive model upgrades for Study & Learn
   useEffect(() => {
+    if (!studyLearnEnabled) return
+
     const userMessageCount = messages.filter(m => m.role === 'user').length
-    if (userMessageCount >= 3 && !thinkingEnabled && !autoThinkingTriggered.current) {
-      setThinkingEnabled(true)
-      autoThinkingTriggered.current = true
+    const currentRank = MODEL_RANK[selectedModel] ?? 0
+
+    // Turn 3+: upgrade to gpt-5-mini (only if current model is lower ranked)
+    if (userMessageCount >= 3 && !autoMiniTriggered.current) {
+      if (currentRank < MODEL_RANK['gpt-5-mini']) {
+        setSelectedModel('gpt-5-mini')
+      }
+      if (!autoThinkingTriggered.current) {
+        setThinkingEnabled(true)
+        setThinkingEffort('high')
+        autoThinkingTriggered.current = true
+      }
+      autoMiniTriggered.current = true
     }
-  }, [messages, thinkingEnabled])
+
+    // Turn 5+: upgrade to gpt-5 (only if current model is lower ranked)
+    if (userMessageCount >= 5 && !autoFullTriggered.current) {
+      if (currentRank < MODEL_RANK['gpt-5']) {
+        setSelectedModel('gpt-5')
+      }
+      autoFullTriggered.current = true
+    }
+  }, [messages, studyLearnEnabled, selectedModel, setSelectedModel])
+
+  // Cleanup audio on unmount
+  useEffect(() => {
+    return () => {
+      if (audioRef.current) {
+        audioRef.current.pause()
+        audioRef.current = null
+      }
+      if (audioBlobUrlRef.current) {
+        URL.revokeObjectURL(audioBlobUrlRef.current)
+        audioBlobUrlRef.current = null
+      }
+    }
+  }, [])
+
+  // Cleanup dictate on unmount
+  useEffect(() => {
+    return () => {
+      if (mediaRecorderRef.current?.state === 'recording') {
+        mediaRecorderRef.current.stop()
+      }
+      recordingStreamRef.current?.getTracks().forEach(t => t.stop())
+    }
+  }, [])
 
   const loadConversations = async () => {
     try {
@@ -615,6 +725,200 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     }
   }
 
+  const handleReadAloud = async (message: Message) => {
+    // Toggle off if already playing this message
+    if (playingMessageId === message.id) {
+      if (audioRef.current) {
+        audioRef.current.pause()
+      }
+      setPlayingMessageId(null)
+      if (audioBlobUrlRef.current) {
+        URL.revokeObjectURL(audioBlobUrlRef.current)
+        audioBlobUrlRef.current = null
+      }
+      return
+    }
+
+    // Abort any in-flight TTS request to prevent race conditions
+    if (ttsAbortControllerRef.current) {
+      ttsAbortControllerRef.current.abort()
+    }
+
+    // Stop any currently playing audio
+    if (audioRef.current) {
+      audioRef.current.pause()
+    }
+    if (audioBlobUrlRef.current) {
+      URL.revokeObjectURL(audioBlobUrlRef.current)
+      audioBlobUrlRef.current = null
+    }
+
+    // Strip markdown from content for TTS
+    let plainText = message.content
+      .replace(/\*\*([^*]+)\*\*/g, '$1')  // Remove bold **text**
+      .replace(/\*([^*]+)\*/g, '$1')      // Remove italic *text*
+      .replace(/_([^_]+)_/g, '$1')        // Remove italic _text_
+      .replace(/#{1,6}\s+/g, '')          // Remove headings #
+      .replace(/`([^`]+)`/g, '$1')        // Remove inline code `code`
+      .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')  // Remove links [text](url) -> text
+      .trim()
+
+    setLoadingTtsId(message.id)
+
+    // Create new AbortController for this request
+    const abortController = new AbortController()
+    ttsAbortControllerRef.current = abortController
+
+    try {
+      const response = await fetch('/api/tts', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Session-ID': sessionId,
+          ...(apiKey ? { 'X-API-Key': apiKey } : {})
+        },
+        body: JSON.stringify({
+          text: plainText,
+          voice: ttsVoice
+        }),
+        signal: abortController.signal
+      })
+
+      if (!response.ok) {
+        throw new Error(`TTS request failed: ${response.status}`)
+      }
+
+      const blob = await response.blob()
+
+      const url = URL.createObjectURL(blob)
+      audioBlobUrlRef.current = url
+
+      const audio = new Audio(url)
+      audioRef.current = audio
+
+      audio.onended = () => {
+        setPlayingMessageId(null)
+        if (audioBlobUrlRef.current) {
+          URL.revokeObjectURL(audioBlobUrlRef.current)
+          audioBlobUrlRef.current = null
+        }
+      }
+
+      audio.onerror = () => {
+        setPlayingMessageId(null)
+        if (audioBlobUrlRef.current) {
+          URL.revokeObjectURL(audioBlobUrlRef.current)
+          audioBlobUrlRef.current = null
+        }
+        console.error('Audio playback error')
+      }
+
+      // Set loading state cleared, wait for play to succeed before showing "playing"
+      setLoadingTtsId(null)
+
+      try {
+        await audio.play()
+        setPlayingMessageId(message.id)  // Only set AFTER play succeeds
+      } catch (playError) {
+        // Clean up if play failed — reset state and revoke URL
+        setPlayingMessageId(null)
+        if (audioBlobUrlRef.current) {
+          URL.revokeObjectURL(audioBlobUrlRef.current)
+          audioBlobUrlRef.current = null
+        }
+        console.error('Audio playback failed:', playError)
+      }
+
+    } catch (error) {
+      // Ignore aborted requests
+      if (error instanceof Error && error.name === 'AbortError') {
+        return
+      }
+      console.error('TTS error:', error)
+      setLoadingTtsId(null)
+      // Could show error message to user here if needed
+    }
+  }
+
+  const handleDictate = async () => {
+    // If currently recording, stop
+    if (isRecording) {
+      // Set isTranscribing immediately to prevent race condition
+      setIsTranscribing(true)
+      setIsRecording(false)
+
+      if (mediaRecorderRef.current?.state === 'recording') {
+        mediaRecorderRef.current.stop()
+      }
+      recordingStreamRef.current?.getTracks().forEach(t => t.stop())
+      return
+    }
+
+    // Start recording
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      recordingStreamRef.current = stream
+
+      // Determine MIME type
+      let mimeType = ''
+      if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
+        mimeType = 'audio/webm;codecs=opus'
+      } else if (MediaRecorder.isTypeSupported('audio/mp4')) {
+        mimeType = 'audio/mp4'
+      }
+
+      const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : {})
+      recordingChunksRef.current = []
+
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) {
+          recordingChunksRef.current.push(e.data)
+        }
+      }
+
+      recorder.onstop = async () => {
+        // isTranscribing is already set to true when stop() was called
+        try {
+          const audioBlob = new Blob(recordingChunksRef.current, { type: recorder.mimeType || 'audio/webm' })
+          const ext = recorder.mimeType?.includes('mp4') ? 'mp4' : 'webm'
+          const formData = new FormData()
+          formData.append('audio', audioBlob, `recording.${ext}`)
+
+          const response = await fetch('/api/transcribe', {
+            method: 'POST',
+            headers: {
+              'X-Session-ID': sessionId,
+              ...(apiKey ? { 'X-API-Key': apiKey } : {})
+            },
+            body: formData,
+          })
+
+          if (!response.ok) throw new Error('Transcription failed')
+
+          const data = await response.json()
+          if (data.text) {
+            setInputMessage(prev => prev ? `${prev} ${data.text}` : data.text)
+          }
+        } catch (err) {
+          console.error('Transcription error:', err)
+          setImageError('Transcription failed. Please try again.')
+          setTimeout(() => setImageError(null), 3000)
+        } finally {
+          setIsTranscribing(false)
+          recordingChunksRef.current = []
+        }
+      }
+
+      mediaRecorderRef.current = recorder
+      recorder.start()
+      setIsRecording(true)
+    } catch (error) {
+      console.error('Microphone access error:', error)
+      setImageError('Microphone access denied. Please allow microphone access.')
+      setTimeout(() => setImageError(null), 3000)
+    }
+  }
+
   const handleSubmit = async (e: React.FormEvent, messageContent?: string) => {
     e.preventDefault()
     const messageToSubmit = messageContent || inputMessage
@@ -681,7 +985,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         // New optional fields for ChatGPT-style features (backend will ignore for now)
         web_search: webSearchEnabled,
         ...(thinkingEnabled ? {
-          reasoning: { effort: "medium", summary: "auto" }
+          reasoning: { effort: thinkingEffort, summary: "auto" }
         } : {}),
         ...(webSearchEnabled ? {
           include: ['web_search_call.action.sources']
@@ -931,6 +1235,16 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     setDocumentSuggestedQuestions([])
     setDocumentSummary(null)
     autoThinkingTriggered.current = false
+    autoMiniTriggered.current = false
+    autoFullTriggered.current = false
+    slLastSetModel.current = ''
+    setThinkingEffort('medium')
+
+    // Reset model and thinking when Study & Learn is enabled
+    if (studyLearnEnabled) {
+      setSelectedModel('gpt-5-nano')
+      setThinkingEnabled(false)
+    }
   }
 
   const startNewConversation = () => {
@@ -1182,6 +1496,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         isWhitelisted={isWhitelisted}
         freeTurnsRemaining={freeTurnsRemaining}
         hasFreeTurns={hasFreeTurns}
+        ttsVoice={ttsVoice}
+        setTtsVoice={setTtsVoice}
+        sessionId={sessionId}
       />
 
       {/* Backdrop for mobile sidebar */}
@@ -1359,17 +1676,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                       {message.role === 'user' ? 'You' : 'Assistant'}
                     </div>
 
-                    {/* Thinking block - collapsible */}
+                    {/* Thinking block - collapsible with preview */}
                     {message.role === 'assistant' && message.thinking && (
-                      <details className="thinking-block">
-                        <summary className="thinking-header">
-                          <Brain size={16} />
-                          <span>Thinking</span>
-                        </summary>
-                        <div className="thinking-content">
-                          <MarkdownRenderer content={message.thinking} />
-                        </div>
-                      </details>
+                      <ThinkingBlock content={message.thinking} />
                     )}
 
                     <div className="message-content">
@@ -1381,6 +1690,31 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                         </div>
                       ) : renderMessageContent(message)}
                     </div>
+
+                    {/* Read Aloud button for assistant messages */}
+                    {message.role === 'assistant' &&
+                     message.content &&
+                     !isLoading &&
+                     (hasOwnApiKey || isWhitelisted) && (
+                      <div className="message-actions">
+                        <button
+                          className={`read-aloud-btn ${playingMessageId === message.id ? 'playing' : ''}`}
+                          onClick={() => handleReadAloud(message)}
+                          disabled={loadingTtsId === message.id}
+                          title={playingMessageId === message.id ? 'Stop' : 'Read aloud'}
+                          aria-label={playingMessageId === message.id ? 'Stop reading' : 'Read aloud'}
+                        >
+                          {loadingTtsId === message.id ? (
+                            <div className="tts-spinner" />
+                          ) : playingMessageId === message.id ? (
+                            <Square size={14} />
+                          ) : (
+                            <Volume2 size={14} />
+                          )}
+                        </button>
+                      </div>
+                    )}
+
                     <div className="message-timestamp">
                       {message.timestamp.toLocaleTimeString()}
                     </div>
@@ -1453,64 +1787,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         )}
 
         <form onSubmit={handleSubmit} className="input-form">
-          {/* Active feature pills */}
-          {(webSearchEnabled || studyLearnEnabled || topicExplorerEnabled || thinkingEnabled) && (
-            <div className="active-features-pills">
-              {webSearchEnabled && (
-                <div className="feature-pill">
-                  <Search size={14} />
-                  <span>Web Search</span>
-                  <button
-                    type="button"
-                    onClick={() => setWebSearchEnabled(false)}
-                    className="pill-remove"
-                  >
-                    <X size={12} />
-                  </button>
-                </div>
-              )}
-              {studyLearnEnabled && (
-                <div className="feature-pill">
-                  <BookOpen size={14} />
-                  <span>Study & Learn</span>
-                  <button
-                    type="button"
-                    onClick={() => setStudyLearnEnabled(false)}
-                    className="pill-remove"
-                  >
-                    <X size={12} />
-                  </button>
-                </div>
-              )}
-              {topicExplorerEnabled && (
-                <div className="feature-pill">
-                  <Compass size={14} />
-                  <span>Topic Explorer</span>
-                  <button
-                    type="button"
-                    onClick={() => setTopicExplorerEnabled(false)}
-                    className="pill-remove"
-                  >
-                    <X size={12} />
-                  </button>
-                </div>
-              )}
-              {thinkingEnabled && (
-                <div className="feature-pill">
-                  <Brain size={14} />
-                  <span>Thinking</span>
-                  <button
-                    type="button"
-                    onClick={() => setThinkingEnabled(false)}
-                    className="pill-remove"
-                  >
-                    <X size={12} />
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
-          {/* Image preview */}
+          {/* Image preview stays ABOVE the box */}
           {attachedImage && (
             <div className="image-preview-container">
               <div className="image-preview">
@@ -1534,87 +1811,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             onDragOver={handleImageDragOver}
             onDragLeave={handleImageDragLeave}
           >
-            {/* Context menu button */}
-            <div className="context-menu-wrapper" ref={contextMenuRef}>
-              <button
-                type="button"
-                className="context-menu-button"
-                onClick={() => setShowContextMenu(!showContextMenu)}
-                disabled={isLoading || (!isWhitelisted && !hasOwnApiKey && !hasFreeTurns)}
-                title="Add context (or type /)"
-              >
-                <Plus size={20} />
-              </button>
-
-              {/* Context menu popover */}
-              {showContextMenu && (
-                <div className="context-menu-popover">
-                  <button
-                    type="button"
-                    className="context-menu-item"
-                    onClick={() => {
-                      imageInputRef.current?.click()
-                      setShowContextMenu(false)
-                    }}
-                    disabled={selectedProvider !== 'openai' || chatMode !== 'regular' || !!attachedImage}
-                  >
-                    <Image size={16} />
-                    <span>Attach Image</span>
-                  </button>
-                  <button
-                    type="button"
-                    className="context-menu-item"
-                    onClick={() => {
-                      fileInputRef.current?.click()
-                      setShowContextMenu(false)
-                    }}
-                    disabled={isPdfUploading}
-                  >
-                    <Upload size={16} />
-                    <span>Attach Document</span>
-                  </button>
-                  <div className="context-menu-divider" />
-                  <button
-                    type="button"
-                    className={`context-menu-item toggle ${webSearchEnabled ? 'active' : ''}`}
-                    onClick={() => setWebSearchEnabled(!webSearchEnabled)}
-                  >
-                    <Search size={16} />
-                    <span>Web Search</span>
-                    {webSearchEnabled && <span className="checkmark">✓</span>}
-                  </button>
-                  <button
-                    type="button"
-                    className={`context-menu-item toggle ${studyLearnEnabled ? 'active' : ''}`}
-                    onClick={() => setStudyLearnEnabled(!studyLearnEnabled)}
-                  >
-                    <BookOpen size={16} />
-                    <span>Study & Learn</span>
-                    {studyLearnEnabled && <span className="checkmark">✓</span>}
-                  </button>
-                  <button
-                    type="button"
-                    className={`context-menu-item toggle ${topicExplorerEnabled ? 'active' : ''}`}
-                    onClick={() => setTopicExplorerEnabled(!topicExplorerEnabled)}
-                    disabled={hasConversationStarted}
-                  >
-                    <Compass size={16} />
-                    <span>Topic Explorer</span>
-                    {topicExplorerEnabled && <span className="checkmark">✓</span>}
-                  </button>
-                  <button
-                    type="button"
-                    className={`context-menu-item toggle ${thinkingEnabled ? 'active' : ''}`}
-                    onClick={() => setThinkingEnabled(!thinkingEnabled)}
-                  >
-                    <Brain size={16} />
-                    <span>Thinking</span>
-                    {thinkingEnabled && <span className="checkmark">✓</span>}
-                  </button>
-                </div>
-              )}
-            </div>
-
+            {/* TOP ROW: just the textarea */}
             <textarea
               ref={textareaRef}
               autoFocus
@@ -1633,13 +1830,185 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
               disabled={isLoading || (!isWhitelisted && !hasOwnApiKey && !hasFreeTurns)}
               rows={1}
             />
-            <button
-              type="submit"
-              className="send-button"
-              disabled={isLoading || !inputMessage.trim() || (!isWhitelisted && !hasOwnApiKey && !hasFreeTurns)}
-            >
-              <Send size={16} />
-            </button>
+
+            {/* BOTTOM ROW: controls bar */}
+            <div className="input-controls-row">
+              {/* Left: context menu [+] */}
+              <div className="context-menu-wrapper" ref={contextMenuRef}>
+                <button
+                  type="button"
+                  className="context-menu-button"
+                  onClick={() => setShowContextMenu(!showContextMenu)}
+                  disabled={isLoading || (!isWhitelisted && !hasOwnApiKey && !hasFreeTurns)}
+                  title="Add context (or type /)"
+                >
+                  <Plus size={20} />
+                </button>
+
+                {/* Context menu popover */}
+                {showContextMenu && (
+                  <div className="context-menu-popover">
+                    <button
+                      type="button"
+                      className="context-menu-item"
+                      onClick={() => {
+                        imageInputRef.current?.click()
+                        setShowContextMenu(false)
+                      }}
+                      disabled={selectedProvider !== 'openai' || chatMode !== 'regular' || !!attachedImage}
+                    >
+                      <Image size={16} />
+                      <span>Attach Image</span>
+                    </button>
+                    <button
+                      type="button"
+                      className={`context-menu-item${documentSummary ? ' toggle active' : ''}`}
+                      onClick={() => {
+                        fileInputRef.current?.click()
+                        setShowContextMenu(false)
+                      }}
+                      disabled={isPdfUploading}
+                      title={documentSummary ? "Document loaded — RAG mode active. Upload another to replace." : "Attach a document to enable RAG mode"}
+                    >
+                      <Upload size={16} />
+                      <span>Attach Document</span>
+                      {documentSummary && <span className="checkmark">✓</span>}
+                    </button>
+                    <div className="context-menu-divider" />
+                    <button
+                      type="button"
+                      className={`context-menu-item toggle ${webSearchEnabled ? 'active' : ''}`}
+                      onClick={() => setWebSearchEnabled(!webSearchEnabled)}
+                    >
+                      <Search size={16} />
+                      <span>Web Search</span>
+                      {webSearchEnabled && <span className="checkmark">✓</span>}
+                    </button>
+                    <button
+                      type="button"
+                      className={`context-menu-item toggle ${studyLearnEnabled ? 'active' : ''}`}
+                      onClick={() => setStudyLearnEnabled(!studyLearnEnabled)}
+                    >
+                      <BookOpen size={16} />
+                      <span>Study & Learn</span>
+                      {studyLearnEnabled && <span className="checkmark">✓</span>}
+                    </button>
+                    <button
+                      type="button"
+                      className={`context-menu-item toggle ${topicExplorerEnabled ? 'active' : ''}`}
+                      onClick={() => setTopicExplorerEnabled(!topicExplorerEnabled)}
+                      disabled={hasConversationStarted}
+                      title={hasConversationStarted ? "Topic Explorer can only be enabled at the start of a new conversation" : "Enable Topic Explorer for interactive document learning"}
+                    >
+                      <Compass size={16} />
+                      <span>Topic Explorer</span>
+                      {topicExplorerEnabled && <span className="checkmark">✓</span>}
+                    </button>
+                    <button
+                      type="button"
+                      className={`context-menu-item toggle ${thinkingEnabled ? 'active' : ''}`}
+                      onClick={() => {
+                        setThinkingEnabled(!thinkingEnabled)
+                        if (thinkingEnabled) {
+                          setThinkingEffort('medium')
+                        }
+                      }}
+                    >
+                      <Brain size={16} />
+                      <span>Thinking</span>
+                      {thinkingEnabled && <span className="checkmark">✓</span>}
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Active feature chips - now inline in the controls row */}
+              {webSearchEnabled && (
+                <button
+                  type="button"
+                  className="input-chip active"
+                  onClick={() => setWebSearchEnabled(false)}
+                >
+                  <Search size={13} />
+                  <span>Web Search</span>
+                  <X size={11} />
+                </button>
+              )}
+              {studyLearnEnabled && (
+                <button
+                  type="button"
+                  className="input-chip active"
+                  onClick={() => setStudyLearnEnabled(false)}
+                >
+                  <BookOpen size={13} />
+                  <span>Study & Learn</span>
+                  <X size={11} />
+                </button>
+              )}
+              {topicExplorerEnabled && (
+                <button
+                  type="button"
+                  className="input-chip active"
+                  onClick={() => setTopicExplorerEnabled(false)}
+                >
+                  <Compass size={13} />
+                  <span>Topic Explorer</span>
+                  <X size={11} />
+                </button>
+              )}
+              {thinkingEnabled && (
+                <button
+                  type="button"
+                  className="input-chip active"
+                  onClick={() => {
+                    setThinkingEnabled(false)
+                    setThinkingEffort('medium')
+                  }}
+                >
+                  <Brain size={13} />
+                  <span>Thinking{thinkingEffort === 'high' ? ' (high)' : ''}</span>
+                  <X size={11} />
+                </button>
+              )}
+              {chatMode === 'rag' && (
+                <div className="input-chip active rag-chip">
+                  <Upload size={13} />
+                  <span>RAG Mode</span>
+                </div>
+              )}
+
+              {/* Spacer pushes right-side buttons to the end */}
+              <div style={{ flex: 1 }} />
+
+              {/* Right: mic + send */}
+              {(hasOwnApiKey || isWhitelisted) && (
+                <button
+                  type="button"
+                  className={`dictate-btn ${isRecording ? 'recording' : ''}`}
+                  onClick={handleDictate}
+                  disabled={isLoading || isTranscribing || (!isWhitelisted && !hasOwnApiKey && !hasFreeTurns)}
+                  title={isRecording ? 'Stop recording' : isTranscribing ? 'Transcribing...' : 'Dictate'}
+                  aria-label={isRecording ? 'Stop dictation' : 'Start dictation'}
+                >
+                  {isTranscribing ? (
+                    <div className="dictate-spinner" />
+                  ) : isRecording ? (
+                    <MicOff size={16} />
+                  ) : (
+                    <Mic size={16} />
+                  )}
+                </button>
+              )}
+              <button
+                type="submit"
+                className="send-button"
+                disabled={isLoading || !inputMessage.trim() || (!isWhitelisted && !hasOwnApiKey && !hasFreeTurns)}
+              >
+                <Send size={16} />
+              </button>
+            </div>
+
+            {/* Hidden file inputs - keep as-is */}
             <input
               ref={fileInputRef}
               type="file"
