@@ -93,6 +93,7 @@ function App() {
 
   // Handle provider changes
   const handleProviderChange = async (newProvider: string) => {
+    if (newProvider === selectedProvider) return  // No-op: provider hasn't changed, don't reset model
     setSelectedProvider(newProvider)
     // Set default model based on provider
     if (newProvider === 'together') {
