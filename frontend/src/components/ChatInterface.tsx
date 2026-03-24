@@ -784,21 +784,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         signal: abortController.signal
       })
 
-      // Check if this request was aborted or superseded
-      if (loadingTtsId !== message.id) {
-        return
-      }
-
       if (!response.ok) {
         throw new Error(`TTS request failed: ${response.status}`)
       }
 
       const blob = await response.blob()
-
-      // Check again after async operation
-      if (loadingTtsId !== message.id) {
-        return
-      }
 
       const url = URL.createObjectURL(blob)
       audioBlobUrlRef.current = url
