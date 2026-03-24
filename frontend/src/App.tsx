@@ -9,7 +9,7 @@ function App() {
   const [openaiApiKey, setOpenaiApiKey] = useState<string>('')
   const [togetherApiKey, setTogetherApiKey] = useState<string>('')
   const [theme, setTheme] = useState<'light' | 'dark'>('light')
-  const [selectedModel, setSelectedModel] = useState<string>('gpt-5')
+  const [selectedModel, setSelectedModel] = useState<string>('gpt-5-nano')
   const [selectedProvider, setSelectedProvider] = useState<string>('openai')
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [settingsModalOpen, setSettingsModalOpen] = useState(false)

@@ -243,6 +243,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const containerRef = useRef<HTMLDivElement>(null)
   const contextMenuRef = useRef<HTMLDivElement>(null)
   const autoThinkingTriggered = useRef(false)
+  const autoMiniTriggered = useRef(false)       // new
+  const autoFullTriggered = useRef(false)       // new
+  const slLastSetModel = useRef<string>('')     // tracks what SL system last set
 
 
   // Filter available models based on chat mode and provider
@@ -415,12 +418,17 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     }
   }, [topicExplorerEnabled, documentSummary, studyLearnEnabled])
 
-  // Auto-switch to GPT-5 when Study & Learn is enabled
+  // Auto-switch to gpt-5-nano when Study & Learn is enabled, then upgrade progressively
   useEffect(() => {
     if (studyLearnEnabled) {
-      setSelectedModel('gpt-5')
+      slLastSetModel.current = 'gpt-5-nano'
+      setSelectedModel('gpt-5-nano')
       setSelectedProvider('openai')
       setStudyLearnOverride(true)
+      // Reset progression refs when re-enabling
+      autoThinkingTriggered.current = false
+      autoMiniTriggered.current = false
+      autoFullTriggered.current = false
     } else {
       setStudyLearnOverride(false)
     }
@@ -462,15 +470,34 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     }
   }, [apiKey, showApiKeySuccess])
 
-  // Auto-enable Thinking after 3 user messages (only when Study & Learn is enabled)
+  // Progressive model upgrades for Study & Learn
   useEffect(() => {
+    if (!studyLearnEnabled) return
+
     const userMessageCount = messages.filter(m => m.role === 'user').length
-    if (studyLearnEnabled && userMessageCount >= 3 && !thinkingEnabled && !autoThinkingTriggered.current) {
-      setThinkingEnabled(true)
-      setThinkingEffort('high')
-      autoThinkingTriggered.current = true
+
+    // Detect if user manually changed the model (stop auto-upgrades if so)
+    const userOverrode = slLastSetModel.current && selectedModel !== slLastSetModel.current
+
+    // Turn 3+: upgrade to gpt-5-mini + enable thinking high
+    if (userMessageCount >= 3 && !autoMiniTriggered.current && !userOverrode) {
+      slLastSetModel.current = 'gpt-5-mini'
+      setSelectedModel('gpt-5-mini')
+      if (!autoThinkingTriggered.current) {
+        setThinkingEnabled(true)
+        setThinkingEffort('high')
+        autoThinkingTriggered.current = true
+      }
+      autoMiniTriggered.current = true
     }
-  }, [messages, thinkingEnabled, studyLearnEnabled])
+
+    // Turn 6+: upgrade to gpt-5
+    if (userMessageCount >= 6 && !autoFullTriggered.current && !userOverrode) {
+      slLastSetModel.current = 'gpt-5'
+      setSelectedModel('gpt-5')
+      autoFullTriggered.current = true
+    }
+  }, [messages, studyLearnEnabled, selectedModel, setSelectedModel])
 
   // Cleanup audio on unmount
   useEffect(() => {
@@ -1163,6 +1190,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     setDocumentSuggestedQuestions([])
     setDocumentSummary(null)
     autoThinkingTriggered.current = false
+    autoMiniTriggered.current = false    // add this
+    autoFullTriggered.current = false    // add this
+    slLastSetModel.current = ''          // add this
     setThinkingEffort('medium')
   }
 
