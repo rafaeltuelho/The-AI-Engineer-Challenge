@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react'
-import { Send, MessageSquare, User, Bot, Trash2, Settings, ArrowDown, X, FileText, Upload, Compass, Image, Plus, Search, BookOpen, Brain, Volume2, Square } from 'lucide-react'
+import { Send, MessageSquare, User, Bot, Trash2, Settings, ArrowDown, X, FileText, Upload, Compass, Image, Plus, Search, BookOpen, Brain, Volume2, Square, Mic, MicOff } from 'lucide-react'
 import MarkdownRenderer from './MarkdownRenderer'
 import SuggestedQuestions from './SuggestedQuestions'
 import SettingsModal from './SettingsModal'
@@ -192,6 +192,13 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const [loadingTtsId, setLoadingTtsId] = useState<string | null>(null)
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const audioBlobUrlRef = useRef<string | null>(null)
+
+  // Dictate state
+  const [isRecording, setIsRecording] = useState(false)
+  const [isTranscribing, setIsTranscribing] = useState(false)
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
+  const recordingChunksRef = useRef<Blob[]>([])
+  const recordingStreamRef = useRef<MediaStream | null>(null)
 
   const fileInputRef = useRef<HTMLInputElement>(null)
   const imageInputRef = useRef<HTMLInputElement>(null)
@@ -437,6 +444,14 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         URL.revokeObjectURL(audioBlobUrlRef.current)
         audioBlobUrlRef.current = null
       }
+    }
+  }, [])
+
+  // Cleanup dictate on unmount
+  useEffect(() => {
+    return () => {
+      mediaRecorderRef.current?.stop()
+      recordingStreamRef.current?.getTracks().forEach(t => t.stop())
     }
   }, [])
 
@@ -719,6 +734,77 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       console.error('TTS error:', error)
       setLoadingTtsId(null)
       // Could show error message to user here if needed
+    }
+  }
+
+  const handleDictate = async () => {
+    // If currently recording, stop
+    if (isRecording) {
+      mediaRecorderRef.current?.stop()
+      recordingStreamRef.current?.getTracks().forEach(t => t.stop())
+      setIsRecording(false)
+      return
+    }
+
+    // Start recording
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      recordingStreamRef.current = stream
+
+      // Determine MIME type
+      let mimeType = ''
+      if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
+        mimeType = 'audio/webm;codecs=opus'
+      } else if (MediaRecorder.isTypeSupported('audio/mp4')) {
+        mimeType = 'audio/mp4'
+      }
+
+      const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : {})
+      recordingChunksRef.current = []
+
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) {
+          recordingChunksRef.current.push(e.data)
+        }
+      }
+
+      recorder.onstop = async () => {
+        setIsTranscribing(true)
+        try {
+          const audioBlob = new Blob(recordingChunksRef.current, { type: recorder.mimeType || 'audio/webm' })
+          const ext = recorder.mimeType?.includes('mp4') ? 'mp4' : 'webm'
+          const formData = new FormData()
+          formData.append('audio', audioBlob, `recording.${ext}`)
+
+          const response = await fetch('/api/transcribe', {
+            method: 'POST',
+            headers: { 'X-Session-ID': sessionId },
+            body: formData,
+          })
+
+          if (!response.ok) throw new Error('Transcription failed')
+
+          const data = await response.json()
+          if (data.text) {
+            setInputMessage(prev => prev ? `${prev} ${data.text}` : data.text)
+          }
+        } catch (err) {
+          console.error('Transcription error:', err)
+          setImageError('Transcription failed. Please try again.')
+          setTimeout(() => setImageError(null), 3000)
+        } finally {
+          setIsTranscribing(false)
+          recordingChunksRef.current = []
+        }
+      }
+
+      mediaRecorderRef.current = recorder
+      recorder.start()
+      setIsRecording(true)
+    } catch (error) {
+      console.error('Microphone access error:', error)
+      setImageError('Microphone access denied. Please allow microphone access.')
+      setTimeout(() => setImageError(null), 3000)
     }
   }
 
@@ -1747,6 +1833,26 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                 </div>
               )}
             </div>
+
+            {/* Dictate button - only show for OpenAI with own API key */}
+            {selectedProvider === 'openai' && hasOwnApiKey && (
+              <button
+                type="button"
+                className={`dictate-btn ${isRecording ? 'recording' : ''}`}
+                onClick={handleDictate}
+                disabled={isLoading || isTranscribing || (!isWhitelisted && !hasOwnApiKey && !hasFreeTurns)}
+                title={isRecording ? 'Stop recording' : isTranscribing ? 'Transcribing...' : 'Dictate'}
+                aria-label={isRecording ? 'Stop dictation' : 'Start dictation'}
+              >
+                {isTranscribing ? (
+                  <div className="dictate-spinner" />
+                ) : isRecording ? (
+                  <MicOff size={16} />
+                ) : (
+                  <Mic size={16} />
+                )}
+              </button>
+            )}
 
             <textarea
               ref={textareaRef}

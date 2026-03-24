@@ -1284,6 +1284,49 @@
   cursor: not-allowed;
 }
 
+.dictate-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.2s, background 0.2s;
+  flex-shrink: 0;
+}
+
+.dictate-btn:hover {
+  color: var(--text-primary);
+  background: var(--bg-tertiary);
+}
+
+.dictate-btn.recording {
+  color: #ef4444;
+  animation: pulse-record 1.2s ease-in-out infinite;
+}
+
+.dictate-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.dictate-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--border-primary);
+  border-top-color: var(--accent-primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes pulse-record {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
 .input-container.dragging-image {
   border-color: var(--accent-primary);
   background: rgba(16, 163, 127, 0.05);
