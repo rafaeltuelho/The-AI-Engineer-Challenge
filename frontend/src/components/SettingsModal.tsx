@@ -87,7 +87,12 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
       const url = URL.createObjectURL(blob)
       const audio = new Audio(url)
       audio.onended = () => URL.revokeObjectURL(url)
-      await audio.play()
+      audio.onerror = () => URL.revokeObjectURL(url)  // Revoke on error too
+      try {
+        await audio.play()
+      } catch {
+        URL.revokeObjectURL(url)  // Revoke if play() throws
+      }
     } catch (e) {
       console.error('Voice preview error:', e)
     } finally {

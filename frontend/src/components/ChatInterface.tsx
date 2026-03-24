@@ -804,9 +804,21 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         console.error('Audio playback error')
       }
 
-      setPlayingMessageId(message.id)
+      // Set loading state cleared, wait for play to succeed before showing "playing"
       setLoadingTtsId(null)
-      await audio.play()
+
+      try {
+        await audio.play()
+        setPlayingMessageId(message.id)  // Only set AFTER play succeeds
+      } catch (playError) {
+        // Clean up if play failed
+        setPlayingMessageId(null)
+        if (audioBlobUrlRef.current) {
+          URL.revokeObjectURL(audioBlobUrlRef.current)
+          audioBlobUrlRef.current = null
+        }
+        console.error('Audio playback failed:', playError)
+      }
 
     } catch (error) {
       console.error('TTS error:', error)

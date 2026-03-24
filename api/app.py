@@ -1248,10 +1248,11 @@ async def text_to_speech(
             raise HTTPException(status_code=401, detail="Invalid or expired session")
 
         # Use user's own OpenAI key if they have one AND are using OpenAI provider
-        if session.get("has_own_api_key") and session.get("api_key") and session.get("provider") == "openai":
+        if session.get("api_key") and session.get("provider") == "openai":
+            # User has provided their own OpenAI key
             api_key = session["api_key"]
         elif SERVER_OPENAI_API_KEY:
-            # Fall back to server-side OpenAI key (for whitelisted users, Together.ai users, free tier)
+            # Fall back to server-side OpenAI key (whitelisted users, Together.ai users, free tier)
             api_key = SERVER_OPENAI_API_KEY
         else:
             raise HTTPException(
@@ -1313,10 +1314,11 @@ async def transcribe_audio(
             raise HTTPException(status_code=401, detail="Invalid or expired session")
 
         # Use user's own OpenAI key if they have one AND are using OpenAI provider
-        if session.get("has_own_api_key") and session.get("api_key") and session.get("provider") == "openai":
+        if session.get("api_key") and session.get("provider") == "openai":
+            # User has provided their own OpenAI key
             api_key = session["api_key"]
         elif SERVER_OPENAI_API_KEY:
-            # Fall back to server-side OpenAI key (for whitelisted users, Together.ai users, free tier)
+            # Fall back to server-side OpenAI key (whitelisted users, Together.ai users, free tier)
             api_key = SERVER_OPENAI_API_KEY
         else:
             raise HTTPException(
