@@ -697,6 +697,42 @@ class AppConfigResponse(BaseModel):
     suggestions: List[str]
     max_image_size_mb: float
 
+class TTSRequest(BaseModel):
+    text: str
+    voice: str = "coral"
+
+    @field_validator('text')
+    @classmethod
+    def validate_text(cls, v):
+        """Validate text content"""
+        if not v or not isinstance(v, str):
+            raise ValueError('Text is required')
+
+        if len(v.strip()) == 0:
+            raise ValueError('Text cannot be empty')
+
+        if len(v) > 4096:
+            raise ValueError('Text is too long (max 4096 characters)')
+
+        return v.strip()
+
+    @field_validator('voice')
+    @classmethod
+    def validate_voice(cls, v):
+        """Validate voice selection"""
+        if not v:
+            return "coral"  # Default voice
+
+        # OpenAI TTS supported voices
+        allowed_voices = ["alloy", "ash", "ballad", "coral", "echo", "sage", "shimmer", "verse"]
+        if v.lower() not in allowed_voices:
+            raise ValueError(f'Invalid voice: {v}. Allowed voices: {", ".join(allowed_voices)}')
+
+        return v.lower()
+
+class TranscribeResponse(BaseModel):
+    text: str
+
 class DocumentUploadResponse(BaseModel):
     document_id: str
     message: str
@@ -1177,6 +1213,144 @@ async def get_app_config(request: Request):
         suggestions=suggestions,
         max_image_size_mb=MAX_IMAGE_SIZE_MB
     )
+
+# Endpoint for text-to-speech
+@app.post(
+    "/api/tts",
+    tags=["Audio"],
+    summary="Convert text to speech",
+    description="Convert text to speech using OpenAI's TTS API. Returns MP3 audio data. Requires OpenAI provider and API key.",
+    responses={
+        200: {"description": "Audio generated successfully", "content": {"audio/mpeg": {}}},
+        400: {"description": "Invalid request (empty text or exceeds 4096 characters)"},
+        401: {"description": "Invalid or expired session"},
+        403: {"description": "Not using OpenAI provider or no OpenAI API key"},
+        429: {"description": "Rate limit exceeded"},
+        500: {"description": "Internal server error"}
+    }
+)
+@limiter.limit("10/minute")
+async def text_to_speech(
+    request: Request,
+    tts_request: TTSRequest,
+    x_session_id: str = Header(..., alias="X-Session-ID", description="Session ID for authentication")
+):
+    try:
+        # Validate session
+        session = get_session(x_session_id)
+        if not session:
+            raise HTTPException(status_code=401, detail="Invalid or expired session")
+
+        # Resolve API key and provider
+        api_key, provider = resolve_api_key(x_session_id, None, None)
+
+        # TTS only works with OpenAI provider
+        if provider != "openai":
+            raise HTTPException(
+                status_code=403,
+                detail="Text-to-speech is only supported with OpenAI provider"
+            )
+
+        # Verify we have an OpenAI API key
+        if not api_key:
+            raise HTTPException(
+                status_code=403,
+                detail="OpenAI API key required for text-to-speech"
+            )
+
+        # Create OpenAI client
+        from openai_helper import create_openai_client
+        client = create_openai_client(api_key, provider)
+
+        # Call OpenAI TTS API
+        response = client.audio.speech.create(
+            model="gpt-4o-mini-tts",
+            voice=tts_request.voice,
+            input=tts_request.text,
+            response_format="mp3"
+        )
+
+        # Get audio bytes
+        audio_bytes = response.content
+
+        # Return binary MP3 response
+        from fastapi.responses import Response
+        return Response(content=audio_bytes, media_type="audio/mpeg")
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error in text-to-speech: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error generating speech: {str(e)}")
+
+# Endpoint for speech-to-text transcription
+@app.post(
+    "/api/transcribe",
+    response_model=TranscribeResponse,
+    tags=["Audio"],
+    summary="Transcribe audio to text",
+    description="Transcribe audio to text using OpenAI's Whisper API. Accepts audio file upload. Requires OpenAI API key.",
+    responses={
+        200: {"description": "Audio transcribed successfully"},
+        400: {"description": "Invalid request (no file or unsupported format)"},
+        401: {"description": "Invalid or expired session"},
+        403: {"description": "No OpenAI API key available"},
+        429: {"description": "Rate limit exceeded"},
+        500: {"description": "Internal server error"}
+    }
+)
+@limiter.limit("10/minute")
+async def transcribe_audio(
+    request: Request,
+    audio: UploadFile = File(..., description="Audio file to transcribe"),
+    x_session_id: str = Header(..., alias="X-Session-ID", description="Session ID for authentication")
+):
+    try:
+        # Validate session
+        session = get_session(x_session_id)
+        if not session:
+            raise HTTPException(status_code=401, detail="Invalid or expired session")
+
+        # Resolve API key and provider
+        api_key, provider = resolve_api_key(x_session_id, None, None)
+
+        # Verify we have an OpenAI API key (transcription works with OpenAI)
+        if not api_key:
+            raise HTTPException(
+                status_code=403,
+                detail="OpenAI API key required for transcription"
+            )
+
+        # Validate file was provided
+        if not audio.filename:
+            raise HTTPException(status_code=400, detail="No audio file provided")
+
+        # Read file content
+        file_bytes = await audio.read()
+
+        # Validate file is not empty
+        if len(file_bytes) == 0:
+            raise HTTPException(status_code=400, detail="Audio file is empty")
+
+        # Create OpenAI client
+        from openai_helper import create_openai_client
+        client = create_openai_client(api_key, "openai")
+
+        # Call OpenAI Whisper API for transcription
+        # The API expects a tuple of (filename, file_bytes, content_type)
+        transcription = client.audio.transcriptions.create(
+            model="gpt-4o-transcribe",
+            file=(audio.filename, file_bytes, audio.content_type)
+        )
+
+        # Return transcribed text
+        return TranscribeResponse(text=transcription.text)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error in transcription: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error transcribing audio: {str(e)}")
 
 # Define the main chat endpoint that handles POST requests
 @app.post(
