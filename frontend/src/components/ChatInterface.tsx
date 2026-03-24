@@ -186,6 +186,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const [studyLearnEnabled, setStudyLearnEnabled] = useState(true)
   const [topicExplorerEnabled, setTopicExplorerEnabled] = useState(false)
   const [thinkingEnabled, setThinkingEnabled] = useState(false)
+  const [thinkingEffort, setThinkingEffort] = useState<'medium' | 'high'>('medium')
 
   // TTS state
   const [playingMessageId, setPlayingMessageId] = useState<string | null>(null)
@@ -424,14 +425,15 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     }
   }, [apiKey, showApiKeySuccess])
 
-  // Auto-enable Thinking after 3 user messages
+  // Auto-enable Thinking after 3 user messages (only when Study & Learn is enabled)
   useEffect(() => {
     const userMessageCount = messages.filter(m => m.role === 'user').length
-    if (userMessageCount >= 3 && !thinkingEnabled && !autoThinkingTriggered.current) {
+    if (studyLearnEnabled && userMessageCount >= 3 && !thinkingEnabled && !autoThinkingTriggered.current) {
       setThinkingEnabled(true)
+      setThinkingEffort('high')
       autoThinkingTriggered.current = true
     }
-  }, [messages, thinkingEnabled])
+  }, [messages, thinkingEnabled, studyLearnEnabled])
 
   // Cleanup audio on unmount
   useEffect(() => {
@@ -874,7 +876,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         // New optional fields for ChatGPT-style features (backend will ignore for now)
         web_search: webSearchEnabled,
         ...(thinkingEnabled ? {
-          reasoning: { effort: "medium", summary: "auto" }
+          reasoning: { effort: thinkingEffort, summary: "auto" }
         } : {}),
         ...(webSearchEnabled ? {
           include: ['web_search_call.action.sources']
@@ -1124,6 +1126,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     setDocumentSuggestedQuestions([])
     setDocumentSummary(null)
     autoThinkingTriggered.current = false
+    setThinkingEffort('medium')
   }
 
   const startNewConversation = () => {
@@ -1717,10 +1720,13 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
               {thinkingEnabled && (
                 <div className="feature-pill">
                   <Brain size={14} />
-                  <span>Thinking</span>
+                  <span>Thinking{thinkingEffort === 'high' ? ' (high)' : ''}</span>
                   <button
                     type="button"
-                    onClick={() => setThinkingEnabled(false)}
+                    onClick={() => {
+                      setThinkingEnabled(false)
+                      setThinkingEffort('medium')
+                    }}
                     className="pill-remove"
                   >
                     <X size={12} />
@@ -1824,7 +1830,12 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                   <button
                     type="button"
                     className={`context-menu-item toggle ${thinkingEnabled ? 'active' : ''}`}
-                    onClick={() => setThinkingEnabled(!thinkingEnabled)}
+                    onClick={() => {
+                      setThinkingEnabled(!thinkingEnabled)
+                      if (thinkingEnabled) {
+                        setThinkingEffort('medium')
+                      }
+                    }}
                   >
                     <Brain size={16} />
                     <span>Thinking</span>
