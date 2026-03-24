@@ -1830,15 +1830,17 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                     </button>
                     <button
                       type="button"
-                      className="context-menu-item"
+                      className={`context-menu-item${documentSummary ? ' toggle active' : ''}`}
                       onClick={() => {
                         fileInputRef.current?.click()
                         setShowContextMenu(false)
                       }}
                       disabled={isPdfUploading}
+                      title={documentSummary ? "Document loaded — RAG mode active. Upload another to replace." : "Attach a document to enable RAG mode"}
                     >
                       <Upload size={16} />
                       <span>Attach Document</span>
+                      {documentSummary && <span className="checkmark">✓</span>}
                     </button>
                     <div className="context-menu-divider" />
                     <button
@@ -1864,6 +1866,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                       className={`context-menu-item toggle ${topicExplorerEnabled ? 'active' : ''}`}
                       onClick={() => setTopicExplorerEnabled(!topicExplorerEnabled)}
                       disabled={hasConversationStarted}
+                      title={hasConversationStarted ? "Topic Explorer can only be enabled at the start of a new conversation" : "Enable Topic Explorer for interactive document learning"}
                     >
                       <Compass size={16} />
                       <span>Topic Explorer</span>
@@ -1934,6 +1937,12 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                   <span>Thinking{thinkingEffort === 'high' ? ' (high)' : ''}</span>
                   <X size={11} />
                 </button>
+              )}
+              {chatMode === 'rag' && (
+                <div className="input-chip active rag-chip">
+                  <Upload size={13} />
+                  <span>RAG Mode</span>
+                </div>
               )}
 
               {/* Spacer pushes right-side buttons to the end */}
