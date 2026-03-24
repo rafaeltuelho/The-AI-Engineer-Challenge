@@ -1236,31 +1236,26 @@ async def text_to_speech(
     x_session_id: str = Header(..., alias="X-Session-ID", description="Session ID for authentication")
 ):
     try:
-        # Validate session
+        # For audio features, we always need the OpenAI API key specifically
         session = get_session(x_session_id)
         if not session:
             raise HTTPException(status_code=401, detail="Invalid or expired session")
 
-        # Resolve API key and provider
-        api_key, provider = resolve_api_key(x_session_id, None, None)
-
-        # TTS only works with OpenAI provider
-        if provider != "openai":
+        # Use user's own OpenAI key if they have one AND are using OpenAI provider
+        if session.get("has_own_api_key") and session.get("api_key") and session.get("provider") == "openai":
+            api_key = session["api_key"]
+        elif SERVER_OPENAI_API_KEY:
+            # Fall back to server-side OpenAI key (for whitelisted users, Together.ai users, free tier)
+            api_key = SERVER_OPENAI_API_KEY
+        else:
             raise HTTPException(
                 status_code=403,
-                detail="Text-to-speech is only supported with OpenAI provider"
-            )
-
-        # Verify we have an OpenAI API key
-        if not api_key:
-            raise HTTPException(
-                status_code=403,
-                detail="OpenAI API key required for text-to-speech"
+                detail="OpenAI API key not available. Audio features require an OpenAI key."
             )
 
         # Create OpenAI client
         from openai_helper import create_openai_client
-        client = create_openai_client(api_key, provider)
+        client = create_openai_client(api_key, "openai")
 
         # Call OpenAI TTS API
         response = client.audio.speech.create(
@@ -1306,24 +1301,22 @@ async def transcribe_audio(
     x_session_id: str = Header(..., alias="X-Session-ID", description="Session ID for authentication")
 ):
     try:
-        # Validate session
+        # For audio features, we always need the OpenAI API key specifically
         session = get_session(x_session_id)
         if not session:
             raise HTTPException(status_code=401, detail="Invalid or expired session")
 
-        # Resolve API key and provider
-        api_key, provider = resolve_api_key(x_session_id, None, None)
-
-        # Verify we have an OpenAI API key (transcription works with OpenAI)
-        if not api_key:
+        # Use user's own OpenAI key if they have one AND are using OpenAI provider
+        if session.get("has_own_api_key") and session.get("api_key") and session.get("provider") == "openai":
+            api_key = session["api_key"]
+        elif SERVER_OPENAI_API_KEY:
+            # Fall back to server-side OpenAI key (for whitelisted users, Together.ai users, free tier)
+            api_key = SERVER_OPENAI_API_KEY
+        else:
             raise HTTPException(
                 status_code=403,
-                detail="OpenAI API key required for transcription"
+                detail="OpenAI API key not available. Audio features require an OpenAI key."
             )
-
-        # Validate file was provided
-        if not audio.filename:
-            raise HTTPException(status_code=400, detail="No audio file provided")
 
         # Read file content
         file_bytes = await audio.read()
@@ -1338,10 +1331,23 @@ async def transcribe_audio(
 
         # Call OpenAI Whisper API for transcription
         # The API expects a tuple of (filename, file_bytes, content_type)
-        transcription = client.audio.transcriptions.create(
-            model="gpt-4o-transcribe",
-            file=(audio.filename, file_bytes, audio.content_type)
-        )
+        # Browser MediaRecorder Blobs often have None or empty filename, so provide fallback
+        filename = audio.filename or "audio.webm"
+
+        # Try gpt-4o-transcribe first, fall back to whisper-1 if not available
+        try:
+            transcription = client.audio.transcriptions.create(
+                model="gpt-4o-transcribe",
+                file=(filename, file_bytes, audio.content_type or "audio/webm")
+            )
+        except Exception as model_error:
+            if "model" in str(model_error).lower() or "not found" in str(model_error).lower():
+                transcription = client.audio.transcriptions.create(
+                    model="whisper-1",
+                    file=(filename, file_bytes, audio.content_type or "audio/webm")
+                )
+            else:
+                raise
 
         # Return transcribed text
         return TranscribeResponse(text=transcription.text)
