@@ -432,7 +432,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     } else {
       setStudyLearnOverride(false)
     }
-  }, [studyLearnEnabled, setSelectedModel, setSelectedProvider, setStudyLearnOverride])
+  }, [studyLearnEnabled]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Detect mobile viewport
   useEffect(() => {

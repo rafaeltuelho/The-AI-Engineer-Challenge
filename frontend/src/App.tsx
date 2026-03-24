@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import ChatInterface from './components/ChatInterface'
 import Header from './components/Header'
 import { useAuth } from './contexts/AuthContext'
@@ -92,7 +92,7 @@ function App() {
   }
 
   // Handle provider changes
-  const handleProviderChange = async (newProvider: string) => {
+  const handleProviderChange = useCallback(async (newProvider: string) => {
     if (newProvider === selectedProvider) return  // No-op: provider hasn't changed, don't reset model
     setSelectedProvider(newProvider)
     // Set default model based on provider
@@ -101,7 +101,7 @@ function App() {
     } else {
       setSelectedModel('gpt-5-nano')
     }
-  }
+  }, [selectedProvider])
 
   const handleThemeChange = (newTheme: 'light' | 'dark') => {
     setTheme(newTheme)
