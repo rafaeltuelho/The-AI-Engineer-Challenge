@@ -470,19 +470,21 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     }
   }, [apiKey, showApiKeySuccess])
 
+  // Model rank for one-directional upgrades (never downgrade)
+  const MODEL_RANK: Record<string, number> = { 'gpt-5-nano': 0, 'gpt-5-mini': 1, 'gpt-5': 2 }
+
   // Progressive model upgrades for Study & Learn
   useEffect(() => {
     if (!studyLearnEnabled) return
 
     const userMessageCount = messages.filter(m => m.role === 'user').length
+    const currentRank = MODEL_RANK[selectedModel] ?? 0
 
-    // Detect if user manually changed the model (stop auto-upgrades if so)
-    const userOverrode = slLastSetModel.current && selectedModel !== slLastSetModel.current
-
-    // Turn 3+: upgrade to gpt-5-mini + enable thinking high
-    if (userMessageCount >= 3 && !autoMiniTriggered.current && !userOverrode) {
-      slLastSetModel.current = 'gpt-5-mini'
-      setSelectedModel('gpt-5-mini')
+    // Turn 3+: upgrade to gpt-5-mini (only if current model is lower ranked)
+    if (userMessageCount >= 3 && !autoMiniTriggered.current) {
+      if (currentRank < MODEL_RANK['gpt-5-mini']) {
+        setSelectedModel('gpt-5-mini')
+      }
       if (!autoThinkingTriggered.current) {
         setThinkingEnabled(true)
         setThinkingEffort('high')
@@ -491,10 +493,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       autoMiniTriggered.current = true
     }
 
-    // Turn 6+: upgrade to gpt-5
-    if (userMessageCount >= 6 && !autoFullTriggered.current && !userOverrode) {
-      slLastSetModel.current = 'gpt-5'
-      setSelectedModel('gpt-5')
+    // Turn 5+: upgrade to gpt-5 (only if current model is lower ranked)
+    if (userMessageCount >= 5 && !autoFullTriggered.current) {
+      if (currentRank < MODEL_RANK['gpt-5']) {
+        setSelectedModel('gpt-5')
+      }
       autoFullTriggered.current = true
     }
   }, [messages, studyLearnEnabled, selectedModel, setSelectedModel])
