@@ -1400,7 +1400,19 @@ async def chat(
                 )
 
         # Debug logging
-        print(f"Received chat request: session_id={session_id[:8]}..., provider={provider}, model={chat_request.model}, user_message_length={len(chat_request.user_message)}")
+        print(
+            f"[Chat Request] "
+            f"session_id={session_id[:8]}... | "
+            f"provider={provider} | "
+            f"model={chat_request.model} | "
+            f"conversation_id={chat_request.conversation_id} | "
+            f"web_search={chat_request.web_search} | "
+            f"reasoning={chat_request.reasoning} | "
+            f"include={chat_request.include} | "
+            f"image_attachment={'yes' if chat_request.image_attachment else 'no'} | "
+            f"developer_message_len={len(chat_request.developer_message)} | "
+            f"user_message_len={len(chat_request.user_message)}"
+        )
 
         # Initialize OpenAI client with the resolved API key and provider
         client_kwargs = {"api_key": api_key}
