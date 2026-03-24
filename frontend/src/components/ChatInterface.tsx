@@ -230,6 +230,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const [loadingTtsId, setLoadingTtsId] = useState<string | null>(null)
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const audioBlobUrlRef = useRef<string | null>(null)
+  const ttsAbortControllerRef = useRef<AbortController | null>(null)
 
   // Dictate state
   const [isRecording, setIsRecording] = useState(false)
@@ -738,6 +739,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       return
     }
 
+    // Abort any in-flight TTS request to prevent race conditions
+    if (ttsAbortControllerRef.current) {
+      ttsAbortControllerRef.current.abort()
+    }
+
     // Stop any currently playing audio
     if (audioRef.current) {
       audioRef.current.pause()
@@ -759,6 +765,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
     setLoadingTtsId(message.id)
 
+    // Create new AbortController for this request
+    const abortController = new AbortController()
+    ttsAbortControllerRef.current = abortController
+
     try {
       const response = await fetch('/api/tts', {
         method: 'POST',
@@ -770,14 +780,26 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         body: JSON.stringify({
           text: plainText,
           voice: ttsVoice
-        })
+        }),
+        signal: abortController.signal
       })
+
+      // Check if this request was aborted or superseded
+      if (loadingTtsId !== message.id) {
+        return
+      }
 
       if (!response.ok) {
         throw new Error(`TTS request failed: ${response.status}`)
       }
 
       const blob = await response.blob()
+
+      // Check again after async operation
+      if (loadingTtsId !== message.id) {
+        return
+      }
+
       const url = URL.createObjectURL(blob)
       audioBlobUrlRef.current = url
 
@@ -818,6 +840,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       }
 
     } catch (error) {
+      // Ignore aborted requests
+      if (error instanceof Error && error.name === 'AbortError') {
+        return
+      }
       console.error('TTS error:', error)
       setLoadingTtsId(null)
       // Could show error message to user here if needed
@@ -1679,7 +1705,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                     {message.role === 'assistant' &&
                      message.content &&
                      !isLoading &&
-                     selectedProvider === 'openai' &&
                      (hasOwnApiKey || isWhitelisted) && (
                       <div className="message-actions">
                         <button
@@ -1966,7 +1991,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
               <div style={{ flex: 1 }} />
 
               {/* Right: mic + send */}
-              {selectedProvider === 'openai' && (hasOwnApiKey || isWhitelisted) && (
+              {(hasOwnApiKey || isWhitelisted) && (
                 <button
                   type="button"
                   className={`dictate-btn ${isRecording ? 'recording' : ''}`}

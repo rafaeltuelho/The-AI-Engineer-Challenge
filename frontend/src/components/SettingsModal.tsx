@@ -79,6 +79,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         headers: {
           'Content-Type': 'application/json',
           'X-Session-ID': sessionId,
+          ...(apiKey ? { 'X-API-Key': apiKey } : {})
         },
         body: JSON.stringify({ text: 'Hello! This is how I sound.', voice: voiceId }),
       })

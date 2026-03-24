@@ -1338,15 +1338,21 @@ async def transcribe_audio(
                 detail="OpenAI API key not available. Audio features require an OpenAI key."
             )
 
-        # Read file content
-        file_bytes = await audio.read()
-
-        # Validate file size (25MB — OpenAI's limit)
-        if len(file_bytes) > MAX_AUDIO_SIZE_BYTES:
-            raise HTTPException(
-                status_code=413,
-                detail=f"Audio file too large. Maximum size is {MAX_AUDIO_SIZE_MB}MB."
-            )
+        # Read file content in chunks to avoid buffering large files in memory before size check
+        chunks = []
+        total_size = 0
+        while True:
+            chunk = await audio.read(8192)
+            if not chunk:
+                break
+            total_size += len(chunk)
+            if total_size > MAX_AUDIO_SIZE_BYTES:
+                raise HTTPException(
+                    status_code=413,
+                    detail=f"Audio file too large. Maximum size is {MAX_AUDIO_SIZE_MB}MB."
+                )
+            chunks.append(chunk)
+        file_bytes = b"".join(chunks)
 
         # Validate file is not empty
         if len(file_bytes) == 0:
