@@ -8,7 +8,7 @@ function App() {
   const { user, authConfig } = useAuth()
   const [openaiApiKey, setOpenaiApiKey] = useState<string>('')
   const [togetherApiKey, setTogetherApiKey] = useState<string>('')
-  const [theme, setTheme] = useState<'light' | 'dark'>('light')
+  const [theme, setTheme] = useState<'light' | 'dark'>('dark')
   const [selectedModel, setSelectedModel] = useState<string>('gpt-5-nano')
   const [selectedProvider, setSelectedProvider] = useState<string>('openai')
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -64,8 +64,8 @@ function App() {
     if (savedTheme) {
       setTheme(savedTheme)
     } else {
-      // Default to light theme
-      setTheme('light')
+      // Default to dark theme
+      setTheme('dark')
     }
   }, [])
 
@@ -128,15 +128,16 @@ function App() {
     return selectedProvider === 'together' ? togetherApiKey : openaiApiKey
   }
 
-  // Lock provider/model for free tier users
+  // Lock provider/model for free tier users (not when Study & Learn is active)
   useEffect(() => {
     if (!user || !authConfig) return
+    if (studyLearnOverride) return  // Study & Learn manages the model — don't interfere
 
     const hasOwnKey = selectedProvider === 'together' ? togetherApiKey.trim() : openaiApiKey.trim()
     const isFreeTierMode = !user.isWhitelisted && freeTurnsRemaining > 0 && !hasOwnKey
 
-    if (isFreeTierMode && !studyLearnOverride) {
-      // Lock to free provider and model (unless Study & Learn is active)
+    if (isFreeTierMode) {
+      // Lock to free provider and model
       if (selectedProvider !== authConfig.freeProvider) {
         setSelectedProvider(authConfig.freeProvider)
       }
