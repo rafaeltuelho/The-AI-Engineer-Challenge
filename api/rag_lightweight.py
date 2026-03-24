@@ -537,15 +537,15 @@ class RAGSystem:
             # Add response_format for Topic Explorer mode to ensure JSON output
             kwargs = {}
             if mode == "topic-explorer":
-                # Support JSON mode for OpenAI models and Together.ai models
-                openai_json_models = ['gpt-5', 'gpt-5-mini', 'gpt-5-nano']
+                # Only pass response_format for Together.ai models (Chat Completions API supports it).
+                # OpenAI GPT-5 models use the Responses API which does NOT support response_format.
                 together_json_models = [
                     'deepseek-ai/DeepSeek-R1', 'deepseek-ai/DeepSeek-V3', 'deepseek-ai/DeepSeek-V3.1',
                     'meta-llama/Llama-3.3-70B-Instruct-Turbo',
                     'openai/gpt-oss-20b', 'openai/gpt-oss-120b',
                     'moonshotai/Kimi-K2-Instruct-0905', 'Qwen/Qwen3-Next-80B-A3B-Thinking'
                 ]
-                if model_name in openai_json_models or model_name in together_json_models:
+                if model_name in together_json_models:
                     kwargs["response_format"] = {"type": "json_object"}
 
             response = await self.chat_model.arun(messages, model_name=model_name, **kwargs)
@@ -631,15 +631,15 @@ class RAGSystem:
             # Add response_format for Topic Explorer mode to ensure JSON output
             kwargs = {}
             if mode == "topic-explorer":
-                # Support JSON mode for OpenAI models and Together.ai models
-                openai_json_models = ['gpt-5', 'gpt-5-mini', 'gpt-5-nano']
+                # Only pass response_format for Together.ai models (Chat Completions API supports it).
+                # OpenAI GPT-5 models use the Responses API which does NOT support response_format.
                 together_json_models = [
                     'deepseek-ai/DeepSeek-R1', 'deepseek-ai/DeepSeek-V3', 'deepseek-ai/DeepSeek-V3.1',
                     'meta-llama/Llama-3.3-70B-Instruct-Turbo',
                     'openai/gpt-oss-20b', 'openai/gpt-oss-120b',
                     'moonshotai/Kimi-K2-Instruct-0905', 'Qwen/Qwen3-Next-80B-A3B-Thinking'
                 ]
-                if model_name in openai_json_models or model_name in together_json_models:
+                if model_name in together_json_models:
                     kwargs["response_format"] = {"type": "json_object"}
             response = self.chat_model.run(messages, model_name=model_name, **kwargs)
             return response
