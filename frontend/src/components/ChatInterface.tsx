@@ -76,7 +76,7 @@ const parseThinkingBlocks = (content: string): { thinking: string; response: str
 }
 
 // Collapsible thinking block component
-const ThinkingBlock: React.FC<{ content: string; isStreaming?: boolean }> = ({ content, isStreaming = false }) => {
+const ThinkingBlock: React.FC<{ content: string }> = ({ content }) => {
   const [expanded, setExpanded] = React.useState(false)
 
   return (
