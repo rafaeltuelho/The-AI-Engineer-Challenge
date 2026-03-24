@@ -1740,67 +1740,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         )}
 
         <form onSubmit={handleSubmit} className="input-form">
-          {/* Active feature pills */}
-          {(webSearchEnabled || studyLearnEnabled || topicExplorerEnabled || thinkingEnabled) && (
-            <div className="active-features-pills">
-              {webSearchEnabled && (
-                <div className="feature-pill">
-                  <Search size={14} />
-                  <span>Web Search</span>
-                  <button
-                    type="button"
-                    onClick={() => setWebSearchEnabled(false)}
-                    className="pill-remove"
-                  >
-                    <X size={12} />
-                  </button>
-                </div>
-              )}
-              {studyLearnEnabled && (
-                <div className="feature-pill">
-                  <BookOpen size={14} />
-                  <span>Study & Learn</span>
-                  <button
-                    type="button"
-                    onClick={() => setStudyLearnEnabled(false)}
-                    className="pill-remove"
-                  >
-                    <X size={12} />
-                  </button>
-                </div>
-              )}
-              {topicExplorerEnabled && (
-                <div className="feature-pill">
-                  <Compass size={14} />
-                  <span>Topic Explorer</span>
-                  <button
-                    type="button"
-                    onClick={() => setTopicExplorerEnabled(false)}
-                    className="pill-remove"
-                  >
-                    <X size={12} />
-                  </button>
-                </div>
-              )}
-              {thinkingEnabled && (
-                <div className="feature-pill">
-                  <Brain size={14} />
-                  <span>Thinking{thinkingEffort === 'high' ? ' (high)' : ''}</span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setThinkingEnabled(false)
-                      setThinkingEffort('medium')
-                    }}
-                    className="pill-remove"
-                  >
-                    <X size={12} />
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
-          {/* Image preview */}
+          {/* Image preview stays ABOVE the box */}
           {attachedImage && (
             <div className="image-preview-container">
               <div className="image-preview">
@@ -1824,92 +1764,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             onDragOver={handleImageDragOver}
             onDragLeave={handleImageDragLeave}
           >
-            {/* Context menu button */}
-            <div className="context-menu-wrapper" ref={contextMenuRef}>
-              <button
-                type="button"
-                className="context-menu-button"
-                onClick={() => setShowContextMenu(!showContextMenu)}
-                disabled={isLoading || (!isWhitelisted && !hasOwnApiKey && !hasFreeTurns)}
-                title="Add context (or type /)"
-              >
-                <Plus size={20} />
-              </button>
-
-              {/* Context menu popover */}
-              {showContextMenu && (
-                <div className="context-menu-popover">
-                  <button
-                    type="button"
-                    className="context-menu-item"
-                    onClick={() => {
-                      imageInputRef.current?.click()
-                      setShowContextMenu(false)
-                    }}
-                    disabled={selectedProvider !== 'openai' || chatMode !== 'regular' || !!attachedImage}
-                  >
-                    <Image size={16} />
-                    <span>Attach Image</span>
-                  </button>
-                  <button
-                    type="button"
-                    className="context-menu-item"
-                    onClick={() => {
-                      fileInputRef.current?.click()
-                      setShowContextMenu(false)
-                    }}
-                    disabled={isPdfUploading}
-                  >
-                    <Upload size={16} />
-                    <span>Attach Document</span>
-                  </button>
-                  <div className="context-menu-divider" />
-                  <button
-                    type="button"
-                    className={`context-menu-item toggle ${webSearchEnabled ? 'active' : ''}`}
-                    onClick={() => setWebSearchEnabled(!webSearchEnabled)}
-                  >
-                    <Search size={16} />
-                    <span>Web Search</span>
-                    {webSearchEnabled && <span className="checkmark">✓</span>}
-                  </button>
-                  <button
-                    type="button"
-                    className={`context-menu-item toggle ${studyLearnEnabled ? 'active' : ''}`}
-                    onClick={() => setStudyLearnEnabled(!studyLearnEnabled)}
-                  >
-                    <BookOpen size={16} />
-                    <span>Study & Learn</span>
-                    {studyLearnEnabled && <span className="checkmark">✓</span>}
-                  </button>
-                  <button
-                    type="button"
-                    className={`context-menu-item toggle ${topicExplorerEnabled ? 'active' : ''}`}
-                    onClick={() => setTopicExplorerEnabled(!topicExplorerEnabled)}
-                    disabled={hasConversationStarted}
-                  >
-                    <Compass size={16} />
-                    <span>Topic Explorer</span>
-                    {topicExplorerEnabled && <span className="checkmark">✓</span>}
-                  </button>
-                  <button
-                    type="button"
-                    className={`context-menu-item toggle ${thinkingEnabled ? 'active' : ''}`}
-                    onClick={() => {
-                      setThinkingEnabled(!thinkingEnabled)
-                      if (thinkingEnabled) {
-                        setThinkingEffort('medium')
-                      }
-                    }}
-                  >
-                    <Brain size={16} />
-                    <span>Thinking</span>
-                    {thinkingEnabled && <span className="checkmark">✓</span>}
-                  </button>
-                </div>
-              )}
-            </div>
-
+            {/* TOP ROW: just the textarea */}
             <textarea
               ref={textareaRef}
               autoFocus
@@ -1929,33 +1784,175 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
               rows={1}
             />
 
-            {/* Dictate button - only show for OpenAI with own API key */}
-            {selectedProvider === 'openai' && (hasOwnApiKey || isWhitelisted) && (
-              <button
-                type="button"
-                className={`dictate-btn ${isRecording ? 'recording' : ''}`}
-                onClick={handleDictate}
-                disabled={isLoading || isTranscribing || (!isWhitelisted && !hasOwnApiKey && !hasFreeTurns)}
-                title={isRecording ? 'Stop recording' : isTranscribing ? 'Transcribing...' : 'Dictate'}
-                aria-label={isRecording ? 'Stop dictation' : 'Start dictation'}
-              >
-                {isTranscribing ? (
-                  <div className="dictate-spinner" />
-                ) : isRecording ? (
-                  <MicOff size={16} />
-                ) : (
-                  <Mic size={16} />
-                )}
-              </button>
-            )}
+            {/* BOTTOM ROW: controls bar */}
+            <div className="input-controls-row">
+              {/* Left: context menu [+] */}
+              <div className="context-menu-wrapper" ref={contextMenuRef}>
+                <button
+                  type="button"
+                  className="context-menu-button"
+                  onClick={() => setShowContextMenu(!showContextMenu)}
+                  disabled={isLoading || (!isWhitelisted && !hasOwnApiKey && !hasFreeTurns)}
+                  title="Add context (or type /)"
+                >
+                  <Plus size={20} />
+                </button>
 
-            <button
-              type="submit"
-              className="send-button"
-              disabled={isLoading || !inputMessage.trim() || (!isWhitelisted && !hasOwnApiKey && !hasFreeTurns)}
-            >
-              <Send size={16} />
-            </button>
+                {/* Context menu popover */}
+                {showContextMenu && (
+                  <div className="context-menu-popover">
+                    <button
+                      type="button"
+                      className="context-menu-item"
+                      onClick={() => {
+                        imageInputRef.current?.click()
+                        setShowContextMenu(false)
+                      }}
+                      disabled={selectedProvider !== 'openai' || chatMode !== 'regular' || !!attachedImage}
+                    >
+                      <Image size={16} />
+                      <span>Attach Image</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="context-menu-item"
+                      onClick={() => {
+                        fileInputRef.current?.click()
+                        setShowContextMenu(false)
+                      }}
+                      disabled={isPdfUploading}
+                    >
+                      <Upload size={16} />
+                      <span>Attach Document</span>
+                    </button>
+                    <div className="context-menu-divider" />
+                    <button
+                      type="button"
+                      className={`context-menu-item toggle ${webSearchEnabled ? 'active' : ''}`}
+                      onClick={() => setWebSearchEnabled(!webSearchEnabled)}
+                    >
+                      <Search size={16} />
+                      <span>Web Search</span>
+                      {webSearchEnabled && <span className="checkmark">✓</span>}
+                    </button>
+                    <button
+                      type="button"
+                      className={`context-menu-item toggle ${studyLearnEnabled ? 'active' : ''}`}
+                      onClick={() => setStudyLearnEnabled(!studyLearnEnabled)}
+                    >
+                      <BookOpen size={16} />
+                      <span>Study & Learn</span>
+                      {studyLearnEnabled && <span className="checkmark">✓</span>}
+                    </button>
+                    <button
+                      type="button"
+                      className={`context-menu-item toggle ${topicExplorerEnabled ? 'active' : ''}`}
+                      onClick={() => setTopicExplorerEnabled(!topicExplorerEnabled)}
+                      disabled={hasConversationStarted}
+                    >
+                      <Compass size={16} />
+                      <span>Topic Explorer</span>
+                      {topicExplorerEnabled && <span className="checkmark">✓</span>}
+                    </button>
+                    <button
+                      type="button"
+                      className={`context-menu-item toggle ${thinkingEnabled ? 'active' : ''}`}
+                      onClick={() => {
+                        setThinkingEnabled(!thinkingEnabled)
+                        if (thinkingEnabled) {
+                          setThinkingEffort('medium')
+                        }
+                      }}
+                    >
+                      <Brain size={16} />
+                      <span>Thinking</span>
+                      {thinkingEnabled && <span className="checkmark">✓</span>}
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Active feature chips - now inline in the controls row */}
+              {webSearchEnabled && (
+                <button
+                  type="button"
+                  className="input-chip active"
+                  onClick={() => setWebSearchEnabled(false)}
+                >
+                  <Search size={13} />
+                  <span>Web Search</span>
+                  <X size={11} />
+                </button>
+              )}
+              {studyLearnEnabled && (
+                <button
+                  type="button"
+                  className="input-chip active"
+                  onClick={() => setStudyLearnEnabled(false)}
+                >
+                  <BookOpen size={13} />
+                  <span>Study & Learn</span>
+                  <X size={11} />
+                </button>
+              )}
+              {topicExplorerEnabled && (
+                <button
+                  type="button"
+                  className="input-chip active"
+                  onClick={() => setTopicExplorerEnabled(false)}
+                >
+                  <Compass size={13} />
+                  <span>Topic Explorer</span>
+                  <X size={11} />
+                </button>
+              )}
+              {thinkingEnabled && (
+                <button
+                  type="button"
+                  className="input-chip active"
+                  onClick={() => {
+                    setThinkingEnabled(false)
+                    setThinkingEffort('medium')
+                  }}
+                >
+                  <Brain size={13} />
+                  <span>Thinking{thinkingEffort === 'high' ? ' (high)' : ''}</span>
+                  <X size={11} />
+                </button>
+              )}
+
+              {/* Spacer pushes right-side buttons to the end */}
+              <div style={{ flex: 1 }} />
+
+              {/* Right: mic + send */}
+              {selectedProvider === 'openai' && (hasOwnApiKey || isWhitelisted) && (
+                <button
+                  type="button"
+                  className={`dictate-btn ${isRecording ? 'recording' : ''}`}
+                  onClick={handleDictate}
+                  disabled={isLoading || isTranscribing || (!isWhitelisted && !hasOwnApiKey && !hasFreeTurns)}
+                  title={isRecording ? 'Stop recording' : isTranscribing ? 'Transcribing...' : 'Dictate'}
+                  aria-label={isRecording ? 'Stop dictation' : 'Start dictation'}
+                >
+                  {isTranscribing ? (
+                    <div className="dictate-spinner" />
+                  ) : isRecording ? (
+                    <MicOff size={16} />
+                  ) : (
+                    <Mic size={16} />
+                  )}
+                </button>
+              )}
+              <button
+                type="submit"
+                className="send-button"
+                disabled={isLoading || !inputMessage.trim() || (!isWhitelisted && !hasOwnApiKey && !hasFreeTurns)}
+              >
+                <Send size={16} />
+              </button>
+            </div>
+
+            {/* Hidden file inputs - keep as-is */}
             <input
               ref={fileInputRef}
               type="file"
