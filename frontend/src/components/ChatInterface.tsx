@@ -66,6 +66,30 @@ const parseThinkingBlocks = (content: string): { thinking: string; response: str
   }
 }
 
+// Collapsible thinking block component
+const ThinkingBlock: React.FC<{ content: string; isStreaming?: boolean }> = ({ content, isStreaming = false }) => {
+  const [expanded, setExpanded] = React.useState(false)
+
+  return (
+    <div
+      className={`thinking-block ${expanded ? 'expanded' : 'collapsed'}`}
+      onClick={() => setExpanded(e => !e)}
+      role="button"
+      aria-expanded={expanded}
+    >
+      <div className="thinking-header">
+        <Brain size={14} />
+        <span>Thinking</span>
+        <span className="thinking-toggle-hint">{expanded ? '▲ collapse' : '▼ expand'}</span>
+      </div>
+      <div className="thinking-content">
+        <MarkdownRenderer content={content} chatMode="regular" />
+        {!expanded && <div className="thinking-fade" />}
+      </div>
+    </div>
+  )
+}
+
 // Default developer messages for each chat mode (pure function, extracted outside component)
 const getDefaultDeveloperMessage = (mode: 'regular' | 'rag' | 'topic-explorer'): string => {
   switch (mode) {
@@ -1562,17 +1586,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                       {message.role === 'user' ? 'You' : 'Assistant'}
                     </div>
 
-                    {/* Thinking block - collapsible */}
+                    {/* Thinking block - collapsible with preview */}
                     {message.role === 'assistant' && message.thinking && (
-                      <details className="thinking-block">
-                        <summary className="thinking-header">
-                          <Brain size={16} />
-                          <span>Thinking</span>
-                        </summary>
-                        <div className="thinking-content">
-                          <MarkdownRenderer content={message.thinking} />
-                        </div>
-                      </details>
+                      <ThinkingBlock content={message.thinking} />
                     )}
 
                     <div className="message-content">

@@ -723,36 +723,70 @@
 .thinking-block {
   margin-bottom: 12px;
   border: 1px solid var(--border-primary);
-  border-radius: 8px;
+  border-radius: 10px;
   background: var(--bg-tertiary);
   overflow: hidden;
+  cursor: pointer;
+  transition: box-shadow 0.15s ease;
+  user-select: none;
+}
+
+.thinking-block:hover {
+  box-shadow: 0 0 0 2px var(--accent-primary-alpha, rgba(16,163,127,0.15));
 }
 
 .thinking-header {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 10px 12px;
-  cursor: pointer;
-  user-select: none;
+  gap: 6px;
+  padding: 8px 12px;
   font-weight: 600;
+  font-size: 0.8rem;
   color: var(--text-primary);
-  list-style: none;
-}
-
-.thinking-header::-webkit-details-marker {
-  display: none;
 }
 
 .thinking-header svg {
   color: var(--accent-primary);
+  flex-shrink: 0;
+}
+
+.thinking-toggle-hint {
+  margin-left: auto;
+  font-size: 0.7rem;
+  font-weight: 400;
+  color: var(--text-tertiary, var(--text-secondary));
+  opacity: 0.7;
 }
 
 .thinking-content {
-  padding: 0 12px 12px 12px;
+  position: relative;
+  padding: 0 12px 10px 12px;
   color: var(--text-secondary);
-  font-size: 0.9375rem;
-  line-height: 1.6;
+  font-size: 0.75rem;
+  line-height: 1.55;
+}
+
+/* Collapsed: clip to ~5 lines */
+.thinking-block.collapsed .thinking-content {
+  max-height: 7.75em;   /* 5 lines × 1.55 line-height */
+  overflow: hidden;
+}
+
+/* Expanded: no clipping */
+.thinking-block.expanded .thinking-content {
+  max-height: none;
+  overflow: visible;
+}
+
+/* Fade gradient at bottom of collapsed content */
+.thinking-fade {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 2.5em;
+  background: linear-gradient(to bottom, transparent, var(--bg-tertiary));
+  pointer-events: none;
 }
 
 .suggestion-chips {
