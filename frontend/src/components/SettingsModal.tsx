@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { X, Key, Settings, MessageSquare, CheckCircle, AlertCircle } from 'lucide-react'
 import './SettingsModal.css'
 
@@ -36,6 +36,12 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   hasFreeTurns = false
 }) => {
   const [showApiKeySuccess, setShowApiKeySuccess] = useState(false)
+  const [localDeveloperMessage, setLocalDeveloperMessage] = useState(developerMessage)
+
+  // Sync local state with prop changes (e.g., when Study & Learn is toggled)
+  useEffect(() => {
+    setLocalDeveloperMessage(developerMessage)
+  }, [developerMessage])
 
   if (!isOpen) return null
 
@@ -186,8 +192,11 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
               <span>System Message</span>
             </label>
             <textarea
-              value={developerMessage}
-              onChange={(e) => setDeveloperMessage(e.target.value)}
+              value={localDeveloperMessage}
+              onChange={(e) => {
+                setLocalDeveloperMessage(e.target.value)
+                setDeveloperMessage(e.target.value)
+              }}
               placeholder="Define the AI's behavior and role"
               className="settings-textarea"
               rows={6}

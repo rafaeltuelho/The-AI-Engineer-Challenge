@@ -1121,6 +1121,11 @@
   font-family: inherit;
 }
 
+.message-input:focus {
+  border: none;
+  outline: none;
+}
+
 .message-input::placeholder {
   color: var(--text-muted);
 }
