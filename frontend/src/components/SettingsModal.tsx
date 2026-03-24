@@ -3,10 +3,10 @@ import { X, Key, Settings, MessageSquare, CheckCircle, AlertCircle, Volume2, Pla
 import './SettingsModal.css'
 
 const VOICES = [
-  { id: 'coral',  name: 'Coral',  label: 'Female · Warm' },
+  { id: 'marin',  name: 'Marin',  label: 'Female · Natural' },
   { id: 'nova',   name: 'Nova',   label: 'Female · Bright' },
   { id: 'onyx',   name: 'Onyx',   label: 'Male · Deep' },
-  { id: 'echo',   name: 'Echo',   label: 'Male · Clear' },
+  { id: 'cedar',  name: 'Cedar',  label: 'Male · Warm' },
 ]
 
 interface SettingsModalProps {

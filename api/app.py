@@ -724,7 +724,7 @@ class TTSRequest(BaseModel):
             return "coral"  # Default voice
 
         # OpenAI TTS supported voices
-        allowed_voices = ["alloy", "ash", "ballad", "coral", "echo", "fable", "nova", "onyx", "sage", "shimmer", "verse"]
+        allowed_voices = ["alloy", "ash", "ballad", "cedar", "coral", "echo", "fable", "marin", "nova", "onyx", "sage", "shimmer", "verse"]
         if v.lower() not in allowed_voices:
             raise ValueError(f'Invalid voice: {v}. Allowed voices: {", ".join(allowed_voices)}')
 

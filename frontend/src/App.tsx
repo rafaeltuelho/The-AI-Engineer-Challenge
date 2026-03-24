@@ -16,7 +16,7 @@ function App() {
   const [freeTurnsRemaining, setFreeTurnsRemaining] = useState<number>(user?.freeTurnsRemaining ?? 0)
   const [welcomeSuggestions, setWelcomeSuggestions] = useState<string[]>([])
   const [studyLearnOverride, setStudyLearnOverride] = useState(false)
-  const [ttsVoice, setTtsVoice] = useState<string>('coral')
+  const [ttsVoice, setTtsVoice] = useState<string>('marin')
 
   const modelDescriptions = {
     // OpenAI models - GPT-5 only
