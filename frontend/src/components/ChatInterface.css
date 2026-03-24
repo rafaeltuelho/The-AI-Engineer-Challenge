@@ -1285,6 +1285,8 @@
 }
 
 .dictate-btn {
+  width: 32px;
+  height: 32px;
   background: transparent;
   border: none;
   color: var(--text-muted);
@@ -1294,6 +1296,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
   transition: color 0.2s, background 0.2s;
   flex-shrink: 0;
 }
@@ -1646,6 +1649,11 @@
   }
 
   .send-button {
+    width: 28px;
+    height: 28px;
+  }
+
+  .dictate-btn {
     width: 28px;
     height: 28px;
   }

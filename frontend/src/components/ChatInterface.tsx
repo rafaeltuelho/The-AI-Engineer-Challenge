@@ -1834,6 +1834,25 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
               )}
             </div>
 
+            <textarea
+              ref={textareaRef}
+              autoFocus
+              value={inputMessage}
+              onChange={handleInputChange}
+              onKeyDown={handleKeyDown}
+              onPaste={handlePaste}
+              placeholder={
+                !isWhitelisted && !hasOwnApiKey && !hasFreeTurns
+                  ? "Free messages exhausted. Add your API key in Settings to continue."
+                  : isDraggingImage
+                  ? "Drop image here..."
+                  : "Message AI..."
+              }
+              className="message-input"
+              disabled={isLoading || (!isWhitelisted && !hasOwnApiKey && !hasFreeTurns)}
+              rows={1}
+            />
+
             {/* Dictate button - only show for OpenAI with own API key */}
             {selectedProvider === 'openai' && (hasOwnApiKey || isWhitelisted) && (
               <button
@@ -1854,24 +1873,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
               </button>
             )}
 
-            <textarea
-              ref={textareaRef}
-              autoFocus
-              value={inputMessage}
-              onChange={handleInputChange}
-              onKeyDown={handleKeyDown}
-              onPaste={handlePaste}
-              placeholder={
-                !isWhitelisted && !hasOwnApiKey && !hasFreeTurns
-                  ? "Free messages exhausted. Add your API key in Settings to continue."
-                  : isDraggingImage
-                  ? "Drop image here..."
-                  : "Message AI..."
-              }
-              className="message-input"
-              disabled={isLoading || (!isWhitelisted && !hasOwnApiKey && !hasFreeTurns)}
-              rows={1}
-            />
             <button
               type="submit"
               className="send-button"
