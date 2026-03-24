@@ -429,10 +429,13 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       autoThinkingTriggered.current = false
       autoMiniTriggered.current = false
       autoFullTriggered.current = false
+      // Also reset thinking — Study & Learn starts with thinking off (it auto-enables at turn 3)
+      setThinkingEnabled(false)
+      setThinkingEffort('medium')
     } else {
       setStudyLearnOverride(false)
     }
-  }, [studyLearnEnabled]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [studyLearnEnabled, setSelectedModel, setSelectedProvider]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Detect mobile viewport
   useEffect(() => {
@@ -519,7 +522,13 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   // Cleanup dictate on unmount
   useEffect(() => {
     return () => {
-      mediaRecorderRef.current?.stop()
+      try {
+        if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+          mediaRecorderRef.current.stop()
+        }
+      } catch {
+        // ignore InvalidStateError on unmount
+      }
       recordingStreamRef.current?.getTracks().forEach(t => t.stop())
     }
   }, [])
@@ -809,7 +818,13 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const handleDictate = async () => {
     // If currently recording, stop
     if (isRecording) {
-      mediaRecorderRef.current?.stop()
+      try {
+        if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+          mediaRecorderRef.current.stop()
+        }
+      } catch {
+        // ignore InvalidStateError
+      }
       recordingStreamRef.current?.getTracks().forEach(t => t.stop())
       setIsRecording(false)
       return

@@ -69,6 +69,12 @@ FREE_MODEL = os.getenv("FREE_MODEL", "deepseek-ai/DeepSeek-V3.1")
 # ============================================
 MAX_IMAGE_SIZE_MB = float(os.getenv("MAX_IMAGE_SIZE_MB", "3"))
 
+# ============================================
+# Audio Upload Configuration
+# ============================================
+MAX_AUDIO_SIZE_MB = 25  # OpenAI Whisper's actual limit
+MAX_AUDIO_SIZE_BYTES = MAX_AUDIO_SIZE_MB * 1024 * 1024
+
 # Server-side API keys (for free tier)
 SERVER_OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 SERVER_TOGETHER_API_KEY = os.getenv("TOGETHER_API_KEY", "")
@@ -1219,12 +1225,12 @@ async def get_app_config(request: Request):
     "/api/tts",
     tags=["Audio"],
     summary="Convert text to speech",
-    description="Convert text to speech using OpenAI's TTS API. Returns MP3 audio data. Requires OpenAI provider and API key.",
+    description="Convert text to speech using OpenAI's TTS API. Returns MP3 audio data. Requires an OpenAI API key (either user-provided or server-configured).",
     responses={
         200: {"description": "Audio generated successfully", "content": {"audio/mpeg": {}}},
         400: {"description": "Invalid request (empty text or exceeds 4096 characters)"},
         401: {"description": "Invalid or expired session"},
-        403: {"description": "Not using OpenAI provider or no OpenAI API key"},
+        403: {"description": "No OpenAI API key available"},
         429: {"description": "Rate limit exceeded"},
         500: {"description": "Internal server error"}
     }
@@ -1276,7 +1282,7 @@ async def text_to_speech(
         raise
     except Exception as e:
         print(f"Error in text-to-speech: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error generating speech: {str(e)}")
+        raise HTTPException(status_code=500, detail="TTS request failed")
 
 # Endpoint for speech-to-text transcription
 @app.post(
@@ -1321,6 +1327,13 @@ async def transcribe_audio(
         # Read file content
         file_bytes = await audio.read()
 
+        # Validate file size
+        if len(file_bytes) > MAX_AUDIO_SIZE_BYTES:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Audio file too large. Maximum size is {MAX_AUDIO_SIZE_MB}MB."
+            )
+
         # Validate file is not empty
         if len(file_bytes) == 0:
             raise HTTPException(status_code=400, detail="Audio file is empty")
@@ -1356,7 +1369,7 @@ async def transcribe_audio(
         raise
     except Exception as e:
         print(f"Error in transcription: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error transcribing audio: {str(e)}")
+        raise HTTPException(status_code=500, detail="Transcription request failed")
 
 # Define the main chat endpoint that handles POST requests
 @app.post(
