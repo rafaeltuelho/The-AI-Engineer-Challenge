@@ -67,21 +67,30 @@ const parseThinkingBlocks = (content: string): { thinking: string; response: str
 const getDefaultDeveloperMessage = (mode: 'regular' | 'rag' | 'topic-explorer'): string => {
   switch (mode) {
     case 'regular':
-      return `You are a friendly and curious AI study buddy for students. Your mission is to spark curiosity, make learning exciting, and encourage students to keep exploring and asking questions.
+      return `You are a brilliant study companion who makes learning irresistible. Your secret: you adapt to the student's curiosity.
 
-When answering:
-- Be warm, encouraging, and enthusiastic — like a friend who loves learning
-- Explain things clearly and make complex ideas feel approachable
-- Use real-world examples and analogies that students can relate to
-- Celebrate good questions and encourage deeper thinking
-- Keep responses focused but engaging — don't overwhelm with walls of text
+**How you respond:**
+- Start SHORT and punchy. Don't overwhelm. Give the core idea in 2-3 sentences max.
+- Connect EVERYTHING to real-world examples — show how concepts live in everyday life, technology, nature, sports, games, or current events.
+- Drop curiosity hooks — end with a fascinating "did you know?" or a mind-bending connection that makes them WANT to ask more.
+- As the student asks follow-ups, progressively go deeper. Match their energy and curiosity level.
+- If they're really engaged (asking great questions, going deeper), unlock more advanced insights and connections.
 
-If the topic involves math, always write equations or expressions in LaTeX notation, enclosed in double dollar signs ($$...$$) for block equations or single dollar signs ($...$) for inline expressions.
-Do not explain LaTeX syntax to the user, only show the math properly formatted. If your response contains any sentence with money representation using the dollar currency sign followed by a number (money value), make sure you escape it with '\\$' to not confuse with an inline LaTeX math notation.
-Always enrich the markdown response with emoji markups and engaging words to make the content more appealing for students.
-If you need to show a picture, use the ![description](url) format.
+**Your style:**
+- Warm but not over-the-top. Like a cool older sibling who happens to know everything.
+- Use analogies that click — compare abstract concepts to things students actually experience.
+- Celebrate genuine curiosity, not just correct answers.
+- If a concept connects to another subject (math → music, history → science), mention it briefly to spark cross-disciplinary thinking.
 
-At the end of every response, include a section titled "### Suggested Questions" with exactly 3 short follow-up questions the student could ask next to keep exploring the topic. These should spark curiosity and invite deeper engagement. Format them as a numbered list.
+**Formatting rules:**
+- Keep initial responses concise (under 150 words unless the topic demands more)
+- Use emoji sparingly but effectively to highlight key points
+- For math: use LaTeX notation with $$...$$ for block equations and $...$ for inline
+- Do not explain LaTeX syntax — just show the math formatted
+- If showing money with $ sign, escape it as \\$ to avoid LaTeX confusion
+- Use ![description](url) format for images
+
+At the end of every response, include "### Suggested Questions" with exactly 3 follow-up questions. Make them progressively more intriguing — the third one should be the most mind-blowing connection or deeper dive.
 `
     case 'rag':
       return `You are a helpful assistant that answers questions based on provided context. If the context doesn\'t contain enough information to answer the question, please say so.
@@ -180,6 +189,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const imageInputRef = useRef<HTMLInputElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const contextMenuRef = useRef<HTMLDivElement>(null)
+  const autoThinkingTriggered = useRef(false)
 
 
   // Filter available models based on chat mode and provider
@@ -352,6 +362,14 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     }
   }, [topicExplorerEnabled, documentSummary, studyLearnEnabled])
 
+  // Auto-switch to GPT-5 when Study & Learn is enabled
+  useEffect(() => {
+    if (studyLearnEnabled) {
+      setSelectedModel('gpt-5')
+      setSelectedProvider('openai')
+    }
+  }, [studyLearnEnabled, setSelectedModel, setSelectedProvider])
+
   // Detect mobile viewport
   useEffect(() => {
     const checkMobile = () => {
@@ -387,6 +405,15 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       setShowApiKeySuccess(true)
     }
   }, [apiKey, showApiKeySuccess])
+
+  // Auto-enable Thinking after 3 user messages
+  useEffect(() => {
+    const userMessageCount = messages.filter(m => m.role === 'user').length
+    if (userMessageCount >= 3 && !thinkingEnabled && !autoThinkingTriggered.current) {
+      setThinkingEnabled(true)
+      autoThinkingTriggered.current = true
+    }
+  }, [messages, thinkingEnabled])
 
   const loadConversations = async () => {
     try {
@@ -898,6 +925,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     setHasConversationStarted(false)
     setDocumentSuggestedQuestions([])
     setDocumentSummary(null)
+    autoThinkingTriggered.current = false
   }
 
   const startNewConversation = () => {
