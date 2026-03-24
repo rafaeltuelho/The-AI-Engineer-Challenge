@@ -522,12 +522,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   // Cleanup dictate on unmount
   useEffect(() => {
     return () => {
-      try {
-        if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-          mediaRecorderRef.current.stop()
-        }
-      } catch {
-        // ignore InvalidStateError on unmount
+      if (mediaRecorderRef.current?.state === 'recording') {
+        mediaRecorderRef.current.stop()
       }
       recordingStreamRef.current?.getTracks().forEach(t => t.stop())
     }
@@ -811,7 +807,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         await audio.play()
         setPlayingMessageId(message.id)  // Only set AFTER play succeeds
       } catch (playError) {
-        // Clean up if play failed
+        // Clean up if play failed — reset state and revoke URL
         setPlayingMessageId(null)
         if (audioBlobUrlRef.current) {
           URL.revokeObjectURL(audioBlobUrlRef.current)
@@ -830,15 +826,14 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const handleDictate = async () => {
     // If currently recording, stop
     if (isRecording) {
-      try {
-        if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-          mediaRecorderRef.current.stop()
-        }
-      } catch {
-        // ignore InvalidStateError
+      // Set isTranscribing immediately to prevent race condition
+      setIsTranscribing(true)
+      setIsRecording(false)
+
+      if (mediaRecorderRef.current?.state === 'recording') {
+        mediaRecorderRef.current.stop()
       }
       recordingStreamRef.current?.getTracks().forEach(t => t.stop())
-      setIsRecording(false)
       return
     }
 
@@ -865,7 +860,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       }
 
       recorder.onstop = async () => {
-        setIsTranscribing(true)
+        // isTranscribing is already set to true when stop() was called
         try {
           const audioBlob = new Blob(recordingChunksRef.current, { type: recorder.mimeType || 'audio/webm' })
           const ext = recorder.mimeType?.includes('mp4') ? 'mp4' : 'webm'
@@ -1220,10 +1215,16 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     setDocumentSuggestedQuestions([])
     setDocumentSummary(null)
     autoThinkingTriggered.current = false
-    autoMiniTriggered.current = false    // add this
-    autoFullTriggered.current = false    // add this
-    slLastSetModel.current = ''          // add this
+    autoMiniTriggered.current = false
+    autoFullTriggered.current = false
+    slLastSetModel.current = ''
     setThinkingEffort('medium')
+
+    // Reset model and thinking when Study & Learn is enabled
+    if (studyLearnEnabled) {
+      setSelectedModel('gpt-5-nano')
+      setThinkingEnabled(false)
+    }
   }
 
   const startNewConversation = () => {
