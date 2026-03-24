@@ -1580,7 +1580,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                      message.content &&
                      !isLoading &&
                      selectedProvider === 'openai' &&
-                     hasOwnApiKey && (
+                     (hasOwnApiKey || isWhitelisted) && (
                       <div className="message-actions">
                         <button
                           className={`read-aloud-btn ${playingMessageId === message.id ? 'playing' : ''}`}
@@ -1835,7 +1835,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             </div>
 
             {/* Dictate button - only show for OpenAI with own API key */}
-            {selectedProvider === 'openai' && hasOwnApiKey && (
+            {selectedProvider === 'openai' && (hasOwnApiKey || isWhitelisted) && (
               <button
                 type="button"
                 className={`dictate-btn ${isRecording ? 'recording' : ''}`}
