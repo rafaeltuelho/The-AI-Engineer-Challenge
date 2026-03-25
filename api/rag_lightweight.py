@@ -535,7 +535,7 @@ class RAGSystem:
 
             # Generate response
             # Add response_format for Topic Explorer mode to ensure JSON output
-            kwargs = {}
+            kwargs = {"web_search": False}  # RAG uses document context, not web search
             if mode == "topic-explorer":
                 # Only pass response_format for Together.ai models (Chat Completions API supports it).
                 # OpenAI GPT-5 models use the Responses API which does NOT support response_format.
@@ -629,7 +629,7 @@ class RAGSystem:
             
             # Generate response synchronously
             # Add response_format for Topic Explorer mode to ensure JSON output
-            kwargs = {}
+            kwargs = {"web_search": False}  # RAG uses document context, not web search
             if mode == "topic-explorer":
                 # Only pass response_format for Together.ai models (Chat Completions API supports it).
                 # OpenAI GPT-5 models use the Responses API which does NOT support response_format.
