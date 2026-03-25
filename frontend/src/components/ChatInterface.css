@@ -58,6 +58,45 @@
   cursor: not-allowed;
 }
 
+
+/* Sidebar Search */
+.sidebar-search-container {
+  padding: 0 12px 12px;
+  position: relative;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+}
+
+.sidebar-search-container svg {
+  position: absolute;
+  left: 20px;
+  color: var(--text-secondary);
+  pointer-events: none;
+}
+
+.sidebar-search-input {
+  width: 100%;
+  padding: 8px 12px 8px 30px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-primary);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-size: 0.875rem;
+  transition: all var(--transition-fast);
+}
+
+.sidebar-search-input:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: -1px;
+  border-color: var(--accent-primary);
+  background: var(--bg-primary);
+}
+
+.sidebar-search-input::placeholder {
+  color: var(--text-muted);
+}
+
 /* Conversations List */
 .conversations-list {
   flex: 1;
