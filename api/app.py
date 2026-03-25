@@ -2088,7 +2088,7 @@ async def rag_query(
         if conversation_id not in user_conversations:
             user_conversations[conversation_id] = {
                 "messages": [],
-                "system_message": query_request.developer_message,
+                "system_message": system_msg,
                 "title": None,  # Will be set when first user message is added
                 "created_at": datetime.now(timezone.utc),
                 "last_updated": datetime.now(timezone.utc),

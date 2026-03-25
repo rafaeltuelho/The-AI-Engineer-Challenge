@@ -75,9 +75,11 @@ class ChatOpenAI:
         GPT5_WEB_SEARCH_MODELS = ["gpt-5", "gpt-5-mini", "gpt-5-nano"]
         is_gpt5_with_web_search = self.provider == "openai" and model_name in GPT5_WEB_SEARCH_MODELS
 
+        # Pop web_search from kwargs so it's never forwarded raw to the API
+        web_search = kwargs.pop("web_search", None)
+
         if is_gpt5_with_web_search:
-            # For GPT-5 models, use Responses API with web search tool
-            # Convert messages to input format
+            # For GPT-5 models, use Responses API
             if len(messages) == 1:
                 input_text = messages[0]["content"]
             else:
@@ -94,13 +96,15 @@ class ChatOpenAI:
                         formatted_parts.append(f"Assistant: {content}")
                 input_text = "\n\n".join(formatted_parts)
 
-            # Build Responses API request parameters
             request_params = {
                 "model": model_name,
                 "input": input_text,
-                "tools": [{"type": "web_search"}],
                 **kwargs
             }
+
+            # Only add web_search tool when not explicitly disabled (default: enabled)
+            if web_search is not False:
+                request_params["tools"] = [{"type": "web_search"}]
 
             response = await client.responses.create(**request_params)
 
@@ -109,6 +113,7 @@ class ChatOpenAI:
             return response
         else:
             # For Together.ai and other models, use Chat Completions API
+            # (web_search already popped above, so it won't be forwarded)
             request_params = {
                 "model": model_name,
                 "messages": messages,
