@@ -2067,8 +2067,7 @@ async def rag_query(
         rag_system = get_or_create_rag_system(session_id, api_key, provider)
         
         # Query the RAG system with the specified mode and developer message
-        # For topic-explorer mode, use None to let the specialized system message be used
-        system_msg = None if query_request.mode == "topic-explorer" else query_request.developer_message
+        system_msg = query_request.developer_message
         answer = rag_system.query(query_request.question, k=query_request.k, mode=query_request.mode, model_name=query_request.model, system_message=system_msg)
         
         # Get document info
