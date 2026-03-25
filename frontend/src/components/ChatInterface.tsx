@@ -1923,62 +1923,61 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
               </div>
 
               {/* Active feature chips - now inline in the controls row */}
-              {webSearchEnabled && (
-                <button
-                  type="button"
-                  className="input-chip active"
-                  onClick={() => setWebSearchEnabled(false)}
-                >
-                  <Search size={13} />
-                  <span>Web Search</span>
-                  <X size={11} />
-                </button>
-              )}
-              {studyLearnEnabled && (
-                <button
-                  type="button"
-                  className="input-chip active"
-                  onClick={() => setStudyLearnEnabled(false)}
-                >
-                  <BookOpen size={13} />
-                  <span>Study & Learn</span>
-                  <X size={11} />
-                </button>
-              )}
-              {topicExplorerEnabled && (
-                <button
-                  type="button"
-                  className="input-chip active"
-                  onClick={() => setTopicExplorerEnabled(false)}
-                >
-                  <Compass size={13} />
-                  <span>Topic Explorer</span>
-                  <X size={11} />
-                </button>
-              )}
-              {thinkingEnabled && (
-                <button
-                  type="button"
-                  className="input-chip active"
-                  onClick={() => {
-                    setThinkingEnabled(false)
-                    setThinkingEffort('medium')
-                  }}
-                >
-                  <Brain size={13} />
-                  <span>Thinking{thinkingEffort === 'high' ? ' (high)' : ''}</span>
-                  <X size={11} />
-                </button>
-              )}
-              {chatMode === 'rag' && (
-                <div className="input-chip active rag-chip">
-                  <Upload size={13} />
-                  <span>RAG Mode</span>
-                </div>
-              )}
-
-              {/* Spacer pushes right-side buttons to the end */}
-              <div style={{ flex: 1 }} />
+              <div className="chips-scroll-area">
+                {webSearchEnabled && (
+                  <button
+                    type="button"
+                    className="input-chip active"
+                    onClick={() => setWebSearchEnabled(false)}
+                  >
+                    <Search size={13} />
+                    <span>Web Search</span>
+                    <X size={11} />
+                  </button>
+                )}
+                {studyLearnEnabled && (
+                  <button
+                    type="button"
+                    className="input-chip active"
+                    onClick={() => setStudyLearnEnabled(false)}
+                  >
+                    <BookOpen size={13} />
+                    <span>Study & Learn</span>
+                    <X size={11} />
+                  </button>
+                )}
+                {topicExplorerEnabled && (
+                  <button
+                    type="button"
+                    className="input-chip active"
+                    onClick={() => setTopicExplorerEnabled(false)}
+                  >
+                    <Compass size={13} />
+                    <span>Topic Explorer</span>
+                    <X size={11} />
+                  </button>
+                )}
+                {thinkingEnabled && (
+                  <button
+                    type="button"
+                    className="input-chip active"
+                    onClick={() => {
+                      setThinkingEnabled(false)
+                      setThinkingEffort('medium')
+                    }}
+                  >
+                    <Brain size={13} />
+                    <span>Thinking{thinkingEffort === 'high' ? ' (high)' : ''}</span>
+                    <X size={11} />
+                  </button>
+                )}
+                {chatMode === 'rag' && (
+                  <div className="input-chip active rag-chip">
+                    <Upload size={13} />
+                    <span>RAG Mode</span>
+                  </div>
+                )}
+              </div>
 
               {/* Right: mic + send */}
               {(hasOwnApiKey || isWhitelisted) && (
