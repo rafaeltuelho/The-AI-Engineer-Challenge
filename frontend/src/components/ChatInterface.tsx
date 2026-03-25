@@ -211,6 +211,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const [documentSuggestedQuestions, setDocumentSuggestedQuestions] = useState<string[]>([])
   const [documentSummary, setDocumentSummary] = useState<string | null>(null)
   const [isMobile, setIsMobile] = useState(false)
+  const [conversationSearchQuery, setConversationSearchQuery] = useState('')
 
   // Image attachment state
   const [attachedImage, setAttachedImage] = useState<{ file: File; dataUrl: string } | null>(null)
@@ -1524,12 +1525,35 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
               New Chat
             </button>
 
+            {/* Search Input */}
+            <div className="sidebar-search-container">
+              <Search size={14} />
+              <input
+                type="text"
+                className="sidebar-search-input"
+                placeholder="Search history..."
+                aria-label="Search conversations"
+                value={conversationSearchQuery}
+                onChange={(e) => setConversationSearchQuery(e.target.value)}
+              />
+            </div>
+
             {/* Conversation History List */}
             <div className="conversations-list">
-              {conversations.length === 0 ? (
-                <p className="no-conversations">No conversations yet</p>
+              {conversations.filter(conv => {
+                if (!conversationSearchQuery.trim()) return true;
+                const query = conversationSearchQuery.toLowerCase();
+                const title = conv.title || conv.system_message || '';
+                return title.toLowerCase().includes(query);
+              }).length === 0 ? (
+                <p className="no-conversations">No conversations found</p>
               ) : (
-                conversations.map((conv) => {
+                conversations.filter(conv => {
+                  if (!conversationSearchQuery.trim()) return true;
+                  const query = conversationSearchQuery.toLowerCase();
+                  const title = conv.title || conv.system_message || '';
+                  return title.toLowerCase().includes(query);
+                }).map((conv) => {
                   const isActive = conversationId === conv.conversation_id
                   const isLoading = loadingConversationId === conv.conversation_id
                   const modeLabel = conv.mode === 'rag' ? '📄' : conv.mode === 'topic-explorer' ? '📚' : '💬'
