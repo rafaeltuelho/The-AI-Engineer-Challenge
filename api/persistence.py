@@ -1,7 +1,7 @@
 """
 Lightweight conversation persistence for Google-authenticated users using Upstash Redis.
 
-Conversations are keyed by SHA-256 hash of the user's email address.
+Conversations and user profile settings are keyed by SHA-256 hash of the user's email address.
 If Redis is not configured (env vars missing), all functions are no-ops
 and the app falls back to pure in-memory storage.
 """
@@ -67,6 +67,12 @@ def _make_key(email: str) -> str:
     """Create a Redis key from an email address using SHA-256 hash."""
     email_hash = hashlib.sha256(email.lower().strip().encode()).hexdigest()
     return f"convs:{email_hash}"
+
+
+def _make_profile_key(email: str) -> str:
+    """Create a Redis key for non-sensitive user personalization settings."""
+    email_hash = hashlib.sha256(email.lower().strip().encode()).hexdigest()
+    return f"profile:{email_hash}"
 
 
 class _ConversationEncoder(json.JSONEncoder):
@@ -178,6 +184,53 @@ def delete_conversations(email: str) -> None:
         logger.warning(f"Failed to delete conversations from Redis: {e}")
 
 
+def load_personalization(email: str) -> Dict[str, Any]:
+    """Load non-sensitive personalization settings for a user from Redis."""
+    redis = _get_redis_client()
+    if not redis:
+        return {}
+
+    try:
+        key = _make_profile_key(email)
+        data = redis.get(key)
+        if data is None:
+            return {}
+        if isinstance(data, str):
+            loaded = json.loads(data, object_hook=_conversation_decoder)
+            return loaded if isinstance(loaded, dict) else {}
+        return {}
+    except Exception as e:
+        logger.warning(f"Failed to load personalization from Redis: {e}")
+        return {}
+
+
+def save_personalization(email: str, personalization: Dict[str, Any]) -> None:
+    """Save non-sensitive personalization settings for a user to Redis."""
+    redis = _get_redis_client()
+    if not redis:
+        return
+
+    try:
+        key = _make_profile_key(email)
+        data = json.dumps(personalization, cls=_ConversationEncoder)
+        redis.set(key, data)
+    except Exception as e:
+        logger.warning(f"Failed to save personalization to Redis: {e}")
+
+
+def delete_personalization(email: str) -> None:
+    """Delete persisted personalization settings for a user from Redis."""
+    redis = _get_redis_client()
+    if not redis:
+        return
+
+    try:
+        key = _make_profile_key(email)
+        redis.delete(key)
+    except Exception as e:
+        logger.warning(f"Failed to delete personalization from Redis: {e}")
+
+
 def save_session(session_id: str, session_data: dict) -> None:
     """Save session to Redis as JSON (best-effort).
 
@@ -236,4 +289,3 @@ def delete_session(session_id: str) -> None:
         redis.delete(key)
     except Exception as e:
         logger.warning(f"Failed to delete session from Redis: {e}")
-

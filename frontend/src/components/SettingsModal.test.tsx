@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import SettingsModal from './SettingsModal'
 
 describe('SettingsModal', () => {
@@ -23,10 +23,18 @@ describe('SettingsModal', () => {
     isWhitelisted: false,
     freeTurnsRemaining: 3,
     hasFreeTurns: true,
+    ttsVoice: 'marin',
+    setTtsVoice: vi.fn(),
+    sessionId: 'test-session',
   }
 
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.stubGlobal('fetch', vi.fn(() => new Promise(() => {})))
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
   })
 
   it('does not render when isOpen is false', () => {
@@ -35,12 +43,13 @@ describe('SettingsModal', () => {
     expect(screen.queryByText('Settings')).not.toBeInTheDocument()
   })
 
-  it('renders provider, model, API key, and system message sections', () => {
+  it('renders provider, model, API key, personalization, and system message sections', () => {
     render(<SettingsModal {...defaultProps} />)
 
     expect(screen.getByText('Provider')).toBeInTheDocument()
     expect(screen.getByText('Model')).toBeInTheDocument()
     expect(screen.getByText('API Key')).toBeInTheDocument()
+    expect(screen.getByText('Personalization')).toBeInTheDocument()
     expect(screen.getByText('System Message')).toBeInTheDocument()
   })
 
@@ -185,5 +194,45 @@ describe('SettingsModal', () => {
 
     expect(setDeveloperMessage).toHaveBeenCalledWith('You are a helpful assistant')
   })
-})
 
+  it('saves personalization settings', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          enabled: true,
+          nickname: '',
+          occupation: '',
+          about: '',
+          response_style: 'default',
+          custom_instructions: '',
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          enabled: true,
+          nickname: 'Rafael',
+          occupation: '',
+          about: '',
+          response_style: 'concise',
+          custom_instructions: '',
+        }),
+      })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<SettingsModal {...defaultProps} />)
+
+    fireEvent.change(screen.getByPlaceholderText('Rafael'), { target: { value: 'Rafael' } })
+    fireEvent.change(screen.getAllByRole('combobox')[2], { target: { value: 'concise' } })
+    fireEvent.click(screen.getByText('Save personalization'))
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenLastCalledWith('/api/personalization', expect.objectContaining({
+        method: 'PUT',
+        headers: expect.objectContaining({ 'X-Session-ID': 'test-session' }),
+      }))
+    })
+    expect(await screen.findByText('Saved')).toBeInTheDocument()
+  })
+})
