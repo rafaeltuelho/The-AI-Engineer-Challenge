@@ -39,53 +39,65 @@ def create_openai_client(api_key: str, provider: str) -> OpenAI:
     return OpenAI(**client_kwargs)
 
 
+def _extract_responses_instructions(messages: List[Dict[str, str]]) -> Optional[str]:
+    """Extract system/developer instructions for the Responses API."""
+    instruction_parts = [
+        msg.get("content", "")
+        for msg in messages
+        if msg.get("role") in {"system", "developer"} and msg.get("content")
+    ]
+    if not instruction_parts:
+        return None
+    return "\n\n".join(instruction_parts)
+
+
 def _messages_to_responses_input(messages: List[Dict[str, str]], image_data_url: Optional[str] = None) -> Union[str, List[Dict[str, Any]]]:
     """
     Convert Chat Completions messages format to Responses API input format.
 
-    The Responses API expects either:
-    - A single input string for text-only
-    - An array of message objects with 'role' and 'content' for multimodal input
+    System/developer messages are intentionally omitted here and passed through
+    the Responses API `instructions` parameter so they keep instruction priority.
+    The remaining conversation turns are sent as structured input items.
 
     Args:
         messages: List of message dicts with 'role' and 'content'
         image_data_url: Optional base64 data URL for image attachment (only for current user turn)
 
     Returns:
-        Formatted input string for text-only, or list of message objects for multimodal
+        Structured Responses API input items, or an empty string if there are no conversation turns.
     """
-    # Build text input from messages
-    if len(messages) == 1:
-        text_content = messages[0]["content"]
-    else:
-        # For multi-turn conversations, format as conversation history
-        formatted_parts = []
-        for msg in messages:
-            role = msg["role"]
-            content = msg["content"]
-            if role == "system":
-                formatted_parts.append(f"System: {content}")
-            elif role == "user":
-                formatted_parts.append(f"User: {content}")
-            elif role == "assistant":
-                formatted_parts.append(f"Assistant: {content}")
-        text_content = "\n\n".join(formatted_parts)
-
-    # If no image, return text only
-    if image_data_url is None:
-        return text_content
-
-    # For multimodal input, wrap content parts in a message object with role
-    # Responses API format: [{"role": "user", "content": [{"type": "input_text", ...}, {"type": "input_image", ...}]}]
-    return [
-        {
-            "role": "user",
-            "content": [
-                {"type": "input_text", "text": text_content},
-                {"type": "input_image", "image_url": image_data_url}
-            ]
-        }
+    conversation_messages = [
+        msg for msg in messages
+        if msg.get("role") not in {"system", "developer"}
     ]
+
+    if not conversation_messages:
+        return ""
+
+    last_user_index = None
+    if image_data_url is not None:
+        for index in range(len(conversation_messages) - 1, -1, -1):
+            if conversation_messages[index].get("role") == "user":
+                last_user_index = index
+                break
+
+    input_items: List[Dict[str, Any]] = []
+    for index, msg in enumerate(conversation_messages):
+        role = msg.get("role", "user")
+        content = msg.get("content", "")
+
+        if image_data_url is not None and index == last_user_index:
+            input_items.append({
+                "role": "user",
+                "content": [
+                    {"type": "input_text", "text": content},
+                    {"type": "input_image", "image_url": image_data_url},
+                ],
+            })
+        else:
+            input_items.append({"role": role, "content": content})
+
+    return input_items
 
 
 def create_openai_request(
@@ -125,8 +137,10 @@ def create_openai_request(
 
     # For OpenAI GPT-5 models, use Responses API with web search tool
     if _supports_web_search(provider, model):
-        # Convert messages to Responses API input format (with optional image)
+        # Convert messages to Responses API input format (with optional image).
+        # System/developer content is passed separately through `instructions`.
         input_data = _messages_to_responses_input(messages, image_data_url)
+        instructions = _extract_responses_instructions(messages)
 
         # Build Responses API request parameters
         request_params = {
@@ -135,6 +149,9 @@ def create_openai_request(
             "stream": stream,
             **kwargs
         }
+
+        if instructions is not None:
+            request_params["instructions"] = instructions
 
         # Add web_search tool if enabled (default: True for backward compatibility)
         if web_search is None or web_search:
@@ -187,4 +204,3 @@ def extract_response_content(response: Any, stream: bool = False) -> Union[str, 
         # Otherwise it's a Chat Completions API response
         else:
             return response.choices[0].message.content
-

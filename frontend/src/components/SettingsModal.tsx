@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { X, Key, Settings, MessageSquare, CheckCircle, AlertCircle, Volume2, Play } from 'lucide-react'
+import { X, Key, Settings, MessageSquare, CheckCircle, AlertCircle, Volume2, Play, UserRound } from 'lucide-react'
 import './SettingsModal.css'
 
 const VOICES = [
@@ -8,6 +8,24 @@ const VOICES = [
   { id: 'onyx',   name: 'Onyx',   label: 'Male · Deep' },
   { id: 'cedar',  name: 'Cedar',  label: 'Male · Warm' },
 ]
+
+interface PersonalizationSettings {
+  enabled: boolean
+  nickname: string
+  occupation: string
+  about: string
+  response_style: string
+  custom_instructions: string
+}
+
+const DEFAULT_PERSONALIZATION: PersonalizationSettings = {
+  enabled: true,
+  nickname: '',
+  occupation: '',
+  about: '',
+  response_style: 'default',
+  custom_instructions: '',
+}
 
 interface SettingsModalProps {
   isOpen: boolean
@@ -51,11 +69,39 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   const [showApiKeySuccess, setShowApiKeySuccess] = useState(false)
   const [localDeveloperMessage, setLocalDeveloperMessage] = useState(developerMessage)
   const [previewingVoice, setPreviewingVoice] = useState<string | null>(null)
+  const [personalization, setPersonalization] = useState<PersonalizationSettings>(DEFAULT_PERSONALIZATION)
+  const [personalizationStatus, setPersonalizationStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
 
   // Sync local state with prop changes (e.g., when Study & Learn is toggled)
   useEffect(() => {
     setLocalDeveloperMessage(developerMessage)
   }, [developerMessage])
+
+  useEffect(() => {
+    if (!isOpen || !sessionId || typeof fetch !== 'function') return
+
+    let isActive = true
+    const loadPersonalization = async () => {
+      try {
+        const response = await fetch('/api/personalization', {
+          headers: { 'X-Session-ID': sessionId },
+        })
+        if (!response.ok) return
+        const data = await response.json()
+        if (isActive) {
+          setPersonalization({ ...DEFAULT_PERSONALIZATION, ...data })
+          setPersonalizationStatus('idle')
+        }
+      } catch (e) {
+        console.error('Personalization load error:', e)
+      }
+    }
+
+    loadPersonalization()
+    return () => {
+      isActive = false
+    }
+  }, [isOpen, sessionId])
 
   if (!isOpen) return null
 
@@ -68,6 +114,39 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     if (apiKey.trim()) {
       setShowApiKeySuccess(true)
       setTimeout(() => setShowApiKeySuccess(false), 3000)
+    }
+  }
+
+  const handlePersonalizationChange = <K extends keyof PersonalizationSettings>(
+    key: K,
+    value: PersonalizationSettings[K]
+  ) => {
+    setPersonalization(prev => ({ ...prev, [key]: value }))
+    setPersonalizationStatus('idle')
+  }
+
+  const handleSavePersonalization = async () => {
+    if (!sessionId || typeof fetch !== 'function') return
+
+    setPersonalizationStatus('saving')
+    try {
+      const response = await fetch('/api/personalization', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Session-ID': sessionId,
+        },
+        body: JSON.stringify(personalization),
+      })
+
+      if (!response.ok) throw new Error('Personalization save failed')
+      const data = await response.json()
+      setPersonalization({ ...DEFAULT_PERSONALIZATION, ...data })
+      setPersonalizationStatus('saved')
+      setTimeout(() => setPersonalizationStatus('idle'), 3000)
+    } catch (e) {
+      console.error('Personalization save error:', e)
+      setPersonalizationStatus('error')
     }
   }
 
@@ -262,6 +341,103 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
             </div>
           )}
 
+          <div className="settings-section personalization-section">
+            <label className="settings-label">
+              <UserRound size={16} />
+              <span>Personalization</span>
+            </label>
+
+            <label className="settings-checkbox-row">
+              <input
+                type="checkbox"
+                checked={personalization.enabled}
+                onChange={(e) => handlePersonalizationChange('enabled', e.target.checked)}
+              />
+              <span>Use personalization in chats</span>
+            </label>
+
+            <div className="settings-field-grid">
+              <label className="settings-field">
+                <span>Nickname</span>
+                <input
+                  type="text"
+                  value={personalization.nickname}
+                  onChange={(e) => handlePersonalizationChange('nickname', e.target.value)}
+                  placeholder="Rafael"
+                  className="settings-input"
+                  maxLength={120}
+                />
+              </label>
+
+              <label className="settings-field">
+                <span>Occupation</span>
+                <input
+                  type="text"
+                  value={personalization.occupation}
+                  onChange={(e) => handlePersonalizationChange('occupation', e.target.value)}
+                  placeholder="Solution Architect"
+                  className="settings-input"
+                  maxLength={120}
+                />
+              </label>
+            </div>
+
+            <label className="settings-field">
+              <span>Response style</span>
+              <select
+                value={personalization.response_style}
+                onChange={(e) => handlePersonalizationChange('response_style', e.target.value)}
+                className="settings-select"
+              >
+                <option value="default">Default</option>
+                <option value="concise">Concise</option>
+                <option value="balanced">Balanced</option>
+                <option value="detailed">Detailed</option>
+                <option value="coaching">Coaching</option>
+              </select>
+            </label>
+
+            <label className="settings-field">
+              <span>About you</span>
+              <textarea
+                value={personalization.about}
+                onChange={(e) => handlePersonalizationChange('about', e.target.value)}
+                placeholder="Background, interests, or context the assistant should keep in mind"
+                className="settings-textarea compact"
+                rows={4}
+                maxLength={1200}
+              />
+            </label>
+
+            <label className="settings-field">
+              <span>Custom preferences</span>
+              <textarea
+                value={personalization.custom_instructions}
+                onChange={(e) => handlePersonalizationChange('custom_instructions', e.target.value)}
+                placeholder="Tone, examples, formatting, or things you prefer"
+                className="settings-textarea compact"
+                rows={4}
+                maxLength={1200}
+              />
+            </label>
+
+            <div className="personalization-actions">
+              <button
+                className="personalization-save-btn"
+                onClick={handleSavePersonalization}
+                disabled={personalizationStatus === 'saving'}
+              >
+                {personalizationStatus === 'saving' ? 'Saving...' : 'Save personalization'}
+              </button>
+              {personalizationStatus === 'saved' && (
+                <span className="personalization-status success">Saved</span>
+              )}
+              {personalizationStatus === 'error' && (
+                <span className="personalization-status error">Save failed</span>
+              )}
+            </div>
+          </div>
+
           {/* System Message Section */}
           <div className="settings-section">
             <label className="settings-label">
@@ -292,4 +468,3 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
 }
 
 export default SettingsModal
-
