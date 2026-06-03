@@ -651,6 +651,56 @@ async def test_chat_endpoint_forwards_selected_model_to_provider(client, clean_s
     assert not mock_client.chat.completions.create.called
 
 
+@pytest.mark.asyncio
+async def test_chat_endpoint_can_include_document_context_without_switching_mode(client, clean_state, mock_session):
+    """Test regular chat can include uploaded document context without becoming a RAG conversation."""
+    import app as app_module
+
+    mock_rag_system = MagicMock()
+    mock_rag_system.search_relevant_chunks.return_value = [
+        {"chunk_text": "Uploaded document says the warranty lasts two years."}
+    ]
+
+    mock_stream = MagicMock()
+    mock_stream.__iter__ = Mock(return_value=iter([
+        MagicMock(type='response.output_text.delta', delta="The warranty lasts two years.")
+    ]))
+
+    with patch.object(app_module, "RAG_ENABLED", True), patch.object(
+        app_module,
+        "get_or_create_rag_system",
+        return_value=mock_rag_system
+    ) as mock_get_rag_system, patch("app.create_openai_request", return_value=mock_stream) as mock_create_request:
+        response = await client.post(
+            "/api/chat",
+            headers={"X-Session-ID": mock_session},
+            json={
+                "developer_message": "You are a helpful assistant.",
+                "user_message": "What is the warranty?",
+                "model": "gpt-5-mini",
+                "provider": "openai",
+                "document_context": True,
+                "document_context_k": 3
+            }
+        )
+
+    assert response.status_code == 200
+    assert response.text == "The warranty lasts two years."
+
+    mock_get_rag_system.assert_called_once_with(mock_session, "test-api-key", "openai")
+    mock_rag_system.search_relevant_chunks.assert_called_once_with("What is the warranty?", k=3)
+
+    call_kwargs = mock_create_request.call_args.kwargs
+    assert call_kwargs["messages"][0] == {"role": "system", "content": "You are a helpful assistant."}
+    assert "What is the warranty?" in call_kwargs["messages"][-1]["content"]
+    assert "Uploaded document says the warranty lasts two years." in call_kwargs["messages"][-1]["content"]
+
+    conversation_id = response.headers["x-conversation-id"]
+    assert conversations[mock_session][conversation_id]["mode"] == "regular"
+    assert conversations[mock_session][conversation_id]["system_message"] == "You are a helpful assistant."
+    assert conversations[mock_session][conversation_id]["messages"][0].content == "What is the warranty?"
+
+
 # ============================================
 # 8. RAG Endpoint Model Forwarding Tests
 # ============================================

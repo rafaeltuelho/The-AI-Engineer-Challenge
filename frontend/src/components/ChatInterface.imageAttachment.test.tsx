@@ -71,6 +71,25 @@ describe('ChatInterface - Image Attachment', () => {
     setTtsVoice: vi.fn(),
   }
 
+  const createStreamingResponse = (text: string, headers: Record<string, string> = {}) => {
+    const encoder = new TextEncoder()
+    const chunks = [encoder.encode(text)]
+
+    return {
+      ok: true,
+      headers: {
+        get: (name: string) => headers[name] ?? headers[name.toLowerCase()] ?? null,
+      },
+      body: {
+        getReader: () => ({
+          read: vi.fn()
+            .mockResolvedValueOnce({ done: false, value: chunks[0] })
+            .mockResolvedValueOnce({ done: true, value: undefined }),
+        }),
+      },
+    } as unknown as Response
+  }
+
   beforeEach(() => {
     vi.clearAllMocks()
     // Mock fetch to return empty conversations
@@ -623,6 +642,72 @@ describe('ChatInterface - Image Attachment', () => {
     await waitFor(() => {
       expect(global.fetch).toHaveBeenCalledWith('/api/conversations/conv-delete', expect.objectContaining({ method: 'DELETE' }))
     })
+  })
+
+  it('keeps regular chat mode when sending with uploaded document context', async () => {
+    global.fetch = vi.fn((url, init) => {
+      if (url === '/api/conversations' && (!init || !init.method || init.method === 'GET')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve([]),
+        } as Response)
+      }
+
+      if (url === '/api/upload-document') {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({
+            document_id: 'guide.pdf',
+            file_name: 'guide.pdf',
+            file_type: 'pdf',
+            chunk_count: 2,
+            summary: 'A short guide summary.',
+            suggested_questions: ['Summarize guide'],
+          }),
+        } as Response)
+      }
+
+      if (url === '/api/chat') {
+        return Promise.resolve(createStreamingResponse('Answered with document context.', {
+          'X-Conversation-ID': 'conv-doc-context',
+          'X-Free-Turns-Remaining': '9',
+        }))
+      }
+
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve([]),
+      } as Response)
+    })
+
+    render(<ChatInterface {...defaultProps} />)
+
+    const documentInput = document.querySelector('input[type="file"][accept*=".pdf"]') as HTMLInputElement
+    const pdfFile = new File(['pdf content'], 'guide.pdf', { type: 'application/pdf' })
+    fireEvent.change(documentInput, { target: { files: [pdfFile] } })
+
+    await waitFor(() => {
+      expect(screen.getByText(/guide.pdf/i)).toBeInTheDocument()
+    })
+    expect(screen.getByText('Document Context')).toBeInTheDocument()
+    expect(screen.queryByText('RAG Mode')).not.toBeInTheDocument()
+
+    const textarea = screen.getByLabelText('Message AI')
+    fireEvent.change(textarea, { target: { value: 'What does the guide say?' } })
+    fireEvent.submit(textarea.closest('form') as HTMLFormElement)
+
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalledWith('/api/chat', expect.any(Object))
+    })
+
+    const ragCalls = (global.fetch as ReturnType<typeof vi.fn>).mock.calls.filter(([url]) => url === '/api/rag-query')
+    expect(ragCalls).toHaveLength(0)
+
+    const chatCall = (global.fetch as ReturnType<typeof vi.fn>).mock.calls.find(([url]) => url === '/api/chat')
+    const requestBody = JSON.parse(chatCall?.[1]?.body as string)
+    expect(requestBody.document_context).toBe(true)
+    expect(requestBody.mode).toBeUndefined()
+    expect(requestBody.developer_message).not.toContain("If the context doesn't contain enough information")
   })
 
   it('expands the message input as multiline text is entered', () => {

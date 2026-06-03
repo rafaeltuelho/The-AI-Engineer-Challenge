@@ -460,6 +460,8 @@ class ChatRequest(BaseModel):
     web_search: Optional[bool] = None  # Optional web search control (default: True for GPT-5 models)
     reasoning: Optional[Dict[str, str]] = None  # Optional reasoning effort level ("low", "medium", "high")
     include: Optional[List[str]] = None  # Optional list of additional data to include (e.g., ["reasoning"])
+    document_context: Optional[bool] = False  # Include uploaded document excerpts in regular chat without changing chat mode
+    document_context_k: Optional[int] = 3  # Number of relevant document chunks to include when document_context is enabled
 
     @field_validator('api_key')
     @classmethod
@@ -597,6 +599,18 @@ class ChatRequest(BaseModel):
                 raise ValueError('Include items must be strings')
             if item not in allowed_values:
                 raise ValueError(f'Invalid include value: {item}. Allowed values: {", ".join(allowed_values)}')
+
+        return v
+
+    @field_validator('document_context_k')
+    @classmethod
+    def validate_document_context_k(cls, v):
+        """Validate number of document chunks to include in regular chat context"""
+        if v is None:
+            return 3
+
+        if v < 1 or v > 10:
+            raise ValueError('document_context_k must be between 1 and 10')
 
         return v
 
@@ -1443,6 +1457,7 @@ async def chat(
             f"reasoning={chat_request.reasoning} | "
             f"include={chat_request.include} | "
             f"image_attachment={'yes' if chat_request.image_attachment else 'no'} | "
+            f"document_context={chat_request.document_context} | "
             f"developer_message_len={len(chat_request.developer_message)} | "
             f"user_message_len={len(chat_request.user_message)}"
         )
@@ -1490,6 +1505,32 @@ async def chat(
         conv_data = user_conversations[conversation_id]
         system_msg = conv_data["system_message"]
         all_messages = conv_data["messages"]
+        document_context = ""
+
+        if chat_request.document_context and RAG_ENABLED:
+            try:
+                rag_system = get_or_create_rag_system(session_id, api_key, provider)
+                relevant_chunks = rag_system.search_relevant_chunks(
+                    chat_request.user_message,
+                    k=chat_request.document_context_k or 3
+                )
+                context_parts = [
+                    chunk.get("chunk_text", "")
+                    for chunk in relevant_chunks
+                    if chunk.get("chunk_text")
+                ]
+                document_context = "\n\n".join(context_parts)
+            except Exception as context_error:
+                logger.warning("Could not attach document context to regular chat request: %s", context_error)
+
+        current_user_content = chat_request.user_message
+        if document_context:
+            current_user_content = (
+                f"{chat_request.user_message}\n\n"
+                "Use the following uploaded document excerpts as additional context when relevant. "
+                "If they are not relevant, answer normally.\n\n"
+                f"Uploaded document context:\n{document_context}"
+            )
 
         # Token-aware context management: compress if approaching context window
         if should_compress(all_messages, system_msg, chat_request.model):
@@ -1523,8 +1564,13 @@ async def chat(
                 # Handle both Message objects and dicts (from Redis)
                 role = msg.role if hasattr(msg, "role") else msg.get("role", "user")
                 content = msg.content if hasattr(msg, "content") else msg.get("content", "")
+                if msg is user_message and document_context:
+                    content = current_user_content
                 openai_role = "assistant" if role == "assistant" else role
                 messages_for_openai.append({"role": openai_role, "content": content})
+
+        if document_context and messages_for_openai and messages_for_openai[-1]["role"] == "user":
+            messages_for_openai[-1]["content"] = current_user_content
         
         # Create an async generator function for streaming responses
         async def generate():

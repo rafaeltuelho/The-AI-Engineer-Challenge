@@ -413,10 +413,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     if (topicExplorerEnabled) {
       setChatMode('topic-explorer')
       setDeveloperMessage(getDefaultDeveloperMessage('topic-explorer'))
-    } else if (documentSummary) {
-      // If document is uploaded, use RAG mode
-      setChatMode('rag')
-      setDeveloperMessage(getDefaultDeveloperMessage('rag'))
     } else {
       setChatMode('regular')
       // Use student prompt when Study & Learn is enabled, generic prompt otherwise
@@ -1001,6 +997,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             filename: currentImage.file.name
           }
         } : {}),
+        ...(documentSummary && chatMode === 'regular' ? {
+          document_context: true,
+          document_context_k: 3
+        } : {}),
         // New optional fields for ChatGPT-style features (backend will ignore for now)
         web_search: webSearchEnabled,
         ...(thinkingEnabled ? {
@@ -1354,13 +1354,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       }
       if (data.summary) {
         setDocumentSummary(data.summary)
-      }
-      
-      // Only switch to RAG mode if currently in regular mode
-      // Preserve RAG or Topic Explorer mode if already selected
-      if (chatMode === 'regular') {
-        setChatMode('rag')
-        setDeveloperMessage(getDefaultDeveloperMessage('rag'))
       }
       
       // Clear success message after 10 seconds
@@ -1946,7 +1939,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                         setShowContextMenu(false)
                       }}
                       disabled={isPdfUploading}
-                      title={documentSummary ? "Document loaded — RAG mode active. Upload another to replace." : "Attach a document to enable RAG mode"}
+                      title={documentSummary ? "Document loaded as chat context. Upload another to replace." : "Attach a document as chat context"}
                     >
                       <Upload size={16} />
                       <span>Attach Document</span>
@@ -2048,6 +2041,12 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                     <span>Thinking{thinkingEffort === 'high' ? ' (high)' : ''}</span>
                     <X size={11} />
                   </button>
+                )}
+                {documentSummary && chatMode === 'regular' && (
+                  <div className="input-chip active rag-chip">
+                    <Upload size={13} />
+                    <span>Document Context</span>
+                  </div>
                 )}
                 {chatMode === 'rag' && (
                   <div className="input-chip active rag-chip">
