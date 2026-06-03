@@ -2024,15 +2024,9 @@ async def upload_document(
                 
             except Exception as e:
                 print(f"Error generating document summary: {str(e)}")
-                # Continue without summary if generation fails
-                summary = "Summary generation failed due to an error."
-                suggested_questions = [
-                    "What are the main topics covered in this document?",
-                    "Can you explain the key concepts mentioned?",
-                    "What are the important details I should know?",
-                    "How does this content relate to practical applications?",
-                    "What questions do you have about this material?"
-                ]
+                # Continue with the indexed document even if optional summary generation fails.
+                summary = None
+                suggested_questions = None
             
             return DocumentUploadResponse(
                 document_id=document_id,

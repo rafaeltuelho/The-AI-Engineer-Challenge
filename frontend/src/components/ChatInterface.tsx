@@ -1704,8 +1704,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             </div>
           )}
 
-          {/* Show document summary and suggested questions when available - always visible */}
-          {documentSummary && documentSuggestedQuestions.length > 0 && (
+          {/* Show document summary and suggested questions only in explicit document-focused modes */}
+          {documentSummary && documentSuggestedQuestions.length > 0 && (docQaEnabled || topicExplorerEnabled) && (
             <div className="document-summary-section">
               <h3>📄 Document Summary</h3>
               <p className="document-summary-text">{documentSummary}</p>

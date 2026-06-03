@@ -690,6 +690,8 @@ describe('ChatInterface - Image Attachment', () => {
       expect(screen.getByText(/guide.pdf/i)).toBeInTheDocument()
     })
     expect(screen.getByText('Document Context')).toBeInTheDocument()
+    expect(screen.queryByText('Document Summary')).not.toBeInTheDocument()
+    expect(screen.queryByText('A short guide summary.')).not.toBeInTheDocument()
     expect(screen.queryByText('RAG Mode')).not.toBeInTheDocument()
 
     const textarea = screen.getByLabelText('Message AI')
@@ -766,6 +768,10 @@ describe('ChatInterface - Image Attachment', () => {
     fireEvent.click(screen.getByTitle('Add context (or type /)'))
     fireEvent.click(screen.getByText('Doc Q&A'))
     expect(screen.getAllByText('Doc Q&A').length).toBeGreaterThan(0)
+    await waitFor(() => {
+      expect(screen.getByText(/Document Summary/)).toBeInTheDocument()
+      expect(screen.getByText('A short guide summary.')).toBeInTheDocument()
+    })
     expect(screen.queryByText('Document Context')).not.toBeInTheDocument()
 
     const textarea = screen.getByLabelText('Message AI')

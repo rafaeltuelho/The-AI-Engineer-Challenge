@@ -15,7 +15,7 @@ import os
 import pytest
 import pytest_asyncio
 from datetime import datetime, timezone
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch, MagicMock, AsyncMock
 import httpx
 
 # Set environment variables BEFORE importing the app
@@ -699,6 +699,51 @@ async def test_chat_endpoint_can_include_document_context_without_switching_mode
     assert conversations[mock_session][conversation_id]["mode"] == "regular"
     assert conversations[mock_session][conversation_id]["system_message"] == "You are a helpful assistant."
     assert conversations[mock_session][conversation_id]["messages"][0].content == "What is the warranty?"
+
+
+@pytest.mark.asyncio
+async def test_upload_document_summary_failure_does_not_mask_successful_index(client, clean_state, mock_session):
+    """Test upload/index can succeed even when optional document summary generation fails."""
+    import app as app_module
+
+    mock_processor = MagicMock()
+    mock_processor.process_document.return_value = {
+        "chunks": ["Document chunk one"],
+        "chunk_count": 1,
+        "metadata": {
+            "file_type": "pdf",
+            "file_name": "guide.pdf"
+        }
+    }
+
+    mock_rag_system = MagicMock()
+    mock_rag_system.index_document = AsyncMock(return_value=None)
+
+    with patch.object(app_module, "RAG_ENABLED", True), patch.object(
+        app_module,
+        "DocumentProcessor",
+        return_value=mock_processor
+    ), patch.object(
+        app_module,
+        "get_or_create_rag_system",
+        return_value=mock_rag_system
+    ), patch("app.ChatOpenAI") as mock_chat_model:
+        mock_chat_model.return_value.run.side_effect = Exception("summary failed")
+
+        response = await client.post(
+            "/api/upload-document",
+            headers={"X-Session-ID": mock_session},
+            files={"file": ("guide.pdf", b"%PDF-1.4 fake content", "application/pdf")}
+        )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["message"] == "PDF document processed and indexed successfully"
+    assert data["chunk_count"] == 1
+    assert data["summary"] is None
+    assert data["suggested_questions"] is None
+
+    mock_rag_system.index_document.assert_called_once()
 
 
 # ============================================
