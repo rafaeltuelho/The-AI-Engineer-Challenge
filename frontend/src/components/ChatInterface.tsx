@@ -236,6 +236,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const [webSearchEnabled, setWebSearchEnabled] = useState(true)
   const [studyLearnEnabled, setStudyLearnEnabled] = useState(true)
   const [topicExplorerEnabled, setTopicExplorerEnabled] = useState(false)
+  const [docQaEnabled, setDocQaEnabled] = useState(false)
   const [thinkingEnabled, setThinkingEnabled] = useState(false)
   const [thinkingEffort, setThinkingEffort] = useState<'medium' | 'high'>('medium')
 
@@ -413,6 +414,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     if (topicExplorerEnabled) {
       setChatMode('topic-explorer')
       setDeveloperMessage(getDefaultDeveloperMessage('topic-explorer'))
+    } else if (docQaEnabled) {
+      setChatMode('rag')
+      setDeveloperMessage(getDefaultDeveloperMessage('rag'))
     } else {
       setChatMode('regular')
       // Use student prompt when Study & Learn is enabled, generic prompt otherwise
@@ -424,7 +428,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         )
       }
     }
-  }, [topicExplorerEnabled, documentSummary, studyLearnEnabled])
+  }, [topicExplorerEnabled, docQaEnabled, studyLearnEnabled])
 
   // Auto-switch to gpt-5-nano when Study & Learn is enabled, then upgrade progressively
   useEffect(() => {
@@ -1253,6 +1257,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     setHasConversationStarted(false)
     setDocumentSuggestedQuestions([])
     setDocumentSummary(null)
+    setDocQaEnabled(false)
     autoThinkingTriggered.current = false
     autoMiniTriggered.current = false
     autoFullTriggered.current = false
@@ -1966,8 +1971,29 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                     </button>
                     <button
                       type="button"
+                      className={`context-menu-item toggle ${docQaEnabled ? 'active' : ''}`}
+                      onClick={() => {
+                        setDocQaEnabled(!docQaEnabled)
+                        if (!docQaEnabled) {
+                          setTopicExplorerEnabled(false)
+                        }
+                      }}
+                      disabled={!documentSummary}
+                      title={documentSummary ? "Ask questions using the uploaded document as the primary source" : "Attach a document before enabling Doc Q&A"}
+                    >
+                      <FileText size={16} />
+                      <span>Doc Q&A</span>
+                      {docQaEnabled && <span className="checkmark">✓</span>}
+                    </button>
+                    <button
+                      type="button"
                       className={`context-menu-item toggle ${topicExplorerEnabled ? 'active' : ''}`}
-                      onClick={() => setTopicExplorerEnabled(!topicExplorerEnabled)}
+                      onClick={() => {
+                        setTopicExplorerEnabled(!topicExplorerEnabled)
+                        if (!topicExplorerEnabled) {
+                          setDocQaEnabled(false)
+                        }
+                      }}
                       disabled={hasConversationStarted}
                       title={hasConversationStarted ? "Topic Explorer can only be enabled at the start of a new conversation" : "Enable Topic Explorer for interactive document learning"}
                     >
@@ -2025,6 +2051,17 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                   >
                     <Compass size={13} />
                     <span>Topic Explorer</span>
+                    <X size={11} />
+                  </button>
+                )}
+                {docQaEnabled && (
+                  <button
+                    type="button"
+                    className="input-chip active rag-chip"
+                    onClick={() => setDocQaEnabled(false)}
+                  >
+                    <FileText size={13} />
+                    <span>Doc Q&A</span>
                     <X size={11} />
                   </button>
                 )}

@@ -710,6 +710,82 @@ describe('ChatInterface - Image Attachment', () => {
     expect(requestBody.developer_message).not.toContain("If the context doesn't contain enough information")
   })
 
+  it('uses RAG query mode when Doc Q&A is explicitly enabled', async () => {
+    global.fetch = vi.fn((url, init) => {
+      if (url === '/api/conversations' && (!init || !init.method || init.method === 'GET')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve([]),
+        } as Response)
+      }
+
+      if (url === '/api/upload-document') {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({
+            document_id: 'guide.pdf',
+            file_name: 'guide.pdf',
+            file_type: 'pdf',
+            chunk_count: 2,
+            summary: 'A short guide summary.',
+            suggested_questions: ['Summarize guide'],
+          }),
+        } as Response)
+      }
+
+      if (url === '/api/rag-query') {
+        return Promise.resolve({
+          ok: true,
+          headers: {
+            get: (name: string) => name === 'X-Conversation-ID' ? 'conv-doc-qa' : null,
+          },
+          json: () => Promise.resolve({
+            answer: 'RAG answer.',
+            relevant_chunks_count: 1,
+            document_info: {},
+          }),
+        } as Response)
+      }
+
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve([]),
+      } as Response)
+    })
+
+    render(<ChatInterface {...defaultProps} />)
+
+    const documentInput = document.querySelector('input[type="file"][accept*=".pdf"]') as HTMLInputElement
+    const pdfFile = new File(['pdf content'], 'guide.pdf', { type: 'application/pdf' })
+    fireEvent.change(documentInput, { target: { files: [pdfFile] } })
+
+    await waitFor(() => {
+      expect(screen.getByText(/guide.pdf/i)).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByTitle('Add context (or type /)'))
+    fireEvent.click(screen.getByText('Doc Q&A'))
+    expect(screen.getAllByText('Doc Q&A').length).toBeGreaterThan(0)
+    expect(screen.queryByText('Document Context')).not.toBeInTheDocument()
+
+    const textarea = screen.getByLabelText('Message AI')
+    fireEvent.change(textarea, { target: { value: 'Answer from the document' } })
+    fireEvent.submit(textarea.closest('form') as HTMLFormElement)
+
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalledWith('/api/rag-query', expect.any(Object))
+    })
+
+    const chatCalls = (global.fetch as ReturnType<typeof vi.fn>).mock.calls.filter(([url]) => url === '/api/chat')
+    expect(chatCalls).toHaveLength(0)
+
+    const ragCall = (global.fetch as ReturnType<typeof vi.fn>).mock.calls.find(([url]) => url === '/api/rag-query')
+    const requestBody = JSON.parse(ragCall?.[1]?.body as string)
+    expect(requestBody.mode).toBe('rag')
+    expect(requestBody.question).toBe('Answer from the document')
+    expect(requestBody.developer_message).toContain("If the context doesn't contain enough information")
+  })
+
   it('expands the message input as multiline text is entered', () => {
     render(<ChatInterface {...defaultProps} />)
 
