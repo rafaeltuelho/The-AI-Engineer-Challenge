@@ -661,8 +661,8 @@ describe('ChatInterface - Image Attachment', () => {
             file_name: 'guide.pdf',
             file_type: 'pdf',
             chunk_count: 2,
-            summary: 'A short guide summary.',
-            suggested_questions: ['Summarize guide'],
+            summary: null,
+            suggested_questions: null,
           }),
         } as Response)
       }
@@ -691,7 +691,6 @@ describe('ChatInterface - Image Attachment', () => {
     })
     expect(screen.getByText('Document Context')).toBeInTheDocument()
     expect(screen.queryByText('Document Summary')).not.toBeInTheDocument()
-    expect(screen.queryByText('A short guide summary.')).not.toBeInTheDocument()
     expect(screen.queryByText('RAG Mode')).not.toBeInTheDocument()
 
     const textarea = screen.getByLabelText('Message AI')

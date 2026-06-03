@@ -221,6 +221,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const [hasConversationStarted, setHasConversationStarted] = useState(false)
   const [documentSuggestedQuestions, setDocumentSuggestedQuestions] = useState<string[]>([])
   const [documentSummary, setDocumentSummary] = useState<string | null>(null)
+  const [uploadedDocument, setUploadedDocument] = useState<{ id: string; name: string; type: string } | null>(null)
   const [isMobile, setIsMobile] = useState(false)
   const [conversationSearchQuery, setConversationSearchQuery] = useState('')
   const [confirmingDeleteConversationId, setConfirmingDeleteConversationId] = useState<string | null>(null)
@@ -1001,7 +1002,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             filename: currentImage.file.name
           }
         } : {}),
-        ...(documentSummary && chatMode === 'regular' ? {
+        ...(uploadedDocument && chatMode === 'regular' ? {
           document_context: true,
           document_context_k: 3
         } : {}),
@@ -1257,6 +1258,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     setHasConversationStarted(false)
     setDocumentSuggestedQuestions([])
     setDocumentSummary(null)
+    setUploadedDocument(null)
     setDocQaEnabled(false)
     autoThinkingTriggered.current = false
     autoMiniTriggered.current = false
@@ -1352,6 +1354,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       const data = await response.json()
       
       setPdfUploadSuccess(`${data.file_type.toUpperCase()} document "${data.file_name}" uploaded and processed successfully! ${data.chunk_count} chunks created.`)
+      setUploadedDocument({
+        id: data.document_id,
+        name: data.file_name,
+        type: data.file_type
+      })
       
       // Store document suggested questions and summary
       if (data.suggested_questions && data.suggested_questions.length > 0) {
@@ -1938,17 +1945,17 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                     </button>
                     <button
                       type="button"
-                      className={`context-menu-item${documentSummary ? ' toggle active' : ''}`}
+                      className={`context-menu-item${uploadedDocument ? ' toggle active' : ''}`}
                       onClick={() => {
                         fileInputRef.current?.click()
                         setShowContextMenu(false)
                       }}
                       disabled={isPdfUploading}
-                      title={documentSummary ? "Document loaded as chat context. Upload another to replace." : "Attach a document as chat context"}
+                      title={uploadedDocument ? "Document loaded as chat context. Upload another to replace." : "Attach a document as chat context"}
                     >
                       <Upload size={16} />
                       <span>Attach Document</span>
-                      {documentSummary && <span className="checkmark">✓</span>}
+                      {uploadedDocument && <span className="checkmark">✓</span>}
                     </button>
                     <div className="context-menu-divider" />
                     <button
@@ -1978,8 +1985,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                           setTopicExplorerEnabled(false)
                         }
                       }}
-                      disabled={!documentSummary}
-                      title={documentSummary ? "Ask questions using the uploaded document as the primary source" : "Attach a document before enabling Doc Q&A"}
+                      disabled={!uploadedDocument}
+                      title={uploadedDocument ? "Ask questions using the uploaded document as the primary source" : "Attach a document before enabling Doc Q&A"}
                     >
                       <FileText size={16} />
                       <span>Doc Q&A</span>
@@ -2079,7 +2086,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                     <X size={11} />
                   </button>
                 )}
-                {documentSummary && chatMode === 'regular' && (
+                {uploadedDocument && chatMode === 'regular' && (
                   <div className="input-chip active rag-chip">
                     <Upload size={13} />
                     <span>Document Context</span>
