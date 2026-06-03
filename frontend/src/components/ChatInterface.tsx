@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react'
+import React, { useState, useRef, useEffect, useLayoutEffect } from 'react'
 import { Send, MessageSquare, User, Bot, Trash2, Settings, ArrowDown, X, FileText, Upload, Compass, Image, Plus, Search, BookOpen, Brain, Volume2, Square, Mic, MicOff } from 'lucide-react'
 import MarkdownRenderer from './MarkdownRenderer'
 import SuggestedQuestions from './SuggestedQuestions'
@@ -73,6 +73,17 @@ const parseThinkingBlocks = (content: string): { thinking: string; response: str
     thinking: thinking.trim(),
     response: response.trim()
   }
+}
+
+const resizeMessageInput = (textarea: HTMLTextAreaElement | null) => {
+  if (!textarea) return
+
+  const minHeight = 28
+  const maxHeight = 200
+  textarea.style.height = 'auto'
+  const nextHeight = Math.max(minHeight, Math.min(textarea.scrollHeight, maxHeight))
+  textarea.style.height = `${nextHeight}px`
+  textarea.style.overflowY = textarea.scrollHeight > maxHeight ? 'auto' : 'hidden'
 }
 
 // Collapsible thinking block component
@@ -337,16 +348,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   }, [conversationId])
 
   // Auto-resize textarea based on content, up to the internal scroll cap.
-  useEffect(() => {
-    const textarea = textareaRef.current
-    if (!textarea) return
-
-    const minHeight = 28
-    const maxHeight = 200
-    textarea.style.height = 'auto'
-    const nextHeight = Math.max(minHeight, Math.min(textarea.scrollHeight, maxHeight))
-    textarea.style.height = `${nextHeight}px`
-    textarea.style.overflowY = textarea.scrollHeight > maxHeight ? 'auto' : 'hidden'
+  useLayoutEffect(() => {
+    resizeMessageInput(textareaRef.current)
   }, [inputMessage])
 
   // Auto-focus textarea on load.
@@ -718,8 +721,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   }
 
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const value = e.target.value
+    const value = e.currentTarget.value
     setInputMessage(value)
+    resizeMessageInput(e.currentTarget)
 
     // Detect slash command at the start of input
     if (value === '/' && !showContextMenu) {
