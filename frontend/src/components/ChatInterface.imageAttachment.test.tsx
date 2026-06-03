@@ -20,6 +20,10 @@ vi.mock('lucide-react', () => ({
   Search: () => <div>Search</div>,
   BookOpen: () => <div>BookOpen</div>,
   Brain: () => <div>Brain</div>,
+  Volume2: () => <div>Volume2</div>,
+  Square: () => <div>Square</div>,
+  Mic: () => <div>Mic</div>,
+  MicOff: () => <div>MicOff</div>,
 }))
 
 // Mock MarkdownRenderer
@@ -63,6 +67,8 @@ describe('ChatInterface - Image Attachment', () => {
     welcomeSuggestions: [],
     maxImageSizeMB: 3,
     setStudyLearnOverride: vi.fn(),
+    ttsVoice: 'marin',
+    setTtsVoice: vi.fn(),
   }
 
   beforeEach(() => {
@@ -552,5 +558,68 @@ describe('ChatInterface - Image Attachment', () => {
     expect(screen.getByText('Got the first one.')).toBeInTheDocument()
     expect(screen.getByText('Got the second one too.')).toBeInTheDocument()
   })
-})
 
+  it('requires confirmation before deleting a conversation', async () => {
+    const mockConversations = [
+      {
+        conversation_id: 'conv-delete',
+        title: 'Delete Me',
+        system_message: 'System',
+        last_updated: new Date().toISOString(),
+        mode: 'regular',
+      }
+    ]
+
+    global.fetch = vi.fn((url, init) => {
+      if (url === '/api/conversations' && (!init || !init.method || init.method === 'GET')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve(mockConversations),
+        } as Response)
+      }
+      if (url === '/api/conversations/conv-delete' && init?.method === 'DELETE') {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ message: 'deleted' }),
+        } as Response)
+      }
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve([]),
+      } as Response)
+    })
+
+    render(<ChatInterface {...defaultProps} sidebarOpen={true} />)
+
+    await waitFor(() => {
+      expect(screen.getByText('Delete Me')).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByLabelText('Delete Delete Me'))
+
+    expect(screen.getByText('Delete')).toBeInTheDocument()
+    expect(screen.getByText('Cancel')).toBeInTheDocument()
+    expect(global.fetch).not.toHaveBeenCalledWith('/api/conversations/conv-delete', expect.objectContaining({ method: 'DELETE' }))
+
+    fireEvent.click(screen.getByText('Delete'))
+
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalledWith('/api/conversations/conv-delete', expect.objectContaining({ method: 'DELETE' }))
+    })
+  })
+
+  it('expands the message input as multiline text is entered', () => {
+    render(<ChatInterface {...defaultProps} />)
+
+    const textarea = screen.getByLabelText('Message AI') as HTMLTextAreaElement
+    Object.defineProperty(textarea, 'scrollHeight', {
+      configurable: true,
+      value: 96,
+    })
+
+    fireEvent.change(textarea, { target: { value: 'line one\nline two\nline three' } })
+
+    expect(textarea.style.height).toBe('96px')
+    expect(textarea.style.overflowY).toBe('hidden')
+  })
+})

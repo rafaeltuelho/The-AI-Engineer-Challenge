@@ -212,6 +212,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const [documentSummary, setDocumentSummary] = useState<string | null>(null)
   const [isMobile, setIsMobile] = useState(false)
   const [conversationSearchQuery, setConversationSearchQuery] = useState('')
+  const [confirmingDeleteConversationId, setConfirmingDeleteConversationId] = useState<string | null>(null)
 
   // Image attachment state
   const [attachedImage, setAttachedImage] = useState<{ file: File; dataUrl: string } | null>(null)
@@ -335,12 +336,17 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     }
   }, [conversationId])
 
-  // Auto-resize textarea based on content
+  // Auto-resize textarea based on content, up to the internal scroll cap.
   useEffect(() => {
-    if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto'
-      textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`
-    }
+    const textarea = textareaRef.current
+    if (!textarea) return
+
+    const minHeight = 28
+    const maxHeight = 200
+    textarea.style.height = 'auto'
+    const nextHeight = Math.max(minHeight, Math.min(textarea.scrollHeight, maxHeight))
+    textarea.style.height = `${nextHeight}px`
+    textarea.style.overflowY = textarea.scrollHeight > maxHeight ? 'auto' : 'hidden'
   }, [inputMessage])
 
   // Auto-focus textarea on load.
@@ -597,6 +603,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     }
 
     // Set loading state
+    setConfirmingDeleteConversationId(null)
     setLoadingConversationId(convId)
 
     try {
@@ -699,6 +706,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         }
       })
       if (response.ok) {
+        setConfirmingDeleteConversationId(null)
         await loadConversations()
         if (conversationId === convId) {
           clearChat()
@@ -1548,7 +1556,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
               }).length === 0 ? (
                 <p className="no-conversations">No conversations found</p>
               ) : (
-                conversations.filter(conv => {
+        conversations.filter(conv => {
                   if (!conversationSearchQuery.trim()) return true;
                   const query = conversationSearchQuery.toLowerCase();
                   const title = conv.title || conv.system_message || '';
@@ -1556,13 +1564,17 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                 }).map((conv) => {
                   const isActive = conversationId === conv.conversation_id
                   const isLoading = loadingConversationId === conv.conversation_id
+                  const isConfirmingDelete = confirmingDeleteConversationId === conv.conversation_id
                   const modeLabel = conv.mode === 'rag' ? '📄' : conv.mode === 'topic-explorer' ? '📚' : '💬'
 
                   return (
                     <div
                       key={conv.conversation_id}
-                      className={`conversation-item ${isActive ? 'active' : ''} ${isLoading ? 'loading' : ''}`}
-                      onClick={() => loadConversation(conv.conversation_id)}
+                      className={`conversation-item ${isActive ? 'active' : ''} ${isLoading ? 'loading' : ''} ${isConfirmingDelete ? 'confirming-delete' : ''}`}
+                      onClick={() => {
+                        if (isConfirmingDelete) return
+                        loadConversation(conv.conversation_id)
+                      }}
                       style={{ cursor: isLoading ? 'wait' : 'pointer' }}
                     >
                       <span className="conversation-mode-icon">{modeLabel}</span>
@@ -1578,16 +1590,39 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                           </div>
                         </div>
                       )}
-                      <button
-                        className="delete-conversation-btn"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          deleteConversation(conv.conversation_id)
-                        }}
-                        title="Delete conversation"
-                      >
-                        <Trash2 size={12} />
-                      </button>
+                      {isConfirmingDelete ? (
+                        <div className="delete-confirmation-actions" onClick={(e) => e.stopPropagation()}>
+                          <button
+                            type="button"
+                            className="confirm-delete-btn"
+                            onClick={() => deleteConversation(conv.conversation_id)}
+                            aria-label={`Confirm delete ${conv.title || 'conversation'}`}
+                          >
+                            Delete
+                          </button>
+                          <button
+                            type="button"
+                            className="cancel-delete-btn"
+                            onClick={() => setConfirmingDeleteConversationId(null)}
+                            aria-label="Cancel delete conversation"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          className="delete-conversation-btn"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setConfirmingDeleteConversationId(conv.conversation_id)
+                          }}
+                          title="Delete conversation"
+                          aria-label={`Delete ${conv.title || 'conversation'}`}
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      )}
                     </div>
                   )
                 })
@@ -1853,6 +1888,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
               className="message-input"
               disabled={isLoading || (!isWhitelisted && !hasOwnApiKey && !hasFreeTurns)}
               rows={1}
+              aria-label="Message AI"
             />
 
             {/* BOTTOM ROW: controls bar */}
