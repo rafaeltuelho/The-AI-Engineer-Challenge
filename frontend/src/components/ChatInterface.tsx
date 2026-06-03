@@ -224,6 +224,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const [isMobile, setIsMobile] = useState(false)
   const [conversationSearchQuery, setConversationSearchQuery] = useState('')
   const [confirmingDeleteConversationId, setConfirmingDeleteConversationId] = useState<string | null>(null)
+  const [deletingConversationId, setDeletingConversationId] = useState<string | null>(null)
 
   // Image attachment state
   const [attachedImage, setAttachedImage] = useState<{ file: File; dataUrl: string } | null>(null)
@@ -701,6 +702,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   }
 
   const deleteConversation = async (convId: string) => {
+    if (deletingConversationId) return
+
+    setDeletingConversationId(convId)
     try {
       const response = await fetch(`/api/conversations/${convId}`, {
         method: 'DELETE',
@@ -717,6 +721,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       }
     } catch (error) {
       console.error('Error deleting conversation:', error)
+    } finally {
+      setDeletingConversationId(null)
     }
   }
 
@@ -1569,17 +1575,19 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                   const isActive = conversationId === conv.conversation_id
                   const isLoading = loadingConversationId === conv.conversation_id
                   const isConfirmingDelete = confirmingDeleteConversationId === conv.conversation_id
+                  const isDeleting = deletingConversationId === conv.conversation_id
                   const modeLabel = conv.mode === 'rag' ? '📄' : conv.mode === 'topic-explorer' ? '📚' : '💬'
 
                   return (
                     <div
                       key={conv.conversation_id}
-                      className={`conversation-item ${isActive ? 'active' : ''} ${isLoading ? 'loading' : ''} ${isConfirmingDelete ? 'confirming-delete' : ''}`}
+                      className={`conversation-item ${isActive ? 'active' : ''} ${isLoading ? 'loading' : ''} ${isConfirmingDelete ? 'confirming-delete' : ''} ${isDeleting ? 'deleting' : ''}`}
                       onClick={() => {
-                        if (isConfirmingDelete) return
+                        if (isConfirmingDelete || isDeleting) return
                         loadConversation(conv.conversation_id)
                       }}
-                      style={{ cursor: isLoading ? 'wait' : 'pointer' }}
+                      style={{ cursor: isLoading || isDeleting ? 'wait' : 'pointer' }}
+                      aria-busy={isDeleting}
                     >
                       <span className="conversation-mode-icon">{modeLabel}</span>
                       <div className="conversation-title">
@@ -1600,14 +1608,20 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                             type="button"
                             className="confirm-delete-btn"
                             onClick={() => deleteConversation(conv.conversation_id)}
+                            disabled={isDeleting}
                             aria-label={`Confirm delete ${conv.title || 'conversation'}`}
                           >
-                            Delete
+                            {isDeleting ? 'Deleting...' : 'Delete'}
                           </button>
                           <button
                             type="button"
                             className="cancel-delete-btn"
-                            onClick={() => setConfirmingDeleteConversationId(null)}
+                            onClick={() => {
+                              if (!isDeleting) {
+                                setConfirmingDeleteConversationId(null)
+                              }
+                            }}
+                            disabled={isDeleting}
                             aria-label="Cancel delete conversation"
                           >
                             Cancel

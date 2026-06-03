@@ -569,6 +569,10 @@ describe('ChatInterface - Image Attachment', () => {
         mode: 'regular',
       }
     ]
+    let resolveDelete: (value: Response) => void
+    const deletePromise = new Promise<Response>((resolve) => {
+      resolveDelete = resolve
+    })
 
     global.fetch = vi.fn((url, init) => {
       if (url === '/api/conversations' && (!init || !init.method || init.method === 'GET')) {
@@ -578,10 +582,7 @@ describe('ChatInterface - Image Attachment', () => {
         } as Response)
       }
       if (url === '/api/conversations/conv-delete' && init?.method === 'DELETE') {
-        return Promise.resolve({
-          ok: true,
-          json: () => Promise.resolve({ message: 'deleted' }),
-        } as Response)
+        return deletePromise
       }
       return Promise.resolve({
         ok: true,
@@ -602,6 +603,22 @@ describe('ChatInterface - Image Attachment', () => {
     expect(global.fetch).not.toHaveBeenCalledWith('/api/conversations/conv-delete', expect.objectContaining({ method: 'DELETE' }))
 
     fireEvent.click(screen.getByText('Delete'))
+
+    expect(screen.getByRole('button', { name: 'Confirm delete Delete Me' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Cancel delete conversation' })).toBeDisabled()
+    expect(screen.getByText('Deleting...')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByText('Deleting...'))
+
+    const deleteCalls = () => (global.fetch as ReturnType<typeof vi.fn>).mock.calls.filter(
+      ([url, init]) => url === '/api/conversations/conv-delete' && init?.method === 'DELETE'
+    )
+    expect(deleteCalls()).toHaveLength(1)
+
+    resolveDelete!({
+      ok: true,
+      json: () => Promise.resolve({ message: 'deleted' }),
+    } as Response)
 
     await waitFor(() => {
       expect(global.fetch).toHaveBeenCalledWith('/api/conversations/conv-delete', expect.objectContaining({ method: 'DELETE' }))

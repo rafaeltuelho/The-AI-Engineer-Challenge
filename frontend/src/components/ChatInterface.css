@@ -401,6 +401,10 @@
   white-space: normal;
 }
 
+.conversation-item.deleting {
+  background: rgba(239, 68, 68, 0.12);
+}
+
 .conversation-loading-indicator {
   display: flex;
   align-items: center;
@@ -483,6 +487,16 @@
 
 .confirm-delete-btn:hover {
   filter: brightness(1.05);
+}
+
+.confirm-delete-btn:disabled,
+.cancel-delete-btn:disabled {
+  cursor: wait;
+  opacity: 0.72;
+}
+
+.confirm-delete-btn:disabled:hover {
+  filter: none;
 }
 
 .cancel-delete-btn {
