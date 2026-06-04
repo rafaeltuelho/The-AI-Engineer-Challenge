@@ -772,6 +772,7 @@ describe('ChatInterface - Image Attachment', () => {
       expect(screen.getByText('A short guide summary.')).toBeInTheDocument()
     })
     expect(screen.queryByText('Document Context')).not.toBeInTheDocument()
+    expect(screen.queryByText('RAG Mode')).not.toBeInTheDocument()
 
     const textarea = screen.getByLabelText('Message AI')
     fireEvent.change(textarea, { target: { value: 'Answer from the document' } })

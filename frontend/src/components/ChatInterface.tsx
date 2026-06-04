@@ -2126,12 +2126,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                     <span>Document Context</span>
                   </div>
                 )}
-                {chatMode === 'rag' && (
-                  <div className="input-chip active rag-chip">
-                    <Upload size={13} />
-                    <span>RAG Mode</span>
-                  </div>
-                )}
               </div>
 
               {/* Right: mic + send */}
