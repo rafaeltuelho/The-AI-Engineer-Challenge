@@ -791,6 +791,17 @@ describe('ChatInterface - Image Attachment', () => {
     expect(requestBody.developer_message).toContain("If the context doesn't contain enough information")
   })
 
+  it('allows enabling Doc Q&A at the beginning before uploading a document', () => {
+    render(<ChatInterface {...defaultProps} />)
+
+    fireEvent.click(screen.getByTitle('Add context (or type /)'))
+    const docQaButton = screen.getByRole('button', { name: /Doc Q&A/ })
+
+    expect(docQaButton).toBeEnabled()
+    fireEvent.click(docQaButton)
+    expect(screen.getAllByText('Doc Q&A').length).toBeGreaterThan(0)
+  })
+
   it('can enable Doc Q&A from the slash command menu', async () => {
     global.fetch = vi.fn((url, init) => {
       if (url === '/api/conversations' && (!init || !init.method || init.method === 'GET')) {

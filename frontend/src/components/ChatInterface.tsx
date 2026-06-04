@@ -2018,13 +2018,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                       type="button"
                       className={`context-menu-item toggle ${docQaEnabled ? 'active' : ''}`}
                       onClick={handleDocQaToggle}
-                      disabled={!uploadedDocument || hasConversationStarted}
+                      disabled={hasConversationStarted}
                       title={
                         hasConversationStarted
                           ? "Doc Q&A can only be enabled at the start of a new conversation"
-                          : uploadedDocument
-                          ? "Ask questions using the uploaded document as the primary source"
-                          : "Attach a document before enabling Doc Q&A"
+                          : "Enable Doc Q&A for uploaded document questions"
                       }
                     >
                       <FileText size={16} />
