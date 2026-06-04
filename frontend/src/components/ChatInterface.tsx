@@ -727,6 +727,32 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     }
   }
 
+  const clearSlashCommandInput = () => {
+    if (inputMessage.trim() === '/') {
+      setInputMessage('')
+    }
+  }
+
+  const handleDocQaToggle = () => {
+    const nextEnabled = !docQaEnabled
+    setDocQaEnabled(nextEnabled)
+    if (nextEnabled) {
+      setTopicExplorerEnabled(false)
+    }
+    clearSlashCommandInput()
+    setShowContextMenu(false)
+  }
+
+  const handleTopicExplorerToggle = () => {
+    const nextEnabled = !topicExplorerEnabled
+    setTopicExplorerEnabled(nextEnabled)
+    if (nextEnabled) {
+      setDocQaEnabled(false)
+    }
+    clearSlashCommandInput()
+    setShowContextMenu(false)
+  }
+
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const value = e.currentTarget.value
     setInputMessage(value)
@@ -735,6 +761,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     // Detect slash command at the start of input
     if (value === '/' && !showContextMenu) {
       setShowContextMenu(true)
+    } else if (value !== '/' && showContextMenu) {
+      setShowContextMenu(false)
     }
   }
 
@@ -1937,6 +1965,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                       onClick={() => {
                         imageInputRef.current?.click()
                         setShowContextMenu(false)
+                        clearSlashCommandInput()
                       }}
                       disabled={selectedProvider !== 'openai' || chatMode !== 'regular' || !!attachedImage}
                     >
@@ -1949,6 +1978,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                       onClick={() => {
                         fileInputRef.current?.click()
                         setShowContextMenu(false)
+                        clearSlashCommandInput()
                       }}
                       disabled={isPdfUploading}
                       title={uploadedDocument ? "Document loaded as chat context. Upload another to replace." : "Attach a document as chat context"}
@@ -1961,7 +1991,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                     <button
                       type="button"
                       className={`context-menu-item toggle ${webSearchEnabled ? 'active' : ''}`}
-                      onClick={() => setWebSearchEnabled(!webSearchEnabled)}
+                      onClick={() => {
+                        setWebSearchEnabled(!webSearchEnabled)
+                        clearSlashCommandInput()
+                        setShowContextMenu(false)
+                      }}
                     >
                       <Search size={16} />
                       <span>Web Search</span>
@@ -1970,7 +2004,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                     <button
                       type="button"
                       className={`context-menu-item toggle ${studyLearnEnabled ? 'active' : ''}`}
-                      onClick={() => setStudyLearnEnabled(!studyLearnEnabled)}
+                      onClick={() => {
+                        setStudyLearnEnabled(!studyLearnEnabled)
+                        clearSlashCommandInput()
+                        setShowContextMenu(false)
+                      }}
                     >
                       <BookOpen size={16} />
                       <span>Study & Learn</span>
@@ -1979,14 +2017,15 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                     <button
                       type="button"
                       className={`context-menu-item toggle ${docQaEnabled ? 'active' : ''}`}
-                      onClick={() => {
-                        setDocQaEnabled(!docQaEnabled)
-                        if (!docQaEnabled) {
-                          setTopicExplorerEnabled(false)
-                        }
-                      }}
-                      disabled={!uploadedDocument}
-                      title={uploadedDocument ? "Ask questions using the uploaded document as the primary source" : "Attach a document before enabling Doc Q&A"}
+                      onClick={handleDocQaToggle}
+                      disabled={!uploadedDocument || hasConversationStarted}
+                      title={
+                        hasConversationStarted
+                          ? "Doc Q&A can only be enabled at the start of a new conversation"
+                          : uploadedDocument
+                          ? "Ask questions using the uploaded document as the primary source"
+                          : "Attach a document before enabling Doc Q&A"
+                      }
                     >
                       <FileText size={16} />
                       <span>Doc Q&A</span>
@@ -1995,12 +2034,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                     <button
                       type="button"
                       className={`context-menu-item toggle ${topicExplorerEnabled ? 'active' : ''}`}
-                      onClick={() => {
-                        setTopicExplorerEnabled(!topicExplorerEnabled)
-                        if (!topicExplorerEnabled) {
-                          setDocQaEnabled(false)
-                        }
-                      }}
+                      onClick={handleTopicExplorerToggle}
                       disabled={hasConversationStarted}
                       title={hasConversationStarted ? "Topic Explorer can only be enabled at the start of a new conversation" : "Enable Topic Explorer for interactive document learning"}
                     >
@@ -2016,6 +2050,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                         if (thinkingEnabled) {
                           setThinkingEffort('medium')
                         }
+                        clearSlashCommandInput()
+                        setShowContextMenu(false)
                       }}
                     >
                       <Brain size={16} />
