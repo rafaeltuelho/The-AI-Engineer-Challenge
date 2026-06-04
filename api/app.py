@@ -1739,6 +1739,18 @@ async def chat(
                 f"Uploaded document context:\n{document_context}"
             )
 
+        # Free-tier requests use a server API key, so enforce limits on the
+        # effective current turn after document excerpts have been attached.
+        if not session.get("has_own_api_key") and not session.get("is_whitelisted"):
+            effective_token_count = count_tokens(current_user_content, chat_request.model)
+            if effective_token_count > MAX_FREE_MESSAGE_TOKENS:
+                if user_conversations[conversation_id]["messages"] and user_conversations[conversation_id]["messages"][-1] is user_message:
+                    user_conversations[conversation_id]["messages"].pop()
+                raise HTTPException(
+                    status_code=403,
+                    detail=f"Message and document context too long for free tier ({effective_token_count} tokens, max {MAX_FREE_MESSAGE_TOKENS}). Please provide your own API key."
+                )
+
         # Token-aware context management: compress if approaching context window
         if should_compress(all_messages, system_msg, chat_request.model):
             compressed = compress_conversation(
@@ -1901,6 +1913,8 @@ async def chat(
         response.headers["X-Free-Turns-Remaining"] = str(free_turns_remaining)
         return response
     
+    except HTTPException:
+        raise
     except Exception as e:
         # Handle any errors that occur during processing
         print(f"Error in chat endpoint: {str(e)}")

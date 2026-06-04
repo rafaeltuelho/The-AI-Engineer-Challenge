@@ -1387,14 +1387,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         name: data.file_name,
         type: data.file_type
       })
-      
-      // Store document suggested questions and summary
-      if (data.suggested_questions && data.suggested_questions.length > 0) {
-        setDocumentSuggestedQuestions(data.suggested_questions)
-      }
-      if (data.summary) {
-        setDocumentSummary(data.summary)
-      }
+
+      // Store or clear document suggested questions and summary for this upload.
+      setDocumentSuggestedQuestions(Array.isArray(data.suggested_questions) ? data.suggested_questions : [])
+      setDocumentSummary(data.summary || null)
       
       // Clear success message after 10 seconds
       setTimeout(() => setPdfUploadSuccess(null), 10000)
@@ -2103,11 +2099,17 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                   <button
                     type="button"
                     className="input-chip active rag-chip"
-                    onClick={() => setDocQaEnabled(false)}
+                    onClick={() => {
+                      if (!hasConversationStarted) {
+                        setDocQaEnabled(false)
+                      }
+                    }}
+                    disabled={hasConversationStarted}
+                    title={hasConversationStarted ? "Doc Q&A mode is locked for this conversation" : "Disable Doc Q&A"}
                   >
                     <FileText size={13} />
                     <span>Doc Q&A</span>
-                    <X size={11} />
+                    {!hasConversationStarted && <X size={11} />}
                   </button>
                 )}
                 {thinkingEnabled && (

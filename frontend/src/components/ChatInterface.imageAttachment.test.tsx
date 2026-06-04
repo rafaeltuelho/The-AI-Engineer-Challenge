@@ -791,6 +791,79 @@ describe('ChatInterface - Image Attachment', () => {
     expect(requestBody.mode).toBe('rag')
     expect(requestBody.question).toBe('Answer from the document')
     expect(requestBody.developer_message).toContain("If the context doesn't contain enough information")
+    expect(screen.getByRole('button', { name: /Doc Q&A/ })).toBeDisabled()
+  })
+
+  it('clears stale document summary when replacement upload has no summary', async () => {
+    const uploadResponses = [
+      {
+        document_id: 'guide-a.pdf',
+        file_name: 'guide-a.pdf',
+        file_type: 'pdf',
+        chunk_count: 2,
+        summary: 'Summary for document A.',
+        suggested_questions: ['Ask about A'],
+      },
+      {
+        document_id: 'guide-b.pdf',
+        file_name: 'guide-b.pdf',
+        file_type: 'pdf',
+        chunk_count: 3,
+        summary: null,
+        suggested_questions: null,
+      },
+    ]
+
+    global.fetch = vi.fn((url, init) => {
+      if (url === '/api/conversations' && (!init || !init.method || init.method === 'GET')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve([]),
+        } as Response)
+      }
+
+      if (url === '/api/upload-document') {
+        const nextUpload = uploadResponses.shift()
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve(nextUpload),
+        } as Response)
+      }
+
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve([]),
+      } as Response)
+    })
+
+    render(<ChatInterface {...defaultProps} />)
+
+    const documentInput = document.querySelector('input[type="file"][accept*=".pdf"]') as HTMLInputElement
+    fireEvent.change(documentInput, {
+      target: { files: [new File(['pdf content a'], 'guide-a.pdf', { type: 'application/pdf' })] }
+    })
+
+    await waitFor(() => {
+      expect(screen.getByText(/guide-a.pdf/i)).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByTitle('Add context (or type /)'))
+    fireEvent.click(screen.getByText('Doc Q&A'))
+
+    await waitFor(() => {
+      expect(screen.getByText('Summary for document A.')).toBeInTheDocument()
+    })
+
+    fireEvent.change(documentInput, {
+      target: { files: [new File(['pdf content b'], 'guide-b.pdf', { type: 'application/pdf' })] }
+    })
+
+    await waitFor(() => {
+      expect(screen.getByText(/guide-b.pdf/i)).toBeInTheDocument()
+    })
+
+    expect(screen.queryByText('Summary for document A.')).not.toBeInTheDocument()
+    expect(screen.queryByText(/Document Summary/)).not.toBeInTheDocument()
   })
 
   it('allows enabling Doc Q&A at the beginning before uploading a document', () => {

@@ -754,6 +754,45 @@ async def test_chat_endpoint_can_include_document_context_without_switching_mode
 
 
 @pytest.mark.asyncio
+async def test_chat_endpoint_counts_document_context_against_free_tier_limit(client, clean_state):
+    """Test regular chat rejects oversized retrieved document context for free-tier sessions."""
+    import app as app_module
+
+    session_id = create_session(auth_type="guest", provider="openai")
+
+    mock_rag_system = MagicMock()
+    mock_rag_system.search_relevant_chunks.return_value = [
+        {"chunk_text": " ".join(["document"] * 3000)}
+    ]
+
+    with patch.object(app_module, "RAG_ENABLED", True), patch.object(
+        app_module,
+        "get_or_create_rag_system",
+        return_value=mock_rag_system
+    ) as mock_get_rag_system, patch("app.create_openai_request") as mock_create_request:
+        response = await client.post(
+            "/api/chat",
+            headers={"X-Session-ID": session_id},
+            json={
+                "developer_message": "You are a helpful assistant.",
+                "user_message": "What is this?",
+                "model": "gpt-5-mini",
+                "provider": "openai",
+                "document_context": True,
+                "document_context_k": 10
+            }
+        )
+
+    assert response.status_code == 403
+    assert "document context too long" in response.json()["detail"]
+    mock_get_rag_system.assert_called_once()
+    mock_create_request.assert_not_called()
+    assert conversations[session_id]
+    conversation_id = next(iter(conversations[session_id]))
+    assert conversations[session_id][conversation_id]["messages"] == []
+
+
+@pytest.mark.asyncio
 async def test_upload_document_summary_failure_does_not_mask_successful_index(client, clean_state, mock_session):
     """Test upload/index can succeed even when optional document summary generation fails."""
     import app as app_module
