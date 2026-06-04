@@ -1,11 +1,12 @@
 # Merge Instructions: Chat UX and Responsiveness Refinements
 
-This branch adds focused chat UX and responsiveness improvements:
+This branch builds on the personalization work already in `main` and adds focused chat UX and responsiveness improvements:
 
 - Conversation history delete now requires an inline confirmation step.
 - The message composer behaves more like ChatGPT: it keeps a comfortable one-row minimum, expands smoothly for multiline text, and scrolls internally after reaching its max height.
-- Document modes are explicit: regular Chat can attach document context, while Doc Q&A/Topic Explorer own the document summary and RAG-style behavior.
+- Document modes are explicit: regular Chat can attach document context, while Doc Q&A and Topic Explorer own the document summary and RAG-style behavior.
 - Regular chat no longer enables Web Search by default, avoiding hidden tool orchestration latency. Users can still opt into Web Search from the composer menu or chip.
+- OpenAI Responses API calls preserve structured `instructions` handling from `main` while keeping Web Search opt-in.
 
 Branch: `codex/follow-up-work`
 
@@ -38,7 +39,7 @@ Do not commit `.env`.
    ```
 
 2. Open the repo on GitHub.
-3. Create a PR from `codex/follow-up-work` into `main`.
+3. Create or update the PR from `codex/follow-up-work` into `main`.
 4. Suggested title:
 
    ```text
@@ -53,6 +54,7 @@ Do not commit `.env`.
    - Improve composer textarea auto-resize behavior for multiline input
    - Add explicit Doc Q&A document mode behavior and summary handling
    - Make Web Search opt-in so regular chat avoids hidden tool latency
+   - Preserve structured Responses API instruction handling from main
 
    ## Verification
    - uv run pytest -q api/tests/test_app.py
@@ -76,6 +78,7 @@ gh pr create \
 - Improve composer textarea auto-resize behavior for multiline input
 - Add explicit Doc Q&A document mode behavior and summary handling
 - Make Web Search opt-in so regular chat avoids hidden tool latency
+- Preserve structured Responses API instruction handling from main
 
 ## Verification
 - uv run pytest -q api/tests/test_app.py

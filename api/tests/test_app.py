@@ -137,6 +137,42 @@ async def test_get_auth_me_invalid_session(client, clean_state):
 
 
 @pytest.mark.asyncio
+async def test_get_personalization_defaults(client, clean_state, mock_session):
+    """Test GET /api/personalization returns default profile settings."""
+    response = await client.get(
+        "/api/personalization",
+        headers={"X-Session-ID": mock_session}
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["enabled"] is True
+    assert data["nickname"] == ""
+    assert data["response_style"] == "default"
+
+
+@pytest.mark.asyncio
+async def test_update_personalization(client, clean_state, mock_session):
+    """Test PUT /api/personalization stores validated profile settings."""
+    response = await client.put(
+        "/api/personalization",
+        headers={"X-Session-ID": mock_session},
+        json={
+            "enabled": True,
+            "nickname": "Rafael",
+            "occupation": "Specialist Solution Architect",
+            "about": "Works on AI engineering.",
+            "response_style": "concise",
+            "custom_instructions": "Be practical and direct."
+        }
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["nickname"] == "Rafael"
+    assert data["response_style"] == "concise"
+    assert sessions[mock_session]["personalization"]["custom_instructions"] == "Be practical and direct."
+
+
+@pytest.mark.asyncio
 async def test_logout_valid_session(client, clean_state, mock_session):
     """Test POST /api/auth/logout deletes session and conversations."""
     # Create a conversation for this session
@@ -397,6 +433,23 @@ def test_chat_request_invalid_provider():
     assert "Invalid provider" in str(exc_info.value)
 
 
+def test_personalization_settings_validation():
+    """Test PersonalizationSettings trims values and validates style."""
+    from app import PersonalizationSettings
+    from pydantic import ValidationError
+
+    settings = PersonalizationSettings(
+        nickname=" Rafael ",
+        occupation="Solution Architect",
+        response_style="CONCISE",
+    )
+    assert settings.nickname == "Rafael"
+    assert settings.response_style == "concise"
+
+    with pytest.raises(ValidationError):
+        PersonalizationSettings(response_style="bossy")
+
+
 def test_chat_request_invalid_conversation_id():
     """Test ChatRequest with invalid conversation_id."""
     from app import ChatRequest
@@ -642,10 +695,10 @@ async def test_chat_endpoint_forwards_selected_model_to_provider(client, clean_s
     assert call_kwargs["stream"] is True
     # Verify web_search tool is not added unless explicitly requested
     assert "tools" not in call_kwargs
-    # Verify input contains the messages
+    # Verify instructions and input preserve role boundaries
     assert "input" in call_kwargs
-    assert "You are a helpful assistant" in call_kwargs["input"]
-    assert "Say hello" in call_kwargs["input"]
+    assert call_kwargs["instructions"] == "You are a helpful assistant."
+    assert call_kwargs["input"] == [{"role": "user", "content": "Say hello"}]
     # Verify Chat Completions API was NOT called
     assert not mock_client.chat.completions.create.called
 
@@ -792,6 +845,47 @@ async def test_upload_document_generates_summary_without_openai_response_format(
     assert run_kwargs["model_name"] == "gpt-5-mini"
     assert run_kwargs["web_search"] is False
     assert "response_format" not in run_kwargs
+
+
+@pytest.mark.asyncio
+async def test_chat_endpoint_applies_personalization_to_system_message(client, clean_state, mock_session):
+    """Test chat requests compose saved personalization into system instructions."""
+    sessions[mock_session]["personalization"] = {
+        "enabled": True,
+        "nickname": "Rafael",
+        "occupation": "Solution Architect",
+        "about": "",
+        "response_style": "concise",
+        "custom_instructions": "Use practical examples."
+    }
+
+    mock_event = MagicMock()
+    mock_event.type = "response.output_text.delta"
+    mock_event.delta = "Done"
+
+    with patch('app.create_openai_request') as mock_helper:
+        mock_stream = MagicMock()
+        mock_stream.__iter__ = Mock(return_value=iter([mock_event]))
+        mock_helper.return_value = mock_stream
+
+        response = await client.post(
+            "/api/chat",
+            headers={"X-Session-ID": mock_session},
+            json={
+                "developer_message": "You are helpful.",
+                "user_message": "Say hi",
+                "model": "gpt-5-mini",
+                "provider": "openai"
+            }
+        )
+
+    assert response.status_code == 200
+    messages = mock_helper.call_args.kwargs["messages"]
+    assert messages[0]["role"] == "system"
+    assert "Saved user personalization follows" in messages[0]["content"]
+    assert "- Nickname: Rafael" in messages[0]["content"]
+    assert "- Preferred response style: concise" in messages[0]["content"]
+    assert "- Custom preferences: Use practical examples." in messages[0]["content"]
 
 
 # ============================================
@@ -1747,7 +1841,10 @@ def test_openai_helper_omits_web_search_by_default_for_gpt5():
             api_key="test-key",
             provider="openai",
             model="gpt-5",
-            messages=[{"role": "user", "content": "test"}],
+            messages=[
+                {"role": "system", "content": "Follow app rules."},
+                {"role": "user", "content": "test"},
+            ],
             stream=False
         )
 
@@ -1755,7 +1852,8 @@ def test_openai_helper_omits_web_search_by_default_for_gpt5():
         assert mock_client.responses.create.called
         call_kwargs = mock_client.responses.create.call_args[1]
         assert "tools" not in call_kwargs
-        assert "input" in call_kwargs
+        assert call_kwargs["instructions"] == "Follow app rules."
+        assert call_kwargs["input"] == [{"role": "user", "content": "test"}]
         # Verify Chat Completions API was NOT called
         assert not mock_client.chat.completions.create.called
 
@@ -2159,15 +2257,19 @@ async def test_text_only_message_no_regression(client, clean_state, mock_session
 
 def test_openai_helper_multimodal_input():
     """Test openai_helper supports multimodal input with correct Responses API format."""
-    from openai_helper import _messages_to_responses_input
+    from openai_helper import _extract_responses_instructions, _messages_to_responses_input
 
-    messages = [{"role": "user", "content": "What's in this image?"}]
+    messages = [
+        {"role": "system", "content": "Use precise language."},
+        {"role": "user", "content": "What's in this image?"},
+    ]
     image_url = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
 
-    # Without image, should return text only
+    assert _extract_responses_instructions(messages) == "Use precise language."
+
+    # Without image, should return structured conversation turns only
     result = _messages_to_responses_input(messages)
-    assert isinstance(result, str)
-    assert result == "What's in this image?"
+    assert result == [{"role": "user", "content": "What's in this image?"}]
 
     # With image, should return list of message objects (Responses API format)
     result = _messages_to_responses_input(messages, image_url)
