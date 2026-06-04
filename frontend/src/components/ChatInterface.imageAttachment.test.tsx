@@ -771,6 +771,7 @@ describe('ChatInterface - Image Attachment', () => {
       expect(screen.getByText(/Document Summary/)).toBeInTheDocument()
       expect(screen.getByText('A short guide summary.')).toBeInTheDocument()
     })
+    expect(screen.queryByText('What can I help with?')).not.toBeInTheDocument()
     expect(screen.queryByText('Document Context')).not.toBeInTheDocument()
     expect(screen.queryByText('RAG Mode')).not.toBeInTheDocument()
 

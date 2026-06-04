@@ -1530,6 +1530,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     )
   }
 
+  const showDocumentSummaryPanel = Boolean(
+    documentSummary && documentSuggestedQuestions.length > 0 && (docQaEnabled || topicExplorerEnabled)
+  )
+
   return (
     <div className="chat-interface" ref={containerRef}>
       {/* Settings Modal */}
@@ -1740,7 +1744,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           )}
 
           {/* Show document summary and suggested questions only in explicit document-focused modes */}
-          {documentSummary && documentSuggestedQuestions.length > 0 && (docQaEnabled || topicExplorerEnabled) && (
+          {showDocumentSummaryPanel && (
             <div className="document-summary-section">
               <h3>📄 Document Summary</h3>
               <p className="document-summary-text">{documentSummary}</p>
@@ -1754,7 +1758,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             </div>
           )}
 
-          {!loadingConversationId && messages.length === 0 ? (
+          {!loadingConversationId && messages.length === 0 && !showDocumentSummaryPanel ? (
             <div className="welcome-screen">
               <h1 className="welcome-heading">What can I help with?</h1>
 
