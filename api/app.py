@@ -1976,8 +1976,9 @@ async def upload_document(
                 
                 # Generate summary and suggested questions
                 # Initialize ChatOpenAI with the provided API key and provider
-                kwargs = {}
-                kwargs["response_format"] = {"type": "json_object"}
+                kwargs = {"web_search": False}
+                if provider != "openai":
+                    kwargs["response_format"] = {"type": "json_object"}
                 chat_model = ChatOpenAI(api_key=api_key, provider=provider)
                 response = chat_model.run(
                     model_name="gpt-5-mini" if provider == "openai" else "deepseek-ai/DeepSeek-V3.1",

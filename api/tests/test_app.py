@@ -746,6 +746,55 @@ async def test_upload_document_summary_failure_does_not_mask_successful_index(cl
     mock_rag_system.index_document.assert_called_once()
 
 
+@pytest.mark.asyncio
+async def test_upload_document_generates_summary_without_openai_response_format(client, clean_state, mock_session):
+    """Test OpenAI document summary generation avoids unsupported response_format on Responses API models."""
+    import app as app_module
+
+    mock_processor = MagicMock()
+    mock_processor.process_document.return_value = {
+        "chunks": ["Document chunk one"],
+        "chunk_count": 1,
+        "metadata": {
+            "file_type": "pdf",
+            "file_name": "guide.pdf"
+        }
+    }
+
+    mock_rag_system = MagicMock()
+    mock_rag_system.index_document = AsyncMock(return_value=None)
+
+    with patch.object(app_module, "RAG_ENABLED", True), patch.object(
+        app_module,
+        "DocumentProcessor",
+        return_value=mock_processor
+    ), patch.object(
+        app_module,
+        "get_or_create_rag_system",
+        return_value=mock_rag_system
+    ), patch("app.ChatOpenAI") as mock_chat_model:
+        mock_chat_model.return_value.run.return_value = (
+            '{"summary":"This document is about modernization.","suggested_questions":["What is modernization?","What are next steps?"]}'
+        )
+
+        response = await client.post(
+            "/api/upload-document",
+            headers={"X-Session-ID": mock_session},
+            files={"file": ("guide.pdf", b"%PDF-1.4 fake content", "application/pdf")}
+        )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["summary"] == "This document is about modernization."
+    assert data["suggested_questions"][:2] == ["What is modernization?", "What are next steps?"]
+    assert len(data["suggested_questions"]) == 5
+
+    run_kwargs = mock_chat_model.return_value.run.call_args.kwargs
+    assert run_kwargs["model_name"] == "gpt-5-mini"
+    assert run_kwargs["web_search"] is False
+    assert "response_format" not in run_kwargs
+
+
 # ============================================
 # 8. RAG Endpoint Model Forwarding Tests
 # ============================================
