@@ -39,8 +39,8 @@ class ChatOpenAI:
         if not isinstance(messages, list):
             raise ValueError("messages must be a list")
 
-        # Use the shared helper which automatically enables web search for GPT-5 models
-        # via Responses API for GPT-5 models, Chat Completions API for others
+        # Use the shared helper: Responses API for GPT-5 models, Chat Completions
+        # API for others. Web search is opt-in via kwargs.
         response = create_openai_request(
             api_key=self.api_key,
             provider=self.provider,
@@ -102,8 +102,8 @@ class ChatOpenAI:
                 **kwargs
             }
 
-            # Only add web_search tool when not explicitly disabled (default: enabled)
-            if web_search is not False:
+            # Only add web_search tool when explicitly enabled.
+            if web_search:
                 request_params["tools"] = [{"type": "web_search"}]
 
             response = await client.responses.create(**request_params)

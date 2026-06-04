@@ -234,7 +234,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
   // Context menu state
   const [showContextMenu, setShowContextMenu] = useState(false)
-  const [webSearchEnabled, setWebSearchEnabled] = useState(true)
+  const [webSearchEnabled, setWebSearchEnabled] = useState(false)
   const [studyLearnEnabled, setStudyLearnEnabled] = useState(true)
   const [topicExplorerEnabled, setTopicExplorerEnabled] = useState(false)
   const [docQaEnabled, setDocQaEnabled] = useState(false)

@@ -640,9 +640,8 @@ async def test_chat_endpoint_forwards_selected_model_to_provider(client, clean_s
     call_kwargs = mock_client.responses.create.call_args.kwargs
     assert call_kwargs["model"] == "gpt-5"
     assert call_kwargs["stream"] is True
-    # Verify web_search tool is added for GPT-5 models
-    assert "tools" in call_kwargs
-    assert call_kwargs["tools"] == [{"type": "web_search"}]
+    # Verify web_search tool is not added unless explicitly requested
+    assert "tools" not in call_kwargs
     # Verify input contains the messages
     assert "input" in call_kwargs
     assert "You are a helpful assistant" in call_kwargs["input"]
@@ -1651,8 +1650,8 @@ async def test_guest_session_no_persistence_load_after_cache_clear(client, clean
 # ============================================
 
 @pytest.mark.asyncio
-async def test_chat_with_gpt5_enables_web_search(client, clean_state):
-    """Test that chat requests with GPT-5 models enable web search via Responses API."""
+async def test_chat_with_gpt5_passes_explicit_web_search(client, clean_state):
+    """Test that chat requests can explicitly enable web search for GPT-5 models."""
     import app as app_module
     from openai_helper import create_openai_request
 
@@ -1678,7 +1677,8 @@ async def test_chat_with_gpt5_enables_web_search(client, clean_state):
                 "user_message": "What is the weather today?",
                 "developer_message": "You are a helpful assistant.",
                 "model": "gpt-5",
-                "provider": "openai"
+                "provider": "openai",
+                "web_search": True
             },
             headers={"X-Session-ID": session_id}
         )
@@ -1692,6 +1692,7 @@ async def test_chat_with_gpt5_enables_web_search(client, clean_state):
         assert call_kwargs["model"] == "gpt-5"
         assert call_kwargs["stream"] is True
         assert call_kwargs["api_key"] == "test-openai-key"
+        assert call_kwargs["web_search"] is True
 
 
 @pytest.mark.asyncio
@@ -1729,8 +1730,8 @@ async def test_chat_with_together_no_web_search(client, clean_state):
         assert call_kwargs["provider"] == "together"
 
 
-def test_openai_helper_adds_web_search_for_gpt5():
-    """Test that the helper uses Responses API with web_search tool for GPT-5 models."""
+def test_openai_helper_omits_web_search_by_default_for_gpt5():
+    """Test that the helper uses Responses API without web_search by default."""
     from openai_helper import create_openai_request
 
     # Mock the OpenAI client
@@ -1750,14 +1751,37 @@ def test_openai_helper_adds_web_search_for_gpt5():
             stream=False
         )
 
-        # Verify Responses API was called with web_search tool
+        # Verify Responses API was called without the web_search tool
         assert mock_client.responses.create.called
         call_kwargs = mock_client.responses.create.call_args[1]
-        assert "tools" in call_kwargs
-        assert call_kwargs["tools"] == [{"type": "web_search"}]
+        assert "tools" not in call_kwargs
         assert "input" in call_kwargs
         # Verify Chat Completions API was NOT called
         assert not mock_client.chat.completions.create.called
+
+
+def test_openai_helper_adds_web_search_when_requested_for_gpt5():
+    """Test that the helper adds web_search for GPT-5 models when requested."""
+    from openai_helper import create_openai_request
+
+    with patch('openai_helper.OpenAI') as mock_openai_class:
+        mock_client = MagicMock()
+        mock_openai_class.return_value = mock_client
+        mock_client.responses.create.return_value = MagicMock(
+            output_text="Test response"
+        )
+
+        create_openai_request(
+            api_key="test-key",
+            provider="openai",
+            model="gpt-5",
+            messages=[{"role": "user", "content": "test"}],
+            stream=False,
+            web_search=True
+        )
+
+        call_kwargs = mock_client.responses.create.call_args[1]
+        assert call_kwargs["tools"] == [{"type": "web_search"}]
 
 
 def test_openai_helper_no_web_search_for_together():
@@ -1793,7 +1817,7 @@ def test_openai_helper_no_web_search_for_together():
 
 
 def test_chatmodel_uses_helper_for_gpt5():
-    """Test that ChatOpenAI class uses helper and enables web search for GPT-5."""
+    """Test that ChatOpenAI class uses helper for GPT-5."""
     from aimakerspace.openai_utils.chatmodel import ChatOpenAI
 
     # Mock the helper

@@ -457,7 +457,7 @@ class ChatRequest(BaseModel):
     api_key: Optional[str] = None  # API key for authentication (optional, can use session's key or server key)
     provider: Optional[str] = "openai"  # Provider selection: "openai" or "together"
     image_attachment: Optional[ImageAttachment] = None  # Optional image attachment for OpenAI GPT models
-    web_search: Optional[bool] = None  # Optional web search control (default: True for GPT-5 models)
+    web_search: Optional[bool] = None  # Optional web search control (default: disabled for lower latency)
     reasoning: Optional[Dict[str, str]] = None  # Optional reasoning effort level ("low", "medium", "high")
     include: Optional[List[str]] = None  # Optional list of additional data to include (e.g., ["reasoning"])
     document_context: Optional[bool] = False  # Include uploaded document excerpts in regular chat without changing chat mode
