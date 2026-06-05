@@ -359,7 +359,8 @@
 }
 
 .conversation-item {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) 32px;
   align-items: center;
   gap: 8px;
   padding: 8px 12px;
@@ -408,16 +409,18 @@
 .conversation-loading-indicator {
   display: flex;
   align-items: center;
-  margin-left: auto;
+  grid-column: 3;
+  justify-content: center;
 }
 
 .conversation-mode-icon {
   font-size: 0.875rem;
   flex-shrink: 0;
+  grid-column: 1;
 }
 
 .conversation-title {
-  flex: 1;
+  grid-column: 2;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -436,26 +439,46 @@
 }
 
 .delete-conversation-btn {
-  padding: 4px;
+  width: 28px;
+  height: 28px;
+  padding: 0;
   background: transparent;
   border: none;
   color: var(--text-muted);
   cursor: pointer;
   border-radius: 4px;
   transition: all var(--transition-fast);
-  display: none;
+  display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  grid-column: 3;
+  justify-self: end;
+  opacity: 0;
+  pointer-events: none;
 }
 
-.conversation-item:hover .delete-conversation-btn {
-  display: flex;
+.conversation-item:hover .delete-conversation-btn,
+.delete-conversation-btn:focus-visible {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .delete-conversation-btn:hover {
   background: rgba(239, 68, 68, 0.1);
   color: var(--accent-error);
+}
+
+@media (hover: none), (pointer: coarse) {
+  .delete-conversation-btn {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+
+.conversation-item.loading .delete-conversation-btn {
+  opacity: 0;
+  pointer-events: none;
 }
 
 .delete-confirmation-actions {
@@ -1883,7 +1906,6 @@
   }
 
   .conversation-item {
-    flex-direction: row;
     align-items: center;
     gap: var(--spacing-xs);
   }
@@ -1893,7 +1915,7 @@
   }
 
   .delete-conversation-btn {
-    align-self: flex-end;
+    justify-self: end;
   }
 
   .panel-content {
