@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react'
+import React, { useState, useRef, useEffect, useLayoutEffect } from 'react'
 import { Send, MessageSquare, User, Bot, Trash2, Settings, ArrowDown, X, FileText, Upload, Compass, Image, Plus, Search, BookOpen, Brain, Volume2, Square, Mic, MicOff } from 'lucide-react'
 import MarkdownRenderer from './MarkdownRenderer'
 import SuggestedQuestions from './SuggestedQuestions'
@@ -73,6 +73,17 @@ const parseThinkingBlocks = (content: string): { thinking: string; response: str
     thinking: thinking.trim(),
     response: response.trim()
   }
+}
+
+const resizeMessageInput = (textarea: HTMLTextAreaElement | null) => {
+  if (!textarea) return
+
+  const minHeight = 28
+  const maxHeight = 200
+  textarea.style.height = 'auto'
+  const nextHeight = Math.max(minHeight, Math.min(textarea.scrollHeight, maxHeight))
+  textarea.style.height = `${nextHeight}px`
+  textarea.style.overflowY = textarea.scrollHeight > maxHeight ? 'auto' : 'hidden'
 }
 
 // Collapsible thinking block component
@@ -210,8 +221,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const [hasConversationStarted, setHasConversationStarted] = useState(false)
   const [documentSuggestedQuestions, setDocumentSuggestedQuestions] = useState<string[]>([])
   const [documentSummary, setDocumentSummary] = useState<string | null>(null)
+  const [uploadedDocument, setUploadedDocument] = useState<{ id: string; name: string; type: string } | null>(null)
   const [isMobile, setIsMobile] = useState(false)
   const [conversationSearchQuery, setConversationSearchQuery] = useState('')
+  const [confirmingDeleteConversationId, setConfirmingDeleteConversationId] = useState<string | null>(null)
+  const [deletingConversationId, setDeletingConversationId] = useState<string | null>(null)
 
   // Image attachment state
   const [attachedImage, setAttachedImage] = useState<{ file: File; dataUrl: string } | null>(null)
@@ -220,9 +234,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
   // Context menu state
   const [showContextMenu, setShowContextMenu] = useState(false)
-  const [webSearchEnabled, setWebSearchEnabled] = useState(true)
+  const [webSearchEnabled, setWebSearchEnabled] = useState(false)
   const [studyLearnEnabled, setStudyLearnEnabled] = useState(true)
   const [topicExplorerEnabled, setTopicExplorerEnabled] = useState(false)
+  const [docQaEnabled, setDocQaEnabled] = useState(false)
   const [thinkingEnabled, setThinkingEnabled] = useState(false)
   const [thinkingEffort, setThinkingEffort] = useState<'medium' | 'high'>('medium')
 
@@ -335,12 +350,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     }
   }, [conversationId])
 
-  // Auto-resize textarea based on content
-  useEffect(() => {
-    if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto'
-      textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`
-    }
+  // Auto-resize textarea based on content, up to the internal scroll cap.
+  useLayoutEffect(() => {
+    resizeMessageInput(textareaRef.current)
   }, [inputMessage])
 
   // Auto-focus textarea on load.
@@ -403,8 +415,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     if (topicExplorerEnabled) {
       setChatMode('topic-explorer')
       setDeveloperMessage(getDefaultDeveloperMessage('topic-explorer'))
-    } else if (documentSummary) {
-      // If document is uploaded, use RAG mode
+    } else if (docQaEnabled) {
       setChatMode('rag')
       setDeveloperMessage(getDefaultDeveloperMessage('rag'))
     } else {
@@ -418,7 +429,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         )
       }
     }
-  }, [topicExplorerEnabled, documentSummary, studyLearnEnabled])
+  }, [topicExplorerEnabled, docQaEnabled, studyLearnEnabled])
 
   // Auto-switch to gpt-5-nano when Study & Learn is enabled, then upgrade progressively
   useEffect(() => {
@@ -597,6 +608,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     }
 
     // Set loading state
+    setConfirmingDeleteConversationId(null)
     setLoadingConversationId(convId)
 
     try {
@@ -658,6 +670,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         setMessages(processedMessages)
         setConversationId(convId)
         setDeveloperMessage(data.system_message)
+        setUploadedDocument(null)
+        setDocumentSummary(null)
+        setDocumentSuggestedQuestions([])
 
         // Set lastSuggestedQuestions for backwards compatibility (from the last assistant message)
         if (conversationMode === 'topic-explorer' || conversationMode === 'regular') {
@@ -691,6 +706,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   }
 
   const deleteConversation = async (convId: string) => {
+    if (deletingConversationId) return
+
+    setDeletingConversationId(convId)
     try {
       const response = await fetch(`/api/conversations/${convId}`, {
         method: 'DELETE',
@@ -699,6 +717,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         }
       })
       if (response.ok) {
+        setConfirmingDeleteConversationId(null)
         await loadConversations()
         if (conversationId === convId) {
           clearChat()
@@ -706,16 +725,47 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       }
     } catch (error) {
       console.error('Error deleting conversation:', error)
+    } finally {
+      setDeletingConversationId(null)
     }
   }
 
+  const clearSlashCommandInput = () => {
+    if (inputMessage.trim() === '/') {
+      setInputMessage('')
+    }
+  }
+
+  const handleDocQaToggle = () => {
+    const nextEnabled = !docQaEnabled
+    setDocQaEnabled(nextEnabled)
+    if (nextEnabled) {
+      setTopicExplorerEnabled(false)
+    }
+    clearSlashCommandInput()
+    setShowContextMenu(false)
+  }
+
+  const handleTopicExplorerToggle = () => {
+    const nextEnabled = !topicExplorerEnabled
+    setTopicExplorerEnabled(nextEnabled)
+    if (nextEnabled) {
+      setDocQaEnabled(false)
+    }
+    clearSlashCommandInput()
+    setShowContextMenu(false)
+  }
+
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const value = e.target.value
+    const value = e.currentTarget.value
     setInputMessage(value)
+    resizeMessageInput(e.currentTarget)
 
     // Detect slash command at the start of input
     if (value === '/' && !showContextMenu) {
       setShowContextMenu(true)
+    } else if (value !== '/' && showContextMenu) {
+      setShowContextMenu(false)
     }
   }
 
@@ -983,6 +1033,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             filename: currentImage.file.name
           }
         } : {}),
+        ...(uploadedDocument && chatMode === 'regular' ? {
+          document_context: true,
+          document_context_k: 3
+        } : {}),
         // New optional fields for ChatGPT-style features (backend will ignore for now)
         web_search: webSearchEnabled,
         ...(thinkingEnabled ? {
@@ -1235,6 +1289,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     setHasConversationStarted(false)
     setDocumentSuggestedQuestions([])
     setDocumentSummary(null)
+    setUploadedDocument(null)
+    setDocQaEnabled(false)
     autoThinkingTriggered.current = false
     autoMiniTriggered.current = false
     autoFullTriggered.current = false
@@ -1329,21 +1385,15 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       const data = await response.json()
       
       setPdfUploadSuccess(`${data.file_type.toUpperCase()} document "${data.file_name}" uploaded and processed successfully! ${data.chunk_count} chunks created.`)
-      
-      // Store document suggested questions and summary
-      if (data.suggested_questions && data.suggested_questions.length > 0) {
-        setDocumentSuggestedQuestions(data.suggested_questions)
-      }
-      if (data.summary) {
-        setDocumentSummary(data.summary)
-      }
-      
-      // Only switch to RAG mode if currently in regular mode
-      // Preserve RAG or Topic Explorer mode if already selected
-      if (chatMode === 'regular') {
-        setChatMode('rag')
-        setDeveloperMessage(getDefaultDeveloperMessage('rag'))
-      }
+      setUploadedDocument({
+        id: data.document_id,
+        name: data.file_name,
+        type: data.file_type
+      })
+
+      // Store or clear document suggested questions and summary for this upload.
+      setDocumentSuggestedQuestions(Array.isArray(data.suggested_questions) ? data.suggested_questions : [])
+      setDocumentSummary(data.summary || null)
       
       // Clear success message after 10 seconds
       setTimeout(() => setPdfUploadSuccess(null), 10000)
@@ -1479,6 +1529,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     )
   }
 
+  const showDocumentSummaryPanel = Boolean(
+    documentSummary && documentSuggestedQuestions.length > 0 && (docQaEnabled || topicExplorerEnabled)
+  )
+
   return (
     <div className="chat-interface" ref={containerRef}>
       {/* Settings Modal */}
@@ -1548,7 +1602,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
               }).length === 0 ? (
                 <p className="no-conversations">No conversations found</p>
               ) : (
-                conversations.filter(conv => {
+        conversations.filter(conv => {
                   if (!conversationSearchQuery.trim()) return true;
                   const query = conversationSearchQuery.toLowerCase();
                   const title = conv.title || conv.system_message || '';
@@ -1556,14 +1610,20 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                 }).map((conv) => {
                   const isActive = conversationId === conv.conversation_id
                   const isLoading = loadingConversationId === conv.conversation_id
+                  const isConfirmingDelete = confirmingDeleteConversationId === conv.conversation_id
+                  const isDeleting = deletingConversationId === conv.conversation_id
                   const modeLabel = conv.mode === 'rag' ? '📄' : conv.mode === 'topic-explorer' ? '📚' : '💬'
 
                   return (
                     <div
                       key={conv.conversation_id}
-                      className={`conversation-item ${isActive ? 'active' : ''} ${isLoading ? 'loading' : ''}`}
-                      onClick={() => loadConversation(conv.conversation_id)}
-                      style={{ cursor: isLoading ? 'wait' : 'pointer' }}
+                      className={`conversation-item ${isActive ? 'active' : ''} ${isLoading ? 'loading' : ''} ${isConfirmingDelete ? 'confirming-delete' : ''} ${isDeleting ? 'deleting' : ''}`}
+                      onClick={() => {
+                        if (isConfirmingDelete || isDeleting) return
+                        loadConversation(conv.conversation_id)
+                      }}
+                      style={{ cursor: isLoading || isDeleting ? 'wait' : 'pointer' }}
+                      aria-busy={isDeleting}
                     >
                       <span className="conversation-mode-icon">{modeLabel}</span>
                       <div className="conversation-title">
@@ -1578,16 +1638,45 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                           </div>
                         </div>
                       )}
-                      <button
-                        className="delete-conversation-btn"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          deleteConversation(conv.conversation_id)
-                        }}
-                        title="Delete conversation"
-                      >
-                        <Trash2 size={12} />
-                      </button>
+                      {isConfirmingDelete ? (
+                        <div className="delete-confirmation-actions" onClick={(e) => e.stopPropagation()}>
+                          <button
+                            type="button"
+                            className="confirm-delete-btn"
+                            onClick={() => deleteConversation(conv.conversation_id)}
+                            disabled={isDeleting}
+                            aria-label={`Confirm delete ${conv.title || 'conversation'}`}
+                          >
+                            {isDeleting ? 'Deleting...' : 'Delete'}
+                          </button>
+                          <button
+                            type="button"
+                            className="cancel-delete-btn"
+                            onClick={() => {
+                              if (!isDeleting) {
+                                setConfirmingDeleteConversationId(null)
+                              }
+                            }}
+                            disabled={isDeleting}
+                            aria-label="Cancel delete conversation"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          className="delete-conversation-btn"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setConfirmingDeleteConversationId(conv.conversation_id)
+                          }}
+                          title="Delete conversation"
+                          aria-label={`Delete ${conv.title || 'conversation'}`}
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      )}
                     </div>
                   )
                 })
@@ -1653,8 +1742,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             </div>
           )}
 
-          {/* Show document summary and suggested questions when available - always visible */}
-          {documentSummary && documentSuggestedQuestions.length > 0 && (
+          {/* Show document summary and suggested questions only in explicit document-focused modes */}
+          {showDocumentSummaryPanel && (
             <div className="document-summary-section">
               <h3>📄 Document Summary</h3>
               <p className="document-summary-text">{documentSummary}</p>
@@ -1668,7 +1757,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             </div>
           )}
 
-          {!loadingConversationId && messages.length === 0 ? (
+          {!loadingConversationId && messages.length === 0 && !showDocumentSummaryPanel ? (
             <div className="welcome-screen">
               <h1 className="welcome-heading">What can I help with?</h1>
 
@@ -1853,6 +1942,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
               className="message-input"
               disabled={isLoading || (!isWhitelisted && !hasOwnApiKey && !hasFreeTurns)}
               rows={1}
+              aria-label="Message AI"
             />
 
             {/* BOTTOM ROW: controls bar */}
@@ -1878,6 +1968,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                       onClick={() => {
                         imageInputRef.current?.click()
                         setShowContextMenu(false)
+                        clearSlashCommandInput()
                       }}
                       disabled={selectedProvider !== 'openai' || chatMode !== 'regular' || !!attachedImage}
                     >
@@ -1886,23 +1977,28 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                     </button>
                     <button
                       type="button"
-                      className={`context-menu-item${documentSummary ? ' toggle active' : ''}`}
+                      className={`context-menu-item${uploadedDocument ? ' toggle active' : ''}`}
                       onClick={() => {
                         fileInputRef.current?.click()
                         setShowContextMenu(false)
+                        clearSlashCommandInput()
                       }}
                       disabled={isPdfUploading}
-                      title={documentSummary ? "Document loaded — RAG mode active. Upload another to replace." : "Attach a document to enable RAG mode"}
+                      title={uploadedDocument ? "Document loaded as chat context. Upload another to replace." : "Attach a document as chat context"}
                     >
                       <Upload size={16} />
                       <span>Attach Document</span>
-                      {documentSummary && <span className="checkmark">✓</span>}
+                      {uploadedDocument && <span className="checkmark">✓</span>}
                     </button>
                     <div className="context-menu-divider" />
                     <button
                       type="button"
                       className={`context-menu-item toggle ${webSearchEnabled ? 'active' : ''}`}
-                      onClick={() => setWebSearchEnabled(!webSearchEnabled)}
+                      onClick={() => {
+                        setWebSearchEnabled(!webSearchEnabled)
+                        clearSlashCommandInput()
+                        setShowContextMenu(false)
+                      }}
                     >
                       <Search size={16} />
                       <span>Web Search</span>
@@ -1911,7 +2007,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                     <button
                       type="button"
                       className={`context-menu-item toggle ${studyLearnEnabled ? 'active' : ''}`}
-                      onClick={() => setStudyLearnEnabled(!studyLearnEnabled)}
+                      onClick={() => {
+                        setStudyLearnEnabled(!studyLearnEnabled)
+                        clearSlashCommandInput()
+                        setShowContextMenu(false)
+                      }}
                     >
                       <BookOpen size={16} />
                       <span>Study & Learn</span>
@@ -1919,8 +2019,23 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                     </button>
                     <button
                       type="button"
+                      className={`context-menu-item toggle ${docQaEnabled ? 'active' : ''}`}
+                      onClick={handleDocQaToggle}
+                      disabled={hasConversationStarted}
+                      title={
+                        hasConversationStarted
+                          ? "Doc Q&A can only be enabled at the start of a new conversation"
+                          : "Enable Doc Q&A for uploaded document questions"
+                      }
+                    >
+                      <FileText size={16} />
+                      <span>Doc Q&A</span>
+                      {docQaEnabled && <span className="checkmark">✓</span>}
+                    </button>
+                    <button
+                      type="button"
                       className={`context-menu-item toggle ${topicExplorerEnabled ? 'active' : ''}`}
-                      onClick={() => setTopicExplorerEnabled(!topicExplorerEnabled)}
+                      onClick={handleTopicExplorerToggle}
                       disabled={hasConversationStarted}
                       title={hasConversationStarted ? "Topic Explorer can only be enabled at the start of a new conversation" : "Enable Topic Explorer for interactive document learning"}
                     >
@@ -1936,6 +2051,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                         if (thinkingEnabled) {
                           setThinkingEffort('medium')
                         }
+                        clearSlashCommandInput()
+                        setShowContextMenu(false)
                       }}
                     >
                       <Brain size={16} />
@@ -1981,6 +2098,23 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                     <X size={11} />
                   </button>
                 )}
+                {docQaEnabled && (
+                  <button
+                    type="button"
+                    className="input-chip active rag-chip"
+                    onClick={() => {
+                      if (!hasConversationStarted) {
+                        setDocQaEnabled(false)
+                      }
+                    }}
+                    disabled={hasConversationStarted}
+                    title={hasConversationStarted ? "Doc Q&A mode is locked for this conversation" : "Disable Doc Q&A"}
+                  >
+                    <FileText size={13} />
+                    <span>Doc Q&A</span>
+                    {!hasConversationStarted && <X size={11} />}
+                  </button>
+                )}
                 {thinkingEnabled && (
                   <button
                     type="button"
@@ -1995,10 +2129,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                     <X size={11} />
                   </button>
                 )}
-                {chatMode === 'rag' && (
+                {uploadedDocument && chatMode === 'regular' && (
                   <div className="input-chip active rag-chip">
                     <Upload size={13} />
-                    <span>RAG Mode</span>
+                    <span>Document Context</span>
                   </div>
                 )}
               </div>

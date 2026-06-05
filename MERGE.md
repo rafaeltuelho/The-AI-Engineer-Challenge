@@ -1,31 +1,27 @@
-# Merge Instructions: Personalization Settings
+# Merge Instructions: Chat UX and Responsiveness Refinements
 
-This branch adds ChatGPT-style personalization settings and fixes OpenAI Responses API message handling so system/developer instructions are no longer flattened into plain text.
+This branch builds on the personalization work already in `main` and adds focused chat UX and responsiveness improvements:
 
-## What Is Included
+- Conversation history delete now requires an inline confirmation step.
+- The message composer behaves more like ChatGPT: it keeps a comfortable one-row minimum, expands smoothly for multiline text, and scrolls internally after reaching its max height.
+- Document modes are explicit: regular Chat can attach document context, while Doc Q&A and Topic Explorer own the document summary and RAG-style behavior.
+- Regular chat no longer enables Web Search by default, avoiding hidden tool orchestration latency. Users can still opt into Web Search from the composer menu or chip.
+- OpenAI Responses API calls preserve structured `instructions` handling from `main` while keeping Web Search opt-in.
 
-- Backend `GET`, `PUT`, and `DELETE` endpoints for `/api/personalization`
-- Redis persistence for Google-authenticated users using hashed email-derived keys
-- Session-scoped personalization for guest and API-key users
-- Server-side prompt composition that treats personalization as untrusted preference context
-- Regular chat and RAG/topic-explorer personalization support
-- Responses API request formatting that sends system/developer content through `instructions` and conversation turns through structured `input`
-- Settings modal UI for nickname, occupation, about-you context, response style, and custom preferences
-
-Branch: `codex/personalization-settings`
+Branch: `codex/follow-up-work`
 
 ## Pre-Merge Checklist
 
-Run the verification commands from the repository root:
+From the repository root:
 
 ```bash
-uv run --extra dev pytest api/tests/test_app.py -q
+uv run pytest -q api/tests/test_app.py
 cd frontend
-npm test -- --run src/components/SettingsModal.test.tsx
+npm test -- --run src/components/ChatInterface.imageAttachment.test.tsx
 npm run build
 ```
 
-For local manual testing, copy the environment file before starting services:
+For local manual testing:
 
 ```bash
 cp ~/tmp/tuelhosai.env .env
@@ -36,45 +32,61 @@ Do not commit `.env`.
 
 ## GitHub PR Route
 
-1. Push the branch:
+1. Push this branch:
 
    ```bash
-   git push origin codex/personalization-settings
+   git push origin codex/follow-up-work
    ```
 
-2. Open the repository on GitHub.
-3. Create a pull request from `codex/personalization-settings` into `main`.
-4. Use a title like:
+2. Open the repo on GitHub.
+3. Create or update the PR from `codex/follow-up-work` into `main`.
+4. Suggested title:
 
    ```text
-   feat: add personalization settings
+   fix: refine chat UX and responsiveness
    ```
 
-5. In the PR description, mention:
+5. Suggested PR body:
 
    ```text
-   Adds persisted personalization settings, server-side prompt composition, Settings UI controls, and structured Responses API input handling.
+   ## Summary
+   - Add inline confirmation before deleting conversations from history
+   - Improve composer textarea auto-resize behavior for multiline input
+   - Add explicit Doc Q&A document mode behavior and summary handling
+   - Make Web Search opt-in so regular chat avoids hidden tool latency
+   - Preserve structured Responses API instruction handling from main
+
+   ## Verification
+   - uv run pytest -q api/tests/test_app.py
+   - npm test -- --run src/components/ChatInterface.imageAttachment.test.tsx
+   - npm run build
    ```
 
-6. Wait for CI, review the changed files, and merge using the team-preferred strategy.
+6. Review the UI manually on desktop and mobile widths before merging.
 
 ## GitHub CLI Route
 
-From the repository root:
-
 ```bash
-git push origin codex/personalization-settings
+git push origin codex/follow-up-work
 
 gh pr create \
   --base main \
-  --head codex/personalization-settings \
-  --title "feat: add personalization settings" \
-  --body "Adds persisted personalization settings, server-side prompt composition, Settings UI controls, and structured Responses API input handling."
+  --head codex/follow-up-work \
+  --title "fix: refine chat UX and responsiveness" \
+  --body "## Summary
+- Add inline confirmation before deleting conversations from history
+- Improve composer textarea auto-resize behavior for multiline input
+- Add explicit Doc Q&A document mode behavior and summary handling
+- Make Web Search opt-in so regular chat avoids hidden tool latency
+- Preserve structured Responses API instruction handling from main
 
-gh pr view --web
+## Verification
+- uv run pytest -q api/tests/test_app.py
+- npm test -- --run src/components/ChatInterface.imageAttachment.test.tsx
+- npm run build"
 ```
 
-After review and passing checks:
+After review:
 
 ```bash
 gh pr merge --squash --delete-branch
@@ -82,11 +94,15 @@ git checkout main
 git pull origin main
 ```
 
-## Post-Merge Smoke Test
+## Manual Smoke Test
 
-1. Sign in or create a guest session.
-2. Open Settings.
-3. Fill in Personalization fields and save.
-4. Send a regular chat message and confirm the answer reflects the saved preferences.
-5. Upload/query a document and confirm RAG mode still responds normally.
-6. Confirm API keys are still only entered through the password-style API key field.
+1. Open `http://localhost:3000/`.
+2. Hover a conversation in the left history panel and click the delete icon.
+3. Confirm that `Delete` and `Cancel` appear inline.
+4. Click `Cancel` and confirm the conversation remains.
+5. Repeat and click `Delete`; confirm the conversation is removed.
+6. Type several lines into the message composer and confirm it expands smoothly.
+7. Keep typing past the max height and confirm the input scrolls internally without shifting the whole layout awkwardly.
+8. Start a fresh regular chat and confirm the `Web Search` chip is not active by default.
+9. Enable `Web Search` from the composer menu and confirm the chip appears and the next chat request can use search.
+10. Start a fresh Doc Q&A session, upload a document, and confirm the summary replaces the empty welcome panel.

@@ -2,7 +2,7 @@
 Shared OpenAI request helper for chat, RAG, and topic explorer modes.
 
 Provides a unified interface for OpenAI requests that:
-- Enables web search for supported GPT-5 models via Responses API
+- Supports opt-in web search for GPT-5 models via Responses API
 - Supports both streaming and non-streaming responses
 - Works with Together.ai provider (no web search, uses Chat Completions API)
 - Normalizes output for different use cases
@@ -115,7 +115,7 @@ def create_openai_request(
     """
     Create an OpenAI request with automatic web search support for GPT-5 models.
 
-    For GPT-5 models with OpenAI provider, uses Responses API with web_search tool.
+    For GPT-5 models with OpenAI provider, uses Responses API and can opt into web_search.
     For other models and Together.ai, uses Chat Completions API without web search.
 
     Args:
@@ -125,7 +125,7 @@ def create_openai_request(
         messages: List of message dicts with 'role' and 'content'
         stream: Whether to stream the response
         image_data_url: Optional base64 data URL for image attachment (OpenAI GPT models only)
-        web_search: Optional bool to enable/disable web search (default: True for GPT-5 models)
+        web_search: Optional bool to enable web search (default: False for lower latency)
         reasoning: Optional reasoning effort level ("low", "medium", "high")
         include: Optional list of additional data to include in response (e.g., ["reasoning"])
         **kwargs: Additional parameters (e.g., response_format, temperature)
@@ -135,7 +135,8 @@ def create_openai_request(
     """
     client = create_openai_client(api_key, provider)
 
-    # For OpenAI GPT-5 models, use Responses API with web search tool
+    # For OpenAI GPT-5 models, use Responses API. Web search is opt-in because
+    # tool orchestration can add noticeable first-token latency to plain chat.
     if _supports_web_search(provider, model):
         # Convert messages to Responses API input format (with optional image).
         # System/developer content is passed separately through `instructions`.
@@ -153,8 +154,8 @@ def create_openai_request(
         if instructions is not None:
             request_params["instructions"] = instructions
 
-        # Add web_search tool if enabled (default: True for backward compatibility)
-        if web_search is None or web_search:
+        # Add web_search tool only when explicitly enabled.
+        if web_search:
             request_params["tools"] = [{"type": "web_search"}]
 
         # Add reasoning parameter if provided

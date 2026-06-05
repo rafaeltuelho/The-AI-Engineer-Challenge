@@ -15,7 +15,7 @@ import os
 import pytest
 import pytest_asyncio
 from datetime import datetime, timezone
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch, MagicMock, AsyncMock
 import httpx
 
 # Set environment variables BEFORE importing the app
@@ -693,15 +693,197 @@ async def test_chat_endpoint_forwards_selected_model_to_provider(client, clean_s
     call_kwargs = mock_client.responses.create.call_args.kwargs
     assert call_kwargs["model"] == "gpt-5"
     assert call_kwargs["stream"] is True
-    # Verify web_search tool is added for GPT-5 models
-    assert "tools" in call_kwargs
-    assert call_kwargs["tools"] == [{"type": "web_search"}]
+    # Verify web_search tool is not added unless explicitly requested
+    assert "tools" not in call_kwargs
     # Verify instructions and input preserve role boundaries
     assert "input" in call_kwargs
     assert call_kwargs["instructions"] == "You are a helpful assistant."
     assert call_kwargs["input"] == [{"role": "user", "content": "Say hello"}]
     # Verify Chat Completions API was NOT called
     assert not mock_client.chat.completions.create.called
+
+
+@pytest.mark.asyncio
+async def test_chat_endpoint_can_include_document_context_without_switching_mode(client, clean_state, mock_session):
+    """Test regular chat can include uploaded document context without becoming a RAG conversation."""
+    import app as app_module
+
+    mock_rag_system = MagicMock()
+    mock_rag_system.search_relevant_chunks.return_value = [
+        {"chunk_text": "Uploaded document says the warranty lasts two years."}
+    ]
+
+    mock_stream = MagicMock()
+    mock_stream.__iter__ = Mock(return_value=iter([
+        MagicMock(type='response.output_text.delta', delta="The warranty lasts two years.")
+    ]))
+
+    with patch.object(app_module, "RAG_ENABLED", True), patch.object(
+        app_module,
+        "get_or_create_rag_system",
+        return_value=mock_rag_system
+    ) as mock_get_rag_system, patch("app.create_openai_request", return_value=mock_stream) as mock_create_request:
+        response = await client.post(
+            "/api/chat",
+            headers={"X-Session-ID": mock_session},
+            json={
+                "developer_message": "You are a helpful assistant.",
+                "user_message": "What is the warranty?",
+                "model": "gpt-5-mini",
+                "provider": "openai",
+                "document_context": True,
+                "document_context_k": 3
+            }
+        )
+
+    assert response.status_code == 200
+    assert response.text == "The warranty lasts two years."
+
+    mock_get_rag_system.assert_called_once_with(mock_session, "test-api-key", "openai")
+    mock_rag_system.search_relevant_chunks.assert_called_once_with("What is the warranty?", k=3)
+
+    call_kwargs = mock_create_request.call_args.kwargs
+    assert call_kwargs["messages"][0] == {"role": "system", "content": "You are a helpful assistant."}
+    assert "What is the warranty?" in call_kwargs["messages"][-1]["content"]
+    assert "Uploaded document says the warranty lasts two years." in call_kwargs["messages"][-1]["content"]
+
+    conversation_id = response.headers["x-conversation-id"]
+    assert conversations[mock_session][conversation_id]["mode"] == "regular"
+    assert conversations[mock_session][conversation_id]["system_message"] == "You are a helpful assistant."
+    assert conversations[mock_session][conversation_id]["messages"][0].content == "What is the warranty?"
+
+
+@pytest.mark.asyncio
+async def test_chat_endpoint_counts_document_context_against_free_tier_limit(client, clean_state):
+    """Test regular chat rejects oversized retrieved document context for free-tier sessions."""
+    import app as app_module
+
+    session_id = create_session(auth_type="guest", provider="openai")
+
+    mock_rag_system = MagicMock()
+    mock_rag_system.search_relevant_chunks.return_value = [
+        {"chunk_text": " ".join(["document"] * 3000)}
+    ]
+
+    with patch.object(app_module, "RAG_ENABLED", True), patch.object(
+        app_module,
+        "get_or_create_rag_system",
+        return_value=mock_rag_system
+    ) as mock_get_rag_system, patch("app.create_openai_request") as mock_create_request:
+        response = await client.post(
+            "/api/chat",
+            headers={"X-Session-ID": session_id},
+            json={
+                "developer_message": "You are a helpful assistant.",
+                "user_message": "What is this?",
+                "model": "gpt-5-mini",
+                "provider": "openai",
+                "document_context": True,
+                "document_context_k": 10
+            }
+        )
+
+    assert response.status_code == 403
+    assert "document context too long" in response.json()["detail"]
+    mock_get_rag_system.assert_called_once()
+    mock_create_request.assert_not_called()
+    assert conversations[session_id]
+    conversation_id = next(iter(conversations[session_id]))
+    assert conversations[session_id][conversation_id]["messages"] == []
+
+
+@pytest.mark.asyncio
+async def test_upload_document_summary_failure_does_not_mask_successful_index(client, clean_state, mock_session):
+    """Test upload/index can succeed even when optional document summary generation fails."""
+    import app as app_module
+
+    mock_processor = MagicMock()
+    mock_processor.process_document.return_value = {
+        "chunks": ["Document chunk one"],
+        "chunk_count": 1,
+        "metadata": {
+            "file_type": "pdf",
+            "file_name": "guide.pdf"
+        }
+    }
+
+    mock_rag_system = MagicMock()
+    mock_rag_system.index_document = AsyncMock(return_value=None)
+
+    with patch.object(app_module, "RAG_ENABLED", True), patch.object(
+        app_module,
+        "DocumentProcessor",
+        return_value=mock_processor
+    ), patch.object(
+        app_module,
+        "get_or_create_rag_system",
+        return_value=mock_rag_system
+    ), patch("app.ChatOpenAI") as mock_chat_model:
+        mock_chat_model.return_value.run.side_effect = Exception("summary failed")
+
+        response = await client.post(
+            "/api/upload-document",
+            headers={"X-Session-ID": mock_session},
+            files={"file": ("guide.pdf", b"%PDF-1.4 fake content", "application/pdf")}
+        )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["message"] == "PDF document processed and indexed successfully"
+    assert data["chunk_count"] == 1
+    assert data["summary"] is None
+    assert data["suggested_questions"] is None
+
+    mock_rag_system.index_document.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_upload_document_generates_summary_without_openai_response_format(client, clean_state, mock_session):
+    """Test OpenAI document summary generation avoids unsupported response_format on Responses API models."""
+    import app as app_module
+
+    mock_processor = MagicMock()
+    mock_processor.process_document.return_value = {
+        "chunks": ["Document chunk one"],
+        "chunk_count": 1,
+        "metadata": {
+            "file_type": "pdf",
+            "file_name": "guide.pdf"
+        }
+    }
+
+    mock_rag_system = MagicMock()
+    mock_rag_system.index_document = AsyncMock(return_value=None)
+
+    with patch.object(app_module, "RAG_ENABLED", True), patch.object(
+        app_module,
+        "DocumentProcessor",
+        return_value=mock_processor
+    ), patch.object(
+        app_module,
+        "get_or_create_rag_system",
+        return_value=mock_rag_system
+    ), patch("app.ChatOpenAI") as mock_chat_model:
+        mock_chat_model.return_value.run.return_value = (
+            '{"summary":"This document is about modernization.","suggested_questions":["What is modernization?","What are next steps?"]}'
+        )
+
+        response = await client.post(
+            "/api/upload-document",
+            headers={"X-Session-ID": mock_session},
+            files={"file": ("guide.pdf", b"%PDF-1.4 fake content", "application/pdf")}
+        )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["summary"] == "This document is about modernization."
+    assert data["suggested_questions"][:2] == ["What is modernization?", "What are next steps?"]
+    assert len(data["suggested_questions"]) == 5
+
+    run_kwargs = mock_chat_model.return_value.run.call_args.kwargs
+    assert run_kwargs["model_name"] == "gpt-5-mini"
+    assert run_kwargs["web_search"] is False
+    assert "response_format" not in run_kwargs
 
 
 @pytest.mark.asyncio
@@ -1601,8 +1783,8 @@ async def test_guest_session_no_persistence_load_after_cache_clear(client, clean
 # ============================================
 
 @pytest.mark.asyncio
-async def test_chat_with_gpt5_enables_web_search(client, clean_state):
-    """Test that chat requests with GPT-5 models enable web search via Responses API."""
+async def test_chat_with_gpt5_passes_explicit_web_search(client, clean_state):
+    """Test that chat requests can explicitly enable web search for GPT-5 models."""
     import app as app_module
     from openai_helper import create_openai_request
 
@@ -1628,7 +1810,8 @@ async def test_chat_with_gpt5_enables_web_search(client, clean_state):
                 "user_message": "What is the weather today?",
                 "developer_message": "You are a helpful assistant.",
                 "model": "gpt-5",
-                "provider": "openai"
+                "provider": "openai",
+                "web_search": True
             },
             headers={"X-Session-ID": session_id}
         )
@@ -1642,6 +1825,7 @@ async def test_chat_with_gpt5_enables_web_search(client, clean_state):
         assert call_kwargs["model"] == "gpt-5"
         assert call_kwargs["stream"] is True
         assert call_kwargs["api_key"] == "test-openai-key"
+        assert call_kwargs["web_search"] is True
 
 
 @pytest.mark.asyncio
@@ -1679,8 +1863,8 @@ async def test_chat_with_together_no_web_search(client, clean_state):
         assert call_kwargs["provider"] == "together"
 
 
-def test_openai_helper_adds_web_search_for_gpt5():
-    """Test that the helper uses Responses API with web_search tool for GPT-5 models."""
+def test_openai_helper_omits_web_search_by_default_for_gpt5():
+    """Test that the helper uses Responses API without web_search by default."""
     from openai_helper import create_openai_request
 
     # Mock the OpenAI client
@@ -1703,15 +1887,38 @@ def test_openai_helper_adds_web_search_for_gpt5():
             stream=False
         )
 
-        # Verify Responses API was called with web_search tool
+        # Verify Responses API was called without the web_search tool
         assert mock_client.responses.create.called
         call_kwargs = mock_client.responses.create.call_args[1]
-        assert "tools" in call_kwargs
-        assert call_kwargs["tools"] == [{"type": "web_search"}]
+        assert "tools" not in call_kwargs
         assert call_kwargs["instructions"] == "Follow app rules."
         assert call_kwargs["input"] == [{"role": "user", "content": "test"}]
         # Verify Chat Completions API was NOT called
         assert not mock_client.chat.completions.create.called
+
+
+def test_openai_helper_adds_web_search_when_requested_for_gpt5():
+    """Test that the helper adds web_search for GPT-5 models when requested."""
+    from openai_helper import create_openai_request
+
+    with patch('openai_helper.OpenAI') as mock_openai_class:
+        mock_client = MagicMock()
+        mock_openai_class.return_value = mock_client
+        mock_client.responses.create.return_value = MagicMock(
+            output_text="Test response"
+        )
+
+        create_openai_request(
+            api_key="test-key",
+            provider="openai",
+            model="gpt-5",
+            messages=[{"role": "user", "content": "test"}],
+            stream=False,
+            web_search=True
+        )
+
+        call_kwargs = mock_client.responses.create.call_args[1]
+        assert call_kwargs["tools"] == [{"type": "web_search"}]
 
 
 def test_openai_helper_no_web_search_for_together():
@@ -1747,7 +1954,7 @@ def test_openai_helper_no_web_search_for_together():
 
 
 def test_chatmodel_uses_helper_for_gpt5():
-    """Test that ChatOpenAI class uses helper and enables web search for GPT-5."""
+    """Test that ChatOpenAI class uses helper for GPT-5."""
     from aimakerspace.openai_utils.chatmodel import ChatOpenAI
 
     # Mock the helper
