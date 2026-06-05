@@ -711,6 +711,112 @@ describe('ChatInterface - Image Attachment', () => {
     expect(requestBody.developer_message).not.toContain("If the context doesn't contain enough information")
   })
 
+  it('clears uploaded document context when loading another conversation', async () => {
+    const mockConversations = [
+      {
+        conversation_id: 'other-conv',
+        title: 'Other Conversation',
+        last_updated: new Date().toISOString(),
+        mode: 'regular',
+      }
+    ]
+
+    const mockConversationDetail = {
+      conversation_id: 'other-conv',
+      title: 'Other Conversation',
+      mode: 'regular',
+      system_message: 'System',
+      messages: [
+        {
+          role: 'user',
+          content: 'Unrelated question',
+          timestamp: new Date(Date.now() - 1000).toISOString(),
+        },
+        {
+          role: 'assistant',
+          content: 'Unrelated answer',
+          timestamp: new Date().toISOString(),
+        }
+      ]
+    }
+
+    global.fetch = vi.fn((url, init) => {
+      if (url === '/api/conversations' && (!init || !init.method || init.method === 'GET')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve(mockConversations),
+        } as Response)
+      }
+
+      if (url === '/api/conversations/other-conv') {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve(mockConversationDetail),
+        } as Response)
+      }
+
+      if (url === '/api/upload-document') {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({
+            document_id: 'guide.pdf',
+            file_name: 'guide.pdf',
+            file_type: 'pdf',
+            chunk_count: 2,
+            summary: null,
+            suggested_questions: null,
+          }),
+        } as Response)
+      }
+
+      if (url === '/api/chat') {
+        return Promise.resolve(createStreamingResponse('Regular answer.', {
+          'X-Conversation-ID': 'other-conv',
+          'X-Free-Turns-Remaining': '9',
+        }))
+      }
+
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve([]),
+      } as Response)
+    })
+
+    render(<ChatInterface {...defaultProps} sidebarOpen={true} />)
+
+    const documentInput = document.querySelector('input[type="file"][accept*=".pdf"]') as HTMLInputElement
+    fireEvent.change(documentInput, {
+      target: { files: [new File(['pdf content'], 'guide.pdf', { type: 'application/pdf' })] }
+    })
+
+    await waitFor(() => {
+      expect(screen.getByText('Document Context')).toBeInTheDocument()
+    })
+
+    await waitFor(() => {
+      expect(screen.getByText('Other Conversation')).toBeInTheDocument()
+    })
+    fireEvent.click(screen.getByText('Other Conversation'))
+
+    await waitFor(() => {
+      expect(screen.getByText('Unrelated question')).toBeInTheDocument()
+    })
+    expect(screen.queryByText('Document Context')).not.toBeInTheDocument()
+
+    const textarea = screen.getByLabelText('Message AI')
+    fireEvent.change(textarea, { target: { value: 'Continue unrelated chat' } })
+    fireEvent.submit(textarea.closest('form') as HTMLFormElement)
+
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalledWith('/api/chat', expect.any(Object))
+    })
+
+    const chatCall = (global.fetch as ReturnType<typeof vi.fn>).mock.calls.find(([url]) => url === '/api/chat')
+    const requestBody = JSON.parse(chatCall?.[1]?.body as string)
+    expect(requestBody.conversation_id).toBe('other-conv')
+    expect(requestBody.document_context).toBeUndefined()
+  })
+
   it('uses RAG query mode when Doc Q&A is explicitly enabled', async () => {
     global.fetch = vi.fn((url, init) => {
       if (url === '/api/conversations' && (!init || !init.method || init.method === 'GET')) {

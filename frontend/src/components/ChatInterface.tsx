@@ -670,6 +670,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         setMessages(processedMessages)
         setConversationId(convId)
         setDeveloperMessage(data.system_message)
+        setUploadedDocument(null)
+        setDocumentSummary(null)
+        setDocumentSuggestedQuestions([])
 
         // Set lastSuggestedQuestions for backwards compatibility (from the last assistant message)
         if (conversationMode === 'topic-explorer' || conversationMode === 'regular') {
