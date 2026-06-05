@@ -10,7 +10,6 @@
 
 - You prefer to use branch development.
 - Before writing any code, check if you are in a feature branch (eg. `feature/branch_name`). If not already in an existing feature branch, create one to hold the changes.
-- After you are done - provide instructions in a `MERGE.md` file that explains how to merge the changes back to main with both a GitHub PR route and a GitHub CLI route.
 
 ## Frontend Rules
 
@@ -21,8 +20,7 @@
 - Always provide users with a way to run the created UI once you have created it.
 
 ## Local dev
- - Before starting the frontend or the backend service in dev mode, make a copy of the `~/tmp/tuelhosai.env` file into the root of this repo as `.env`. This way the services can be tested locally.
- - NEVER Commit the `.env` into git. I must be GIT IGNORED!
+ - NEVER Commit the `.env` into git. It must be GIT IGNORED!
 
 ## README Rules
 
