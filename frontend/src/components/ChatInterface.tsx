@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useLayoutEffect } from 'react'
+import React, { useState, useRef, useEffect, useLayoutEffect, useMemo } from 'react'
 import { Send, MessageSquare, User, Bot, Trash2, Settings, ArrowDown, X, FileText, Upload, Compass, Image, Plus, Search, BookOpen, Brain, Volume2, Square, Mic, MicOff } from 'lucide-react'
 import MarkdownRenderer from './MarkdownRenderer'
 import SuggestedQuestions from './SuggestedQuestions'
@@ -1533,6 +1533,22 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     documentSummary && documentSuggestedQuestions.length > 0 && (docQaEnabled || topicExplorerEnabled)
   )
 
+  const filteredConversations = useMemo(() => {
+    const query = conversationSearchQuery.trim().toLowerCase()
+    if (!query) return conversations
+
+    return conversations.filter(conv => {
+      const title = conv.title || conv.system_message || ''
+      return title.toLowerCase().includes(query)
+    })
+  }, [conversations, conversationSearchQuery])
+
+  const getConversationModeIcon = (mode?: string) => {
+    if (mode === 'rag') return <FileText size={14} aria-hidden="true" />
+    if (mode === 'topic-explorer') return <BookOpen size={14} aria-hidden="true" />
+    return <MessageSquare size={14} aria-hidden="true" />
+  }
+
   return (
     <div className="chat-interface" ref={containerRef}>
       {/* Settings Modal */}
@@ -1594,25 +1610,14 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
             {/* Conversation History List */}
             <div className="conversations-list">
-              {conversations.filter(conv => {
-                if (!conversationSearchQuery.trim()) return true;
-                const query = conversationSearchQuery.toLowerCase();
-                const title = conv.title || conv.system_message || '';
-                return title.toLowerCase().includes(query);
-              }).length === 0 ? (
+              {filteredConversations.length === 0 ? (
                 <p className="no-conversations">No conversations found</p>
               ) : (
-        conversations.filter(conv => {
-                  if (!conversationSearchQuery.trim()) return true;
-                  const query = conversationSearchQuery.toLowerCase();
-                  const title = conv.title || conv.system_message || '';
-                  return title.toLowerCase().includes(query);
-                }).map((conv) => {
+                filteredConversations.map((conv) => {
                   const isActive = conversationId === conv.conversation_id
                   const isLoading = loadingConversationId === conv.conversation_id
                   const isConfirmingDelete = confirmingDeleteConversationId === conv.conversation_id
                   const isDeleting = deletingConversationId === conv.conversation_id
-                  const modeLabel = conv.mode === 'rag' ? '📄' : conv.mode === 'topic-explorer' ? '📚' : '💬'
 
                   return (
                     <div
@@ -1625,9 +1630,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                       style={{ cursor: isLoading || isDeleting ? 'wait' : 'pointer' }}
                       aria-busy={isDeleting}
                     >
-                      <span className="conversation-mode-icon">{modeLabel}</span>
+                      <span className="conversation-mode-icon">{getConversationModeIcon(conv.mode)}</span>
                       <div className="conversation-title">
-                        {conv.title || conv.system_message.substring(0, 30)}
+                        {conv.title || conv.system_message?.substring(0, 30) || 'Untitled conversation'}
                       </div>
                       {isLoading && (
                         <div className="conversation-loading-indicator">
