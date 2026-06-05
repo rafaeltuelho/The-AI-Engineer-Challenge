@@ -20,7 +20,6 @@
 - Always provide users with a way to run the created UI once you have created it.
 
 ## Local dev
- - Before starting the frontend or the backend service in dev mode, make a copy of the `~/tmp/tuelhosai.env` file into the root of this repo as `.env`. This way the services can be tested locally.
  - NEVER Commit the `.env` into git. It must be GIT IGNORED!
 
 ## README Rules

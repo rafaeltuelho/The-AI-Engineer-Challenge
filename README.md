@@ -43,10 +43,10 @@ The project started from [AI-Maker-Space/The-AI-Engineer-Challenge](https://gith
 
 ## Local Setup
 
-Before starting the app, copy the local environment file into the repo root:
+Before starting the app, you need an environment file into the repo root:
 
 ```bash
-cp ~/tmp/tuelhosai.env .env
+cp .env.example .env
 ```
 
 The `.env` file is intentionally ignored by Git. Keep API keys, OAuth client IDs, and provider credentials there, not in source control.
