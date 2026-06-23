@@ -868,8 +868,10 @@ class TTSRequest(BaseModel):
         if len(v.strip()) == 0:
             raise ValueError('Text cannot be empty')
 
-        if len(v) > 4096:
-            raise ValueError('Text is too long (max 4096 characters)')
+        # This is just an abuse guardrail, not the TTS limit. Text longer than
+        # OpenAI's 4096-char TTS limit is summarized down to size in the endpoint.
+        if len(v) > 50000:
+            raise ValueError('Text is too long (max 50000 characters)')
 
         return v.strip()
 
@@ -1440,15 +1442,32 @@ async def get_app_config(request: Request):
         max_image_size_mb=MAX_IMAGE_SIZE_MB
     )
 
+def _truncate_at_boundary(text: str, max_len: int) -> str:
+    """Truncate text to at most max_len characters, breaking at a sentence or word boundary."""
+    if len(text) <= max_len:
+        return text
+
+    truncated = text[:max_len]
+
+    last_sentence_end = max(truncated.rfind('.'), truncated.rfind('!'), truncated.rfind('?'))
+    if last_sentence_end > max_len * 0.5:
+        return truncated[:last_sentence_end + 1].strip()
+
+    last_space = truncated.rfind(' ')
+    if last_space > 0:
+        return truncated[:last_space].strip()
+
+    return truncated.strip()
+
 # Endpoint for text-to-speech
 @app.post(
     "/api/tts",
     tags=["Audio"],
     summary="Convert text to speech",
-    description="Convert text to speech using OpenAI's TTS API. Returns MP3 audio data. Requires an OpenAI API key (user-provided via X-API-Key header, stored in session, or server-configured). Works regardless of the session's selected provider.",
+    description="Convert text to speech using OpenAI's TTS API. Returns MP3 audio data. Text longer than OpenAI's 4096-character TTS limit is automatically summarized (with the X-TTS-Summarized response header set to true) before being sent to TTS. Requires an OpenAI API key (user-provided via X-API-Key header, stored in session, or server-configured). Works regardless of the session's selected provider.",
     responses={
         200: {"description": "Audio generated successfully", "content": {"audio/mpeg": {}}},
-        400: {"description": "Invalid request (empty text or exceeds 4096 characters)"},
+        400: {"description": "Invalid request (empty text or exceeds 50000 characters)"},
         401: {"description": "Invalid or expired session"},
         403: {"description": "No OpenAI API key available. Provide one via X-API-Key header or configure a server key."},
         429: {"description": "Rate limit exceeded"},
@@ -1488,11 +1507,45 @@ async def text_to_speech(
         from openai_helper import create_openai_client
         client = create_openai_client(api_key, "openai")
 
+        TTS_CHAR_LIMIT = 4096
+        tts_text = tts_request.text
+        summarized = False
+
+        if len(tts_text) > TTS_CHAR_LIMIT:
+            try:
+                summary_response = client.chat.completions.create(
+                    model="gpt-5-mini",
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": (
+                                "You summarize text for spoken narration. Produce a concise, "
+                                "natural-sounding spoken-style summary that preserves the key "
+                                "points and tone of the original text. Keep the summary under "
+                                "3000 characters."
+                            )
+                        },
+                        {
+                            "role": "user",
+                            "content": tts_text
+                        }
+                    ],
+                    temperature=0.5,
+                    max_tokens=1500
+                )
+                summary_text = summary_response.choices[0].message.content.strip()
+                tts_text = _truncate_at_boundary(summary_text, TTS_CHAR_LIMIT)
+                summarized = True
+            except Exception:
+                logger.exception("Error summarizing long text for TTS, falling back to truncation")
+                tts_text = _truncate_at_boundary(tts_text, TTS_CHAR_LIMIT)
+                summarized = True
+
         # Call OpenAI TTS API
         response = client.audio.speech.create(
             model="gpt-4o-mini-tts",
             voice=tts_request.voice,
-            input=tts_request.text,
+            input=tts_text,
             response_format="mp3"
         )
 
@@ -1501,7 +1554,11 @@ async def text_to_speech(
 
         # Return binary MP3 response
         from fastapi.responses import Response
-        return Response(content=audio_bytes, media_type="audio/mpeg")
+        return Response(
+            content=audio_bytes,
+            media_type="audio/mpeg",
+            headers={"X-TTS-Summarized": "true" if summarized else "false"}
+        )
 
     except HTTPException:
         raise
