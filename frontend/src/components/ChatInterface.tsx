@@ -244,9 +244,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   // TTS state
   const [playingMessageId, setPlayingMessageId] = useState<string | null>(null)
   const [loadingTtsId, setLoadingTtsId] = useState<string | null>(null)
+  const [ttsNotice, setTtsNotice] = useState<{ messageId: string; type: 'summarized' | 'error'; text: string } | null>(null)
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const audioBlobUrlRef = useRef<string | null>(null)
   const ttsAbortControllerRef = useRef<AbortController | null>(null)
+  const ttsNoticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Dictate state
   const [isRecording, setIsRecording] = useState(false)
@@ -529,6 +531,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         URL.revokeObjectURL(audioBlobUrlRef.current)
         audioBlobUrlRef.current = null
       }
+      if (ttsNoticeTimerRef.current) {
+        clearTimeout(ttsNoticeTimerRef.current)
+        ttsNoticeTimerRef.current = null
+      }
     }
   }, [])
 
@@ -776,6 +782,25 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     }
   }
 
+  const showTtsNotice = (messageId: string, type: 'summarized' | 'error', text: string) => {
+    if (ttsNoticeTimerRef.current) {
+      clearTimeout(ttsNoticeTimerRef.current)
+    }
+    setTtsNotice({ messageId, type, text })
+    ttsNoticeTimerRef.current = setTimeout(() => {
+      setTtsNotice(null)
+      ttsNoticeTimerRef.current = null
+    }, 6000)
+  }
+
+  const dismissTtsNotice = () => {
+    if (ttsNoticeTimerRef.current) {
+      clearTimeout(ttsNoticeTimerRef.current)
+      ttsNoticeTimerRef.current = null
+    }
+    setTtsNotice(null)
+  }
+
   const handleReadAloud = async (message: Message) => {
     // Toggle off if already playing this message
     if (playingMessageId === message.id) {
@@ -789,6 +814,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       }
       return
     }
+
+    dismissTtsNotice()
 
     // Abort any in-flight TTS request to prevent race conditions
     if (ttsAbortControllerRef.current) {
@@ -839,6 +866,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         throw new Error(`TTS request failed: ${response.status}`)
       }
 
+      if (response.headers.get('X-TTS-Summarized') === 'true') {
+        showTtsNotice(message.id, 'summarized', 'Playing a summarized version — the full response was too long for audio')
+      }
+
       const blob = await response.blob()
 
       const url = URL.createObjectURL(blob)
@@ -887,7 +918,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       }
       console.error('TTS error:', error)
       setLoadingTtsId(null)
-      // Could show error message to user here if needed
+      showTtsNotice(message.id, 'error', "Couldn't play audio for this message. Try again.")
     }
   }
 
@@ -1829,6 +1860,19 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                           ) : (
                             <Volume2 size={14} />
                           )}
+                        </button>
+                      </div>
+                    )}
+
+                    {ttsNotice && ttsNotice.messageId === message.id && (
+                      <div className={`tts-notice tts-notice-${ttsNotice.type}`} role="status">
+                        <span>{ttsNotice.text}</span>
+                        <button
+                          className="tts-notice-dismiss"
+                          onClick={dismissTtsNotice}
+                          aria-label="Dismiss notice"
+                        >
+                          <X size={12} />
                         </button>
                       </div>
                     )}
